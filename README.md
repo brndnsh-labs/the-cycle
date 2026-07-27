@@ -36,9 +36,11 @@ Three observations made this tractable:
 2. **Skills already indirect through it.** They say "see DOCTRINE §5" rather than restating rules.
    The habit exists; it just *leaks* — skills also inline `npm run typecheck`, project numbers, and
    brake surfaces. That leak is exactly where they drifted.
-3. **Executables were already single-sourced.** `~/code/dotfiles/bin/forgejo.mjs` is canonical and
-   each repo commits a thin real-file shim. This repo reuses that pattern rather than reinventing
-   it.
+3. **Executables were already single-sourced.** `dotfiles` held one canonical `forgejo.mjs` and
+   each repo committed a thin real-file shim. This repo reuses that pattern rather than
+   reinventing it — and then inverts it: the executables moved *here*, into `helpers/`, so
+   installing the pipeline takes one clone instead of two. `dotfiles` keeps the PATH entry points
+   and now shims in this direction.
 
 So the core move is to **plug the leak**: every repo-specific value lives in one generated binding
 file, and skill templates become fully portable.
