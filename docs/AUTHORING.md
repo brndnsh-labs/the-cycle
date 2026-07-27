@@ -72,9 +72,12 @@ Current overlay points (all optional unless noted):
 1. Write `templates/skills/<name>.md.tmpl`. Frontmatter needs `name` (matching the filename) and
    `description`.
 2. Add it to the profiles that should install it.
-3. `npm test` — the render suite will build it on every profile × backend and check the
+3. `cycle lint` — catches what rendering can't: a `§N` that points at nothing, a verb only one
+   backend binds called outside a `{{#if backend.…}}`, a `/other-skill` reference absent from a
+   profile that installs yours, and any command you inlined instead of binding.
+4. `npm test` — the render suite will build it on every profile × backend and check the
    frontmatter, the absence of unrendered syntax, and idempotency.
-4. Render it into a scratch repo and **read the output**. Tests prove it renders; only reading
+5. Render it into a scratch repo and **read the output**. Tests prove it renders; only reading
    proves it says something true.
 
 ## Changing a template that repos already have

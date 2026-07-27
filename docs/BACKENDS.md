@@ -25,7 +25,7 @@ twice, and the hand-written cheat-sheet that guided it is what this file general
 | `set_field` | `$1` number `$2` field `$3` value | write any routing value |
 | `batch` | `$1` file | one grouped write for many issues |
 | `ci_runs` / `ci_log` / `ci_log_failed` | `$1` run | read CI |
-| `board_list` / `board_add` | — / `$1` url | GitHub only |
+| `board_list` | — | GitHub only — read the board |
 
 A verb's value is itself a template, so it can embed config:
 `"board_list": "gh project item-list {{tracker.project}} --owner {{tracker.owner}} --format json"`.

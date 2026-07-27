@@ -989,6 +989,11 @@ const USAGE = `${bold('cycle')} — render the-cycle's work pipeline into a repo
       Reverse-engineer an existing hand-written setup into config + overlays,
       and show what would change. Read-only unless --write.
 
+  ${bold('cycle lint')} [-q]
+      Check the-cycle's own consistency: §N citations, verb bindings, shim
+      coverage, overlay docs, profiles, cross-skill references. -q hides
+      warnings. For working on the-cycle itself, not on a consuming repo.
+
   ${bold('cycle eject')} <skill>
       Stop managing one skill; strip its provenance header.
 
@@ -1007,6 +1012,10 @@ async function main() {
         case 'adopt': {
             const { cmdAdopt } = await import('./adopt.mjs');
             return cmdAdopt(rest, { CYCLE_HOME, findRepoRoot, detect, planRender, loadProfile, renderConfig });
+        }
+        case 'lint': {
+            const { cmdLint } = await import('./lint.mjs');
+            return cmdLint(rest, { CYCLE_HOME, bold, dim, red, yellow, green });
         }
         case undefined:
         case '-h':

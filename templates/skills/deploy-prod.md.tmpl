@@ -67,5 +67,5 @@ function* changes here, and the person who owns the consequences should be the o
 - **Deploy fails partway:** say exactly which step, and whether a migration ran. Do not retry
   blindly — a half-applied migration needs a decision, not a rerun.
 - **Verification disagrees with the deploy script:** trust the origin. Report as a failure.
-- **Asked to deploy unattended** (from `/burndown`, `/nightly`, or a chained skill): **refuse.**
-  Report that prod needs an explicit invocation.
+- **Asked to deploy unattended** (from `/burndown`, an overnight lane, or a chained skill):
+  **refuse.** Report that prod needs an explicit invocation.

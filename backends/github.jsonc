@@ -71,10 +71,12 @@
     "set_status": "node scripts/gh-project.mjs status $1 $2",
     "batch": "node scripts/gh-project.mjs batch $1",
 
-    // Board reads — GitHub-only; the Forgejo backend has no equivalent because the
-    // issue list IS the board.
+    // Board read — GitHub-only; the Forgejo backend has no equivalent because the
+    // issue list IS the board. There is deliberately no `board_add` counterpart: the
+    // helper's status/set-field/batch all ensure board membership first, so an explicit
+    // add verb would be a second way to do the same thing, and skills would have to
+    // remember to call it.
     "board_list": "gh project item-list {{tracker.project}} --owner {{tracker.owner}} --format json",
-    "board_add": "gh project item-add {{tracker.project}} --owner {{tracker.owner}} --url $1",
 
     "ci_runs": "gh run list",
     "ci_log": "gh run view $1 --log",

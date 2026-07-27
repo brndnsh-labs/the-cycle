@@ -91,6 +91,13 @@ cycle update                         # re-render, show the diff
 cycle adopt                          # reverse-engineer an existing hand-written setup
 ```
 
+And when working on the-cycle itself:
+
+```sh
+cycle lint                           # §N citations, verb bindings, shim coverage,
+npm test                             # overlay docs, profiles, cross-skill refs
+```
+
 ## Profiles
 
 Machinery is opt-in — a repo takes on a lane when it earns it.
