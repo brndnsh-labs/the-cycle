@@ -21,7 +21,7 @@ issue: it defers the thinking to a moment with *less* context than right now.
 ## The one rule that makes this skill itself: interview ONE question at a time
 
 {{repo.human}} will describe the idea in good faith; your job is sharpening it to actionable —
-proposing the shape, filling obvious gaps yourself, asking only where his answer genuinely changes
+proposing the shape, filling obvious gaps yourself, asking only where the answer genuinely changes
 the issue. So:
 
 - Ask **one focused question, then wait.** No batched multi-question forms.
@@ -36,7 +36,7 @@ first) — never to fire several at once.
 
 ## Workflow
 
-1. **Hear the idea.** If invoked bare, ask what's on his mind. If it carried text, restate it in
+1. **Hear the idea.** If invoked bare, ask what's on {{repo.human}}'s mind. If it carried text, restate it in
    one plain sentence to confirm alignment before digging.
 
 2. **Dedup first** (§10, read-only): search open issues on the idea's keywords and skim titles. If
@@ -54,13 +54,15 @@ first) — never to fire several at once.
      drafted body — it still files normally, but `/cycle` will pause there for a human call
      regardless of how the issue reads.
    - **Is it actually a decision, not a task** (no work happens until a direction is picked)? If
-     so, write the options into the body ("decide one of: A / B") rather than picking one for him.
+     so, write the options into the body ("decide one of: A / B") rather than picking one.
 
 4. **Draft and show the shaped issue** — title, body in §10's Why / Touches / Acceptance format,
-   and the classification you'd apply. **This is the checkpoint**: nothing is written until he's
+   and the classification you'd apply. **This is the checkpoint**: nothing is written until it's
    seen it.
 
-5. **File it** (§7): `{{@issue_create "<title>" "<body>" "<label>"}}`{{#if backend.has_board}}, then
+5. **File it** (§7): `{{@issue_create "<title>" "<body>" "<label>"}}` — the label is a §2 workflow
+   label describing *what kind of work it is* (`bug` and the `area:*` set), never a routing value:
+   §10.5 leaves routing to the picking skill. No fitting label is fine; file it bare.{{#if backend.has_board}}, then
    add it to the board and set Status: `{{@set_status "<n>" "{{tracker.status.pickable}}"}}`{{/if}}.
    Batch the field writes into one call (§7).
 
@@ -75,7 +77,7 @@ show the set together, then file with a **single batched field write** (§7).
 
 - **Actionable, or don't file** (§10). If the interview stalls short of that bar, say so and stop —
   a placeholder issue is debt, not capture.
-- **Read-only until he confirms the draft.** No issue is created mid-interview.
+- **Read-only until {{repo.human}} confirms the draft.** No issue is created mid-interview.
 - **Don't over-classify** (§10) — set what you know; routing is the picking skill's job.
 - **Don't fix anything.** `/intake` files; `/cycle` builds. Even a one-line fix goes through the
   pipeline.

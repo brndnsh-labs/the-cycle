@@ -42,9 +42,8 @@ Run **all lenses in one capped sweep** by default; pass a lens name for a focuse
 
 ## The budget — quality over flood (load-bearing)
 
-**All-lenses run:** cap at **~2 findings per lens, ~8 total.** **Single-lens run:** cap at the top
-**3–5**. Rank by (impact × how-actionable); mention anything below the cut in the report without
-filing.
+Within §10.6's budget: **all-lenses run** — ~2 findings per lens, single digits overall;
+**single-lens run** — the top 3–5.
 
 **Filing zero because a lens is clean is a success, not a failure** — say so and stop. A flood of
 marginal issues is worse than a missed one: it burns trust in the whole queue.
@@ -58,9 +57,8 @@ finding that turns out to be a misread costs more than the one you didn't file, 
 
 ## Shape each finding so the smallest human input unlocks it
 
-Prefer a **pre-drafted fix with a yes/no decision** over an open-ended question. A finding that
-arrives with the diff already written costs one glance; the same finding as a paragraph costs a
-work session. This is the difference between a queue that drains and one that grows.
+Shape every finding per §10.3 — a pre-drafted fix with a yes/no decision, not an open-ended
+question. That is the difference between a queue that drains and one that grows.
 
 ## Workflow
 
@@ -68,8 +66,7 @@ work session. This is the difference between a queue that drains and one that gr
 2. **Sweep, read-only.** Fan out across the lenses; each returns candidate findings with
    `file:line` citations.
 3. **Verify each candidate against the real file.** Drop anything that doesn't survive.
-4. **Dedup against open issues** (§10) — search before filing; a near-twin gets a comment, not a
-   new issue.
+4. **Dedup against open issues** (§10.1) — search before filing.
 5. **Rank and cut to budget.**
 6. **Present the slate** — each finding with its lens, `file:line`, the drafted issue body, and
    whether it lands on a §5 brake. **This is the checkpoint**; nothing is written before it.
@@ -96,6 +93,7 @@ work session. This is the difference between a queue that drains and one that gr
 ## How it fits the pipeline
 
 - **`/scout`** = code → candidate issues (the discovery front door).
-- **`/next`** = ranks and picks, including whatever `/scout` just filed.
+- **`/next`** = ranks and picks. A scout-filed issue arrives unrouted (§10), so it surfaces under
+  **Untriaged** and needs promoting to a pickable Status before the loop will take it.
 - **`/implement` / `/cycle`** = build a picked issue; §5 still brakes regardless of who filed it.
 - **`/burndown`** = curates the believed-safe subset and loops `/cycle` over it.

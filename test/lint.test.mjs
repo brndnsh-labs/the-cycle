@@ -110,6 +110,44 @@ describe('lint', () => {
         assert.ok(checksHit(dir).has('inlining'));
     });
 
+    // /dep-update spelled `npm outdated` four times, which quietly made it the one skill
+    // that couldn't be installed in a repo written in anything else.
+    test('catches a package-manager command inlined into portable prose', () => {
+        const dir = sandbox();
+        edit(dir, 'templates/skills/dep-update.md.tmpl', (t) => `${t}\n\nRun \`cargo update\` first.\n`);
+        assert.ok(checksHit(dir).has('inlining'));
+    });
+
+    // The person's name was parameterized as {{repo.human}}; the pronouns around it were
+    // not, so six files silently assumed one maintainer's gender.
+    test('catches a gendered pronoun', () => {
+        const dir = sandbox();
+        edit(dir, 'templates/skills/next.md.tmpl', (t) => `${t}\n\nAsk him what he wants next.\n`);
+        assert.ok(errors(dir).some((f) => /gendered pronoun/.test(f.message)));
+    });
+
+    test('catches the contraction form a plain word-boundary grep misses', () => {
+        const dir = sandbox();
+        edit(dir, 'templates/skills/next.md.tmpl', (t) => `${t}\n\nGroup by how he'd check it.\n`);
+        assert.ok(errors(dir).some((f) => /gendered pronoun/.test(f.message)));
+    });
+
+    // A flag no template reads is decoration that eventually lies: someone flips it
+    // expecting the prose to follow, and nothing moves.
+    test('catches a semantic flag no template branches on', () => {
+        const dir = sandbox();
+        edit(dir, 'backends/forgejo.jsonc', (t) => t.replace('"has_board": false,', '"has_board": false,\n    "invented_flag": true,'));
+        assert.ok(errors(dir).some((f) => f.check === 'semantics' && /invented_flag/.test(f.message)));
+    });
+
+    // The inverse: branching on an undeclared flag reads as falsy, so the branch never
+    // fires and the skill silently loses a section.
+    test('catches a template branching on a flag no backend declares', () => {
+        const dir = sandbox();
+        edit(dir, 'templates/skills/done.md.tmpl', (t) => `${t}\n{{#if backend.never_declared}}x{{/if}}\n`);
+        assert.ok(errors(dir).some((f) => f.check === 'semantics' && /never_declared/.test(f.message)));
+    });
+
     // A verb only one backend binds is fine inside a {{#if backend.…}} branch — that
     // is how board reads work on Forgejo, which has no board. Outside one it is a
     // render failure waiting for whichever repo uses the other tracker.

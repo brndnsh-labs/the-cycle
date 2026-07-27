@@ -481,6 +481,12 @@ function buildContext(cfg, backend) {
             // one env var, and the template language has no way to emit JSON.
             fields_json: JSON.stringify(cfg.tracker?.fields ?? {}),
         },
+        deps: {
+            outdated: '', audit: '', audit_fix: '', update: '', install: '', manifests: [],
+            ...(cfg.deps ?? {}),
+            // Pre-formatted for prose: the join filter can't wrap each item in backticks.
+            manifests_md: (cfg.deps?.manifests ?? []).map((m) => `\`${m}\``).join(', '),
+        },
         backend: { name: cfg.backend, ...(backend.semantics ?? {}), notes: backend.notes ?? {} },
         profile: { name: cfg.profile, ...(cfg.profileFlags ?? {}) },
         // Where this render happened, for the shim's last-resort lookup.
@@ -652,6 +658,50 @@ const readState = (root) => (existsSync(statePath(root)) ? JSON.parse(readFileSy
 // inspection: what does this repo look like?
 // ---------------------------------------------------------------------------
 
+/**
+ * Package-manager commands, keyed by the lockfile that identifies the ecosystem.
+ *
+ * /dep-update used to spell `npm outdated` into its prose, which made the one skill in
+ * the set that couldn't be installed in a repo written in anything else — and did it in
+ * exactly the way docs/AUTHORING.md uses as its cautionary example.
+ *
+ * Order matters: the first match wins, so more specific lockfiles come first.
+ */
+const ECOSYSTEMS = [
+    ['pnpm-lock.yaml', {
+        outdated: 'pnpm outdated', audit: 'pnpm audit', audit_fix: 'pnpm audit --fix',
+        update: 'pnpm update', install: 'pnpm install', manifests: ['package.json', 'pnpm-lock.yaml'],
+    }],
+    ['yarn.lock', {
+        outdated: 'yarn outdated', audit: 'yarn npm audit', audit_fix: '',
+        update: 'yarn up', install: 'yarn install', manifests: ['package.json', 'yarn.lock'],
+    }],
+    ['package-lock.json', {
+        outdated: 'npm outdated', audit: 'npm audit', audit_fix: 'npm audit fix',
+        update: 'npm update', install: 'npm install', manifests: ['package.json', 'package-lock.json'],
+    }],
+    ['Cargo.toml', {
+        outdated: 'cargo outdated', audit: 'cargo audit', audit_fix: '',
+        update: 'cargo update', install: 'cargo build', manifests: ['Cargo.toml', 'Cargo.lock'],
+    }],
+    ['go.mod', {
+        outdated: 'go list -u -m all', audit: 'govulncheck ./...', audit_fix: '',
+        update: 'go get -u ./...', install: 'go mod tidy', manifests: ['go.mod', 'go.sum'],
+    }],
+    ['uv.lock', {
+        outdated: 'uv pip list --outdated', audit: '', audit_fix: '',
+        update: 'uv lock --upgrade', install: 'uv sync', manifests: ['pyproject.toml', 'uv.lock'],
+    }],
+    ['poetry.lock', {
+        outdated: 'poetry show --outdated', audit: '', audit_fix: '',
+        update: 'poetry update', install: 'poetry install', manifests: ['pyproject.toml', 'poetry.lock'],
+    }],
+    ['Gemfile.lock', {
+        outdated: 'bundle outdated', audit: 'bundle audit', audit_fix: '',
+        update: 'bundle update', install: 'bundle install', manifests: ['Gemfile', 'Gemfile.lock'],
+    }],
+];
+
 /** `https://host/api/v1` from a git remote, in either URL or scp-style form. */
 export function apiFromRemote(remote) {
     if (!remote) return '';
@@ -694,6 +744,8 @@ export function detect(root) {
     if (existsSync(join(root, 'scripts', 'deploy.sh'))) {
         out.deploy = { test: './scripts/deploy.sh test', prod: './scripts/deploy.sh prod' };
     }
+
+    out.deps = ECOSYSTEMS.find(([marker]) => existsSync(join(root, marker)))?.[1];
     return out;
 }
 
@@ -764,6 +816,9 @@ export function draftConfig(root, { backend: wanted, profile } = {}) {
             executor_default: 'orchestrator-inline',
         },
         gates: Object.keys(d.gates).length ? d.gates : { typecheck: 'npm run typecheck', test: 'npm test' },
+        // /dep-update's package-manager commands. Detected from the lockfile; blank
+        // where the ecosystem has no equivalent (plenty have no audit-fix).
+        deps: d.deps ?? ECOSYSTEMS.find(([m]) => m === 'package-lock.json')[1],
         brakes: ['auth / tokens / secrets', 'schema / data migration', 'anything destructive or irreversible'],
         branch: { minor_edits_direct: true },
         commit: { coauthor: 'Claude Opus 5 <noreply@anthropic.com>' },

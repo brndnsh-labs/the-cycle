@@ -11,6 +11,7 @@ twice, and the hand-written cheat-sheet that guided it is what this file general
 | Verb | Args | Purpose |
 | --- | --- | --- |
 | `issue_list` | — | open issues, as JSON |
+| `issue_list_closed` | — | recently closed, for the `--board` view |
 | `issue_list_label` | `$1` label | filtered open issues |
 | `issue_list_milestone` | `$1` milestone | filtered open issues |
 | `issue_view` | `$1` number | one issue incl. body |
@@ -24,22 +25,24 @@ twice, and the hand-written cheat-sheet that guided it is what this file general
 | `set_status` | `$1` number `$2` status | write the status value |
 | `set_field` | `$1` number `$2` field `$3` value | write any routing value |
 | `batch` | `$1` file | one grouped write for many issues |
-| `ci_runs` / `ci_log` / `ci_log_failed` | `$1` run | read CI |
+| `ci_runs` | — | list CI runs |
+| `ci_log` / `ci_log_failed` | `$1` run | read one run's log / its failed steps |
 | `board_list` | — | GitHub only — read the board |
 
 A verb's value is itself a template, so it can embed config:
 `"board_list": "gh project item-list {{tracker.project}} --owner {{tracker.owner}} --format json"`.
 
-## The four places the backends genuinely differ
+## The places the backends genuinely differ
 
-Everything else is a command swap. These four are *semantic*, so skills branch on them via
-`{{#if backend.…}}`:
+Everything else is a command swap. These are *semantic*, so skills branch on them via
+`{{#if backend.…}}` — and `cycle lint` fails if a declared flag is one no template reads, or a
+template branches on a flag a backend never declares:
 
 | | Forgejo | GitHub |
 | --- | --- | --- |
-| `fields` | `labels` — routing lives in label namespaces (`status/ready`, `size/s`) | `project` — real Projects v2 fields |
-| `has_board` | `false` — the issue existing IS enough; nothing to add it to | `true` — an issue must be on the board to carry field values |
+| `has_board` | `false` — the issue existing IS enough; routing lives in label namespaces (`status/ready`, `size/s`) | `true` — an issue must be on the board to carry its Projects v2 field values |
 | `job_logs` | `wrapper` — no job-log API; logs come from the `ci-logs` scraper | `api` — `gh run view --log` |
+| `job_logs_search` | `true` — the wrapper scans back for the most recent *failing* run | `false` — `--log-failed` narrows one run; it never searches back |
 | `auto_merge` | `false` — no server-side merge-on-green | `false` unless branch protection exists |
 
 **On `auto_merge`:** a fire-and-forget auto-merge flag is only safe when the forge enforces
@@ -51,7 +54,7 @@ Set `auto_merge: true` only for a repo that actually has protection configured.
 
 - **Forgejo:** find the label with the namespace prefix and strip it —
   `labels.find(l => l.startsWith('status/'))?.slice('status/'.length)`. The helper enforces one
-  label per namespace and preserves workflow labels (`bug`, `area:*`, `finding`).
+  label per namespace and preserves workflow labels (`bug`, `area:*`, `finding`, `scout`).
 - **GitHub:** `gh project item-list` returns `content` plus the fields. It carries **no open/closed
   state**, so intersect with `gh issue list --state open` on `number` — a closed item can linger on
   the board until archived, and the intersection also catches an open issue not yet added.
@@ -109,7 +112,7 @@ path alone would pass every test and fail on the other laptop.
 1. Copy `backends/forgejo.jsonc`.
 2. Bind every verb in the table above. A verb a skill calls but the backend doesn't define is a
    hard error at render time, so nothing is silently missing.
-3. Set the four semantic flags honestly. Getting `auto_merge` wrong is the one that can actually
+3. Set every semantic flag honestly. Getting `auto_merge` wrong is the one that can actually
    lose work.
 4. Fill in `notes.routing_read`, `notes.unreachable`, and `notes.done_means` — these splice into
    DOCTRINE §1/§7 where the backends' *prose* has to differ, not just their commands.

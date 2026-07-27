@@ -38,7 +38,25 @@ import { readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
 
-const API = process.env.FORGEJO_API ?? 'https://git.brndn.zip/api/v1';
+// No hardcoded host: the rendered shim passes FORGEJO_API from .cycle/config.jsonc,
+// and failing that we derive it from this checkout's own origin. A baked-in default
+// would point every repo at one person's instance — the same class of bug as the
+// default repo slug that misfiled 7 issues on 2026-07-22.
+const API = process.env.FORGEJO_API || (() => {
+    try {
+        const url = execFileSync('git', ['remote', 'get-url', 'origin'], {
+            encoding: 'utf8',
+            stdio: ['ignore', 'pipe', 'ignore'],
+        }).trim();
+        return `${new URL(url.replace(/^[^@]+@([^:]+):/, 'https://$1/')).origin}/api/v1`;
+    } catch {
+        return '';
+    }
+})();
+if (!API) {
+    console.error('forgejo: set FORGEJO_API, or run from a checkout whose origin points at your Forgejo');
+    process.exit(1);
+}
 
 // Repo target (global-tool aware): an explicit FORGEJO_REPO wins; else derive
 // owner/repo from THIS repo's `origin` remote when it points at the Forgejo host

@@ -16,15 +16,11 @@ PATH_LINE='export PATH="$HOME/.local/bin:$PATH"'
 
 mkdir -p "$BIN_DIR" "$SKILL_DIR"
 
-echo "Linking bin/ tools into $BIN_DIR:"
-for src in "$CYCLE"/bin/*; do
-    [ -e "$src" ] || continue
-    name="$(basename "$src")"
-    name="${name%.mjs}"          # cycle.mjs → cycle (bare command on PATH)
-    name="${name%.sh}"
-    ln -sf "$src" "$BIN_DIR/$name"
-    echo "  $name -> $src"
-done
+# Only cycle.mjs. The other files in bin/ are subcommand modules it imports on
+# demand — on PATH they would look like commands and do nothing when run.
+ln -sf "$CYCLE/bin/cycle.mjs" "$BIN_DIR/cycle"
+echo "Linking the CLI into $BIN_DIR:"
+echo "  cycle -> $CYCLE/bin/cycle.mjs"
 
 echo
 # The setup skills are PERSONAL, not per-repo: /cycle-setup has to be available in a

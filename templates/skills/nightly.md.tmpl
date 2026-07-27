@@ -15,11 +15,11 @@ exactly as written.
 ## The standing go
 
 The overnight run has a **standing go**: it removes the *checkpoint pauses* that exist so
-{{repo.human}} can redirect in real time. He isn't there, so those pauses would just stall the run
+{{repo.human}} can redirect in real time. Nobody is there, so those pauses would just stall the run
 until morning.
 
 **It does not remove a single guardrail.** Every §5 always-brake surface still stops the work and
-parks it for him. The distinction matters: a pause exists for his convenience; a brake exists
+parks it for morning. The distinction matters: a pause exists for convenience; a brake exists
 because the change needs a human. Only the first one is lifted.
 
 ## Workflow
@@ -57,13 +57,13 @@ Lead with **run duration** (from step 0), then what shipped.
 The smoke-test checklist is the part that earns its keep, so build it properly:
 
 - **Derive it from the night's diff and each shipped issue's `Acceptance:` line.** Derive; don't
-  invent. A generic "check the app still works" teaches him to skim past it.
+  invent. A generic "check the app still works" teaches the reader to skim past it.
 - **Only user-visible surfaces get a checkbox.** A refactor that shipped correctly and changed
   nothing observable gets a line in "what shipped," not a checkbox.
 - **Each item names three things:** what changed · what should now be true · what to confirm
   didn't break nearby.
-- **Group by how he'd actually check** — everything at the desk together, everything on a phone
-  together. Don't make him switch devices six times.
+- **Group by how it would actually get checked** — everything at the desk together, everything on a phone
+  together. Don't force six device switches.
 - **Give each item its one-line revert.** If something's wrong at 7am, the fix should be one
   command, not an investigation.
 

@@ -9,19 +9,14 @@
 
   // Branch points for skills that must genuinely behave differently.
   "semantics": {
-    // Routing values are label namespaces (status/ready, size/s), not board fields.
-    "fields": "labels",
     // There is no board. An issue existing IS enough — nothing to add it to.
     "has_board": false,
     // This Forgejo serves no job-log API; logs come from the ci-logs wrapper.
     "job_logs": "wrapper",
-    // No branch protection, so `--auto`-style merge would fire immediately with
-    // nothing to wait on. Always the poll-then-merge guard.
-    "auto_merge": false,
-    // "Shipped" does not exist as a status. Closing the issue is what done means.
-    "has_shipped_status": false,
-    // All scripts exit 3 and print `unreachable` on a connection failure.
-    "unreachable_exit": 3
+    // The wrapper scans the run list for the first failure, so it needs no run id.
+    "job_logs_search": true,
+    // No branch protection, so `--auto`-style merge would fire immediately.
+    "auto_merge": false
   },
 
   // Helper shims rendered into the consuming repo. `helper` names a file in the-cycle's
@@ -58,6 +53,7 @@
   // $1..$9 are the arguments passed at the call site.
   "verbs": {
     "issue_list": "node scripts/forgejo.mjs list --open",
+    "issue_list_closed": "node scripts/forgejo.mjs list --closed --limit 20",
     "issue_list_label": "node scripts/forgejo.mjs list --open --label $1",
     "issue_list_milestone": "node scripts/forgejo.mjs list --open --milestone $1",
     "issue_view": "node scripts/forgejo.mjs issue view $1",
@@ -88,7 +84,7 @@
 
   // Prose the doctrine splices in where the two backends genuinely diverge.
   "notes": {
-    "routing_read": "Routing values are label namespaces. Read one by finding the label with the prefix and stripping it: `labels.find(l => l.startsWith('status/'))?.slice('status/'.length)`. `forgejo-project.mjs` enforces one label per namespace and preserves workflow labels (`bug`, `area:*`, `finding`).",
+    "routing_read": "Routing values are label namespaces. Read one by finding the label with the prefix and stripping it: `labels.find(l => l.startsWith('status/'))?.slice('status/'.length)`. `forgejo-project.mjs` enforces one label per namespace and preserves workflow labels (`bug`, `area:*`, `finding`, `scout`).",
     "unreachable": "All three scripts exit **3** and print `unreachable` on a connection failure. Stop and say so — never fall back to a cached list or a frozen markdown tracker.",
     "done_means": "A **closed issue is done**. There is no `status/shipped`; `issue close` is the terminal step. Pass `--open` when picking work."
   }

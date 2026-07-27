@@ -18,8 +18,9 @@ by-eye work gets checked *before* it merges.
 
 1. **Sanity.** `git status -sb` — know whether you're shipping a clean branch or a dirty tree.
    Both are legitimate here; say which.
-2. **Deploy.** `{{deploy.test}}` — stream the output rather than waiting silently, so a failure is
-   visible where it happens.
+2. **Deploy.** {{#unless deploy.test}}**`deploy.test` is not set in `.cycle/config.jsonc`** — stop
+   and say so; there is no deploy command to run. {{/unless}}{{#if deploy.test}}`{{deploy.test}}` — stream the output rather than waiting silently, so a failure is
+   visible where it happens.{{/if}}
 3. **Verify the right build actually landed.** Don't infer success from a zero exit code — confirm
    the deployed artifact is the one you just built. If the build stamps a revision into the served
    output, read it back and compare; otherwise check whatever the deploy script itself reports.

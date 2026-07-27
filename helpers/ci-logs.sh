@@ -13,7 +13,7 @@
 # targeting"): FORGEJO_REPO wins, else the CURRENT repo's `origin` remote. As a
 # global command it therefore works from any checkout with no per-repo copy.
 #
-# One-time setup:  fj-ex auth login --host git.brndn.zip --username brandon
+# One-time setup:  fj-ex auth login --host <your-forgejo> --username <you>
 #   (stores a session cookie; re-run when it expires. Needs TOTP 2FA, not a
 #    security key — fj-ex can't drive a WebAuthn ceremony.)
 #
@@ -61,7 +61,7 @@ fi
 # rather than letting each subcommand emit a raw auth error.
 if ! "$FJ" auth status >/dev/null 2>&1; then
     echo "ci-logs: not logged in (or the session cookie expired)." >&2
-    echo "         Re-auth with: fj-ex auth login --host git.brndn.zip --username brandon" >&2
+    echo "         Re-auth with: fj-ex auth login --host ${FORGEJO_HOST:-<your-forgejo>} --username <you>" >&2
     exit 1
 fi
 

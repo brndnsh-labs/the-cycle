@@ -34,7 +34,8 @@ have a go, you don't.
 
 ## 3. Deploy
 
-`{{deploy.prod}}` — backup → migrate → deploy → verify as one sequence, streamed.
+{{#unless deploy.prod}}**`deploy.prod` is not set in `.cycle/config.jsonc`** — stop and say so.
+There is no deploy command to run, and prod is the last place to improvise one.{{/unless}}{{#if deploy.prod}}`{{deploy.prod}}` — backup → migrate → deploy → verify as one sequence, streamed.{{/if}}
 
 ## 4. Verify independently
 

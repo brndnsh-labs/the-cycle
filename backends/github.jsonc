@@ -8,18 +8,18 @@
   "name": "github",
 
   "semantics": {
-    // Routing values are real Project fields, set via the board, not labels.
-    "fields": "project",
     // There IS a board, and an issue must be added to it to carry field values.
     "has_board": true,
     // `gh run view --log` works; no wrapper needed.
     "job_logs": "api",
+    // `gh run view --log-failed` shows the failed steps of ONE run — it does not search
+    // back for the most recent failing run the way the Forgejo wrapper does. Skills must
+    // list runs first and pass an id.
+    "job_logs_search": false,
     // `gh pr merge --auto` is correct ONLY with branch protection — without it the
     // merge fires immediately with nothing to wait on. Repos without protection use
     // the same poll-then-merge guard as Forgejo.
-    "auto_merge": false,
-    "has_shipped_status": true,
-    "unreachable_exit": 1
+    "auto_merge": false
   },
 
   // Config this backend cannot render without. Checked before any template runs, so
@@ -48,6 +48,7 @@
 
   "verbs": {
     "issue_list": "gh issue list --state open --json number,title,labels,milestone,url",
+    "issue_list_closed": "gh issue list --state closed --limit 20 --json number,title,closedAt,url",
     "issue_list_label": "gh issue list --state open --label $1 --json number,title,labels,milestone,url",
     "issue_list_milestone": "gh issue list --state open --milestone $1 --json number,title,labels,milestone,url",
     "issue_view": "gh issue view $1 --json number,title,state,url,labels,milestone,body",

@@ -14,19 +14,22 @@ Goal: keep dependencies current without turning a routine bump into an outage.
 
 ## Workflow
 
-1. **Survey.** `npm outdated` and `npm audit`. Group by risk: patch/minor on a leaf dependency is
+1. **Survey.** `{{deps.outdated}}`{{#if deps.audit}} and `{{deps.audit}}`{{/if}}. Group by risk: patch/minor on a leaf dependency is
    routine; a **major**, a **framework**, or anything with a **native build step** is not.
 2. **Present the plan** (a status update, not a gate — §5): what's bumping, from → to, which group
    each falls in, and anything you're deliberately holding back and why.
 3. **Branch** (§9).
-4. **Update.** `npm update` for the routine set; name specific packages for anything riskier.
+4. **Update.** `{{deps.update}}` for the routine set; name specific packages for anything riskier.
    Take majors **one at a time** — a batch of majors makes a failure impossible to attribute.
 5. **Watch the install output**, don't just check the exit code. A patch step that silently
    no-ops, a native module that rebuilds against a different ABI, or a postinstall that fails
    soft will all exit 0 and break at runtime.
-6. **`npm audit fix` only if needed — never `--force`.** `--force` installs semver-major changes to
-   fix an advisory; that's a different change than the one you're making, and it lands unreviewed.
-   If only `--force` would fix it, stop and surface the tradeoff.
+6. **Advisories.** {{#if deps.audit_fix}}`{{deps.audit_fix}}` only if needed — **never a force
+   flag.** Forcing an advisory fix installs semver-major changes; that's a different change than
+   the one you're making, and it lands unreviewed. If only forcing would fix it, stop and surface
+   the tradeoff.{{/if}}{{#unless deps.audit_fix}}Fix each on its own terms. An advisory that can
+   only be cleared by a major bump is a different change than the one you're making — surface the
+   tradeoff rather than folding it in.{{/unless}}
 7. **Run the gates** (§4):
    ```
 {{#each gates.commands}}   {{.}}
@@ -38,20 +41,20 @@ Goal: keep dependencies current without turning a routine bump into an outage.
      test to match. Pin back, and file it.
 
    If you can't tell which, that's a judgment call (§5) — surface it rather than guessing.
-8. **Commit** (§8) — one commit, explicit paths (`package.json`, `package-lock.json`, plus any
-   test file a *stale expectation* legitimately required). Never `-A`.
+8. **Commit** (§8) — one commit, explicit paths ({{deps.manifests_md}}, plus any test file a
+   *stale expectation* legitimately required). Never `-A`.
 9. **Report** what moved, what's held back and why, and gate status. **Don't auto-push** — a
    dependency bump lands on {{repo.human}}'s schedule.
 
 ## Edge cases
 
-- **Lockfile drift with nothing outdated:** `npm install` rewrote the lockfile without any version
-  change (a transitive resolution moved). That's a legitimate standalone commit — say so, don't
+- **Lockfile drift with nothing outdated:** `{{deps.install}}` rewrote the lockfile without any
+  version change (a transitive resolution moved). That's a legitimate standalone commit — say so, don't
   bury it in an unrelated diff.
 - **A formatter or linter bumped** and now reformats files nobody touched: separate the
   reformat-everything commit from the version bump, or the diff is unreviewable.
-- **A native module's ABI changed** (a Node major, or a rebuilt binary): the gates may pass locally
-  and fail on the deploy target, which runs a different Node. Call it out explicitly.
+- **A native or compiled dependency's ABI changed**: the gates may pass locally and fail on the
+  deploy target, which runs a different runtime version. Call it out explicitly.
 - **A patch/override is in play:** confirm it still applies after the bump. A silently-dropped
   patch is the classic "it worked locally" failure.
 - **Nothing is outdated:** say so and stop. Don't manufacture a bump.

@@ -32,10 +32,19 @@ const WARN = 'warn';
 /** Commands that belong in a backend verb or a gate, never in portable prose. */
 const INLINED = [
     [/\bnpm run [a-z]/, 'a gate command — use {{gates.<name>}}'],
-    [/\b(?:pnpm|yarn) [a-z]/, 'a gate command — use {{gates.<name>}}'],
+    // Any package manager named in prose pins the skill to one ecosystem. /dep-update
+    // spelled `npm outdated` four times, which quietly made it the one skill that
+    // couldn't be installed in a repo written in anything else.
+    [/\b(?:npm|pnpm|yarn|cargo|poetry|bundle|go get|go mod|uv) (?:outdated|audit|update|install|sync|lock|build|tidy|show|up)\b/,
+        'a package-manager command — use {{deps.<name>}}'],
+    [/\b(?:pnpm|yarn) run [a-z]/, 'a gate command — use {{gates.<name>}}'],
     [/\bgh (?:issue|pr|project|run) /, 'a tracker command — use a backend verb'],
     [/\bnode scripts\//, 'a helper invocation — use a backend verb'],
     [/\bci-logs\b/, 'a helper invocation — use {{@ci_log}} / {{@ci_runs}}'],
+    // The name is parameterized as {{repo.human}}; the pronouns around it were not, so
+    // the prose silently assumed one person's gender in six files. they/them is correct
+    // for anyone, and for "the team".
+    [/\b(?:he|him|his|she|her|hers)\b/i, 'a gendered pronoun — use they/them, or {{repo.human}}'],
 ];
 
 export function lint({ CYCLE_HOME }) {
@@ -130,6 +139,34 @@ export function lint({ CYCLE_HOME }) {
             const others = [...backends].filter(([n]) => n !== name);
             if (others.length && others.every(([, o]) => !(o.verbs ?? {})[verb])) {
                 add(WARN, 'verbs', `only ${name} binds "${verb}", and no template calls it`, `backends/${name}.jsonc`);
+            }
+        }
+    }
+
+    // --- backend semantics ---------------------------------------------------
+    // A semantic flag exists to make a template branch. One that no template reads is
+    // decoration that will eventually lie: someone flips it expecting the rendered
+    // prose to follow, and nothing moves, because the real fact is hardcoded elsewhere.
+    // (`has_shipped_status` and `unreachable_exit` were both in exactly that state.)
+    const branchedOn = new Set();
+    for (const text of templates.values()) {
+        for (const m of text.matchAll(/\{\{[#/]?(?:if|unless)?\s*backend\.(\w+)/g)) branchedOn.add(m[1]);
+        for (const m of text.matchAll(/\{\{\s*backend\.(\w+)/g)) branchedOn.add(m[1]);
+    }
+    for (const [name, b] of backends) {
+        for (const flag of Object.keys(b.semantics ?? {})) {
+            if (!branchedOn.has(flag)) {
+                add(ERROR, 'semantics', `${name} declares "${flag}", which no template branches on`, `backends/${name}.jsonc`);
+            }
+        }
+    }
+    // The inverse: a template branching on a flag a backend doesn't declare reads as
+    // falsy, so the branch silently never fires.
+    for (const flag of branchedOn) {
+        if (flag === 'name' || flag === 'notes') continue;
+        for (const [name, b] of backends) {
+            if (!(flag in (b.semantics ?? {}))) {
+                add(ERROR, 'semantics', `templates branch on backend.${flag}, which ${name} does not declare`, `backends/${name}.jsonc`);
             }
         }
     }

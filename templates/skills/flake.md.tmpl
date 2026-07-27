@@ -51,8 +51,10 @@ tests contain none. Measure; don't pattern-match.
 5. **Apply that class's canonical fix.**
 6. **Re-run N times to confirm**, then run the full suite (§4) — an isolation fix that breaks a
    neighbor is common.
-7. **Register it** — a short entry recording the test, the class, the fix, and the measured
-   before/after rate. The registry is what turns "this feels flaky lately" into evidence next time.
+7. **Register it** — comment the record on the issue you filed for this flake (§7):
+   test, class, fix, and the measured before/after rate. If it was fixed without an issue, file
+   one closed rather than inventing a new home for the record — one durable, searchable place is
+   what turns "this feels flaky lately" into evidence next time.
 
 ## Safety — the rules that keep this from causing harm
 

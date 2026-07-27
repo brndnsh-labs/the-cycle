@@ -1,6 +1,6 @@
 ---
 name: unblock
-description: Batch up everything waiting on {{repo.human}} and clear it in one pass. Two lanes — `desk` (decisions he can make from a menu) and `hands-on` (things he has to actually look at or try, verified live first). Restates each item in plain English with a recommendation, asks via AskUserQuestion, and applies every answer in a single batched write. Read-only until he answers. Usage `/unblock` · `/unblock desk` · `/unblock hands-on`.
+description: Batch up everything waiting on {{repo.human}} and clear it in one pass. Two lanes — `desk` (decisions answerable from a menu) and `hands-on` (things that have to be looked at or tried, verified live first). Restates each item in plain English with a recommendation, asks via AskUserQuestion, and applies every answer in a single batched write. Read-only until they answer. Usage `/unblock` · `/unblock desk` · `/unblock hands-on`.
 ---
 
 # /unblock — clear the decisions you owe
@@ -13,10 +13,10 @@ rule).
 
 ## The two lanes
 
-The difference is **what it costs him to answer**, and it changes everything about how the item
+The difference is **what it costs to answer**, and it changes everything about how the item
 should be presented.
 
-| Lane | The item is… | He answers by… |
+| Lane | The item is… | Answered by… |
 | --- | --- | --- |
 | **desk** | a decision — a scoping call, an ambiguous choice, a parked PR needing a yes | reading three lines and picking an option |
 | **hands-on** | a verification — something that has to be seen, clicked, heard, or tried on a real device | actually going and doing it |
@@ -28,15 +28,15 @@ both and presents desk first, then hands-on.
 ## Workflow
 
 1. **Gather.** Two classes: scheduled work explicitly blocked on a decision, and unscheduled items
-   carrying a caveat that means "needs his input even to schedule."
+   carrying a caveat that means "needs input even to schedule."
 2. **Sort into lanes.** When unsure, it's hands-on — assuming a decision is desk-decidable is the
    expensive mistake.
-3. **For the hands-on lane only: verify it's actually live first.** Confirm the thing he's about to
+3. **For the hands-on lane only: verify it's actually live first.** Confirm the thing {{repo.human}} is about to
    go look at is deployed and current. If the test environment has one slot, **sequence them** —
-   don't promise five things he can check simultaneously when only the last one is actually up.
-   Silently asking him to evaluate a stale build burns the whole exercise.
+   don't promise five things to check simultaneously when only the last one is actually up.
+   Silently asking for a verdict on a stale build burns the whole exercise.
 4. **Pick ~5.** More than that stops being one sitting.
-5. **Restate each in a fixed card** — plain English, no jargon he'd have to reload context to parse:
+5. **Restate each in a fixed card** — plain English, no jargon that would need reloaded context to parse:
 
    ```
    **#<n> — <title>**
@@ -54,10 +54,10 @@ both and presents desk first, then hands-on.
    - **hands-on** verdicts: **Works** / **Doesn't work** / **Not now**.
      **"Not now" is a first-class answer, not a failure** — declining to go test something is a
      legitimate outcome, and making it feel like a punt is how a queue becomes a guilt pile.
-7. **Read-only until he answers.** Nothing is written during gathering or asking.
+7. **Read-only until they answer.** Nothing is written during gathering or asking.
 8. **Apply all answers in one batched write** (§7): `{{@batch "<file.json>"}}` — never a loop.
    - **Works** → unblock it: merge via §6's guard, or close it.
-   - **Doesn't work** → capture his description **verbatim** as a `finding`. His raw words are the
+   - **Doesn't work** → capture the description **verbatim** as a `finding`. Their raw words are the
      evidence; don't paraphrase them into your own diagnosis.
    - **Not now** → leave it exactly as it was. No penalty, no nag.
 9. **Report** what moved, what stayed, and what's still owed.
@@ -65,9 +65,9 @@ both and presents desk first, then hands-on.
 ## Safety
 
 - **Never guess an answer** to move the queue along. An unanswered item is fine; a wrong answer
-  recorded as his is not.
+  recorded as theirs is not.
 - **Never present a hands-on item as a desk menu.**
-- **Never re-park a "doesn't work" silently** — it becomes a `finding` with his words attached, or
+- **Never re-park a "doesn't work" silently** — it becomes a `finding` with their words attached, or
   it didn't happen.
 
 ## Edge cases
@@ -75,6 +75,6 @@ both and presents desk first, then hands-on.
 - **Nothing is blocked:** say so and stop. That's the good outcome.
 - **More than ~5 items:** take the highest-value ones and say how many remain.
 - **An item is stale** (already shipped, or overtaken): drop it from the menu and say so — don't
-  make him adjudicate something that no longer exists.
-- **He answers something you didn't ask:** take the answer, and reconcile the item it actually
+  make them adjudicate something that no longer exists.
+- **They answer something you didn't ask:** take the answer, and reconcile the item it actually
   applies to.

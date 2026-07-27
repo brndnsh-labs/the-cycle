@@ -22,7 +22,7 @@ stays in progress.
    | Triage | Criteria | Action |
    |---|---|---|
    | **Fix now (DEFAULT)** | Any finding about the diff under review — P0, P1, **or a bounded P2** (mechanical, or a small/localized change). This is the default, not the exception. | patch inline this turn |
-   | **Escalate to {{repo.human}}** | A real finding that (a) needs a design call (§5 — {{brakes|join:, }}, or any genuinely ambiguous call), or (b) is large / cross-cutting / would balloon the diff | stop; surface it; **on his nod** open a `finding` issue (`{{@issue_create "<title>" "<body>" "finding"}}`) and/or recommend `/implement #<n>` with a fix-focused prompt — **never silently shelve a real finding** |
+   | **Escalate to {{repo.human}}** | A real finding that (a) needs a design call (§5 — {{brakes|join:, }}, or any genuinely ambiguous call), or (b) is large / cross-cutting / would balloon the diff | stop; surface it; **on {{repo.human}}'s nod** open a `finding` issue (`{{@issue_create "<title>" "<body>" "finding"}}`) and/or recommend `/implement #<n>` with a fix-focused prompt — **never silently shelve a real finding** |
 {{#if labels.backlog}}   | **Backlog** | A genuinely *new* idea/feature surfaced during review — not a flaw in this code | open a `backlog` issue (`{{@issue_create "<title>" "<body>" "backlog"}}`) — pipeline, not debt |
 {{/if}}{{#unless labels.backlog}}   | **New idea** | A genuinely *new* idea/feature surfaced during review — not a flaw in this code | **note it to {{repo.human}}**; don't open an issue unprompted |
 {{/unless}}
@@ -66,5 +66,6 @@ stays in progress.
   don't auto-pick.
 - **Cited line has moved** (the diff was edited since `/review`): re-Read, relocate by content
   match, and note the drift.
-- **A finding contradicts a project memory note:** memory wins by default — drop the finding and
-  say so.
+- **A finding contradicts a project memory note:** this is a §5 always-brake — **escalate, don't
+  resolve it here.** The memory usually wins, but "usually" is not a licence to drop a finding
+  silently: surface both, say which you'd keep and why, and let {{repo.human}} call it.
