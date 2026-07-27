@@ -720,20 +720,14 @@ const DEFAULT_STATUSES = {
     ],
 };
 
-async function cmdInstall(args) {
-    const root = findRepoRoot();
-    const { values } = parseArgs({
-        args,
-        options: { profile: { type: 'string' }, backend: { type: 'string' }, yes: { type: 'boolean', short: 'y' } },
-        allowPositionals: true,
-    });
-
-    if (existsSync(configPath(root)) && !values.yes) {
-        fail('this repo already has .cycle/config.jsonc', 'use `cycle update` to re-render, or pass --yes to overwrite');
-    }
-
+/**
+ * The config a fresh install starts from: everything `detect` could infer, plus
+ * defensible defaults for everything it couldn't. Shared by the interview and by
+ * `--plan`, so a guided setup and a manual one begin from exactly the same draft.
+ */
+export function draftConfig(root, { backend: wanted, profile } = {}) {
     const d = detect(root);
-    const backend = values.backend ?? d.backend;
+    const backend = wanted ?? d.backend;
     const cfg = {
         // First name only — the skills address this person directly, dozens of times
         // per file ("ask Brandon", "on his nod"); a full name reads like a form.
@@ -742,7 +736,7 @@ async function cmdInstall(args) {
             slug: d.slug ?? '',
             human: (git(['config', 'user.name'], root) || 'the maintainer').split(/\s+/)[0],
         },
-        profile: values.profile ?? 'lean',
+        profile: profile ?? 'lean',
         backend,
         tracker: {
             description: backend === 'github'
@@ -775,6 +769,29 @@ async function cmdInstall(args) {
         commit: { coauthor: 'Claude Opus 5 <noreply@anthropic.com>' },
         deploy: d.deploy ?? { test: '', prod: '' },
     };
+    return { cfg, detected: d };
+}
+
+async function cmdInstall(args) {
+    const root = findRepoRoot();
+    const { values } = parseArgs({
+        args,
+        options: {
+            profile: { type: 'string' },
+            backend: { type: 'string' },
+            yes: { type: 'boolean', short: 'y' },
+            plan: { type: 'boolean' },
+        },
+        allowPositionals: true,
+    });
+
+    if (values.plan) return cmdPlan(root, values);
+
+    if (existsSync(configPath(root)) && !values.yes) {
+        fail('this repo already has .cycle/config.jsonc', 'use `cycle update` to re-render, or pass --yes to overwrite');
+    }
+
+    const { cfg } = draftConfig(root, { backend: values.backend, profile: values.profile });
 
     if (!values.yes) {
         const rl = createInterface({ input: process.stdin, output: process.stdout });
@@ -815,6 +832,101 @@ async function cmdInstall(args) {
     console.log(`\n${green('✓')} rendered ${bold(String(plan.length))} files from the-cycle@${upstreamSha()}`);
     for (const f of plan) console.log(`  ${dim(f.rel)}`);
     console.log(`\n${dim('next:')} review .cycle/config.jsonc, then commit. \`cycle check\` reports drift.`);
+}
+
+/**
+ * `cycle install --plan` — everything a guided setup needs, as JSON on stdout.
+ *
+ * The split matters: this command decides *what must be known*, and something with
+ * judgment decides *what the answers are*. The renderer stays pure and testable, and
+ * a model filling this in can never emit a skill — only data the renderer consumes.
+ * It writes nothing, so running it is always safe.
+ */
+function cmdPlan(root, values) {
+    const { cfg, detected } = draftConfig(root, { backend: values.backend, profile: values.profile });
+    const backend = loadBackend(cfg.backend);
+    const profiles = readdirSync(join(CYCLE_HOME, 'profiles'))
+        .filter((f) => f.endsWith('.jsonc'))
+        .map((f) => basename(f, '.jsonc'));
+
+    const overlayManifest = existsSync(templatePath('overlays.jsonc')) ? readJsonc(templatePath('overlays.jsonc')) : {};
+
+    console.log(JSON.stringify({
+        root,
+        existing_config: existsSync(configPath(root)) ? relative(root, configPath(root)) : null,
+        // What the filesystem and git could tell us. Everything here is a guess worth
+        // confirming, not a fact — `name` comes from package.json, which is often the
+        // npm slug rather than what a person calls the project.
+        detected: {
+            name: detected.name,
+            slug: detected.slug ?? null,
+            remote: detected.remote ?? null,
+            backend: detected.backend,
+            gates: detected.gates,
+            deploy: detected.deploy ?? null,
+        },
+        draft: cfg,
+        // The decisions a draft cannot make for itself.
+        questions: [
+            {
+                path: 'profile',
+                asks: 'How much machinery should this repo take on?',
+                why: 'Machinery is opt-in — a repo should take a lane when it has earned it, not by default. Start lean unless the repo already does the thing.',
+                options: profiles,
+                default: cfg.profile,
+            },
+            {
+                path: 'backend',
+                asks: 'Which tracker does this repo actually use?',
+                why: 'Drafted from the git remote, which can be wrong mid-migration: a repo can be pushed to one forge while its issues still live on another. Confirm against where issues are really filed, not where the code is pushed.',
+                options: readdirSync(join(CYCLE_HOME, 'backends')).filter((f) => f.endsWith('.jsonc')).map((f) => basename(f, '.jsonc')),
+                default: cfg.backend,
+            },
+            {
+                path: 'repo.human',
+                asks: 'Who does this pipeline interrupt?',
+                why: 'Skills address this person directly and often. A first name reads right; a full name reads like a form.',
+                default: cfg.repo.human,
+            },
+            {
+                path: 'gates',
+                asks: 'What must pass before work is done?',
+                why: 'Read from package.json scripts when present. Verify they actually run here, and add any gate the project has that a script name would not reveal.',
+                default: cfg.gates,
+            },
+            {
+                path: 'brakes',
+                asks: 'What surfaces must never be changed without asking first?',
+                why: 'The always-stop list in DOCTRINE §5. Derive it from what this codebase can actually break irreversibly — auth, migrations, money, anything user-visible and destructive. Generic defaults are close to useless here.',
+                default: cfg.brakes,
+            },
+            {
+                path: 'tracker.statuses',
+                asks: 'What is the status vocabulary, and what does each value mean?',
+                why: 'The table skills read to decide what is pickable. Match the labels or board columns the tracker really has.',
+                default: cfg.tracker.statuses,
+            },
+            ...Object.entries(backend.requires ?? {}).map(([path, why]) => ({
+                path,
+                asks: `${path} is required by the ${cfg.backend} backend`,
+                why,
+                default: path.split('.').reduce((o, k) => (o == null ? o : o[k]), cfg) ?? null,
+            })),
+        ],
+        // Optional by design: an install with no overlays renders a complete pipeline.
+        // These are where a repo says the things only it can say.
+        overlays: Object.entries(overlayManifest).map(([name, o]) => ({
+            name,
+            path: relative(root, join(overlayDir(root), `${name}.md`)),
+            exists: existsSync(join(overlayDir(root), `${name}.md`)),
+            ...o,
+        })),
+        write: {
+            config: relative(root, configPath(root)),
+            overlays_dir: relative(root, overlayDir(root)),
+            then: 'cycle update',
+        },
+    }, null, 2));
 }
 
 /** config.jsonc with comments, so the file explains itself when Brandon opens it. */
@@ -977,6 +1089,11 @@ const USAGE = `${bold('cycle')} — render the-cycle's work pipeline into a repo
 
   ${bold('cycle install')} [--profile lean|standard|full] [--backend forgejo|github] [-y]
       Interview, write .cycle/config.jsonc, render the skills.
+
+  ${bold('cycle install --plan')}
+      Print what a setup needs to decide — detected values, the open questions
+      and why each matters, every overlay point — as JSON, and write nothing.
+      This is what /cycle-setup reads; useful on its own to see the shape.
 
   ${bold('cycle check')} [-q]
       Report drift on two axes: locally edited files, and files a re-render

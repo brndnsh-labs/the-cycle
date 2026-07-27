@@ -82,7 +82,16 @@ git clone https://git.brndn.zip/brandon/the-cycle ~/code/the-cycle
 ~/code/the-cycle/install.sh          # symlinks bin/cycle → ~/.local/bin
 ```
 
+`install.sh` also links `/cycle-setup` and `/cycle-adopt` into `~/.claude/skills` as personal
+skills — they have to work in a repo that doesn't have the-cycle yet.
+
 Then, in a repo:
+
+```sh
+/cycle-setup                         # guided: reads the repo, then writes config + overlays
+```
+
+or drive it by hand:
 
 ```sh
 cycle install --profile lean         # interview → .cycle/config.jsonc → render
@@ -90,6 +99,21 @@ cycle check                          # drift report; non-zero exit on drift
 cycle update                         # re-render, show the diff
 cycle adopt                          # reverse-engineer an existing hand-written setup
 ```
+
+### Why setup is guided
+
+`cycle install` can detect a repo's name, remote and gate commands. It cannot know what breaks
+this codebase irreversibly, which directories deserve which reviewer, or what "ready" means here —
+and those answers are what make the pipeline worth having. Accepting the generic defaults produces
+a pipeline that renders cleanly and advises badly.
+
+So the split is: `cycle install --plan` emits what must be decided — detected values, each open
+question with *why it matters*, every overlay point with the shape its content should take —
+and `/cycle-setup` reads the codebase to answer it, asking only what reading can't settle.
+
+The renderer stays pure. A model fills in **data**; it never writes a skill, and `/cycle-setup` is
+forbidden from touching `.claude/skills/` at all. That keeps the whole pipeline testable, and
+keeps drift detection meaningful.
 
 And when working on the-cycle itself:
 
@@ -127,10 +151,14 @@ bin/
   cycle.mjs            the CLI — Node ESM, zero dependencies
   adopt.mjs            reverse-engineer an existing hand-written setup
 install.sh             symlink bin/cycle onto PATH
+skills/
+  cycle-setup/         guided install — personal skill, linked by install.sh
+  cycle-adopt/         guided reconciliation of an existing setup
 templates/
   DOCTRINE.md.tmpl     the §1–§10 spine
   skills/*.md.tmpl     one per skill
   shim.mjs.tmpl        the helper shim rendered into scripts/
+  overlays.jsonc       the overlay points, and what each is for
 helpers/               the tracker executables, single-sourced
 backends/*.jsonc       verb → command tables, shim declarations
 profiles/*.jsonc       which skills each profile installs

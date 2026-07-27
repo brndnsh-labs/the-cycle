@@ -1,0 +1,100 @@
+// Overlay registry — the injection points where a repo's own content goes.
+//
+// Every skill template is portable prose. These are the holes in it that only the
+// consuming repo can fill: a routing table, a list of what to look for *here*, the
+// deploy topology. All are optional; an install with none of them renders a complete,
+// usable pipeline, and a repo adds one when it has something real to say.
+//
+// This file is the machine-readable half of docs/AUTHORING.md's table. `cycle install
+// --plan` emits it so a guided setup knows what to draft and why; `cycle lint` checks
+// it against the templates in both directions.
+//
+//   purpose  — what the overlay is for, in the second person, for whoever writes it
+//   shape    — the form the content should take, so a draft doesn't invent a format
+//   value    — when it earns its keep; "always" means most repos want it
+{
+  "doctrine-preamble": {
+    "into": "DOCTRINE, before §1",
+    "purpose": "The posture note that frames how this repo works — what it optimizes for, what it refuses. Sets the tone every skill inherits.",
+    "shape": "One short paragraph, or 3-5 bullets. No commands.",
+    "value": "always"
+  },
+  "doctrine-tracker": {
+    "into": "DOCTRINE §1 (Tracker & readiness)",
+    "purpose": "Anything about this repo's tracker that the status table doesn't capture — what 'ready' actually requires here, or a convention about how issues get scoped.",
+    "shape": "A few bullets.",
+    "value": "when the repo has readiness rules beyond the status vocabulary"
+  },
+  "doctrine-labels": {
+    "into": "DOCTRINE §2 (Labels)",
+    "purpose": "The repo's label vocabulary beyond the routing namespaces — workflow labels like `bug`, `area:*`, `finding`, and what each one means.",
+    "shape": "A table or bullet list of label → meaning.",
+    "value": "when the repo uses labels the pipeline doesn't define"
+  },
+  "doctrine-routing": {
+    "into": "DOCTRINE §3 (Routing)",
+    "purpose": "How work is routed here: which agent or model handles which kind of issue, and the rule for deciding.",
+    "shape": "A table: signal → agent/model, plus the default.",
+    "value": "when the repo has more than one implementer"
+  },
+  "doctrine-gates": {
+    "into": "DOCTRINE §4 (Gates)",
+    "purpose": "What 'done' means beyond the gate commands — track-specific definition of done, and the gotchas the gates exist to catch.",
+    "shape": "Bullets. Name the failure each gate prevents, not just the command.",
+    "value": "when a gate's purpose isn't obvious from its name"
+  },
+  "doctrine-autonomy": {
+    "into": "DOCTRINE §5 (Judgment calls & autonomy)",
+    "purpose": "Repo-specific nuance about when to decide alone and when to stop and ask. The always-brake list is config; this is the reasoning around it.",
+    "shape": "A few bullets, each naming a situation and the expected response.",
+    "value": "when the repo has a non-obvious risk surface"
+  },
+  "doctrine-deploy": {
+    "into": "DOCTRINE §6 (Merge guard)",
+    "purpose": "What happens between a green PR and running software here — environments, promotion order, who pushes the button.",
+    "shape": "A short ordered list.",
+    "value": "when the repo deploys anywhere"
+  },
+  "doctrine-tracker-mechanics": {
+    "into": "DOCTRINE §7 (Tracker mechanics)",
+    "purpose": "Mechanical tracker conventions particular to this repo — milestone naming, how epics decompose, anything a skill would otherwise guess.",
+    "shape": "Bullets.",
+    "value": "when tracker conventions aren't self-evident"
+  },
+  "review-routing": {
+    "into": "/review",
+    "purpose": "Which reviewer looks at which part of the codebase. The single highest-value overlay: without it /review has no idea what this repo's risky surfaces are.",
+    "shape": "A table: path glob → reviewer agent → what it's responsible for. Include the fallback for paths that match nothing.",
+    "value": "always, once the repo has reviewer agents"
+  },
+  "scout-lenses": {
+    "into": "/scout",
+    "purpose": "What each scouting lens looks for *in this codebase* — the concrete smells, not the generic ones.",
+    "shape": "One short section per lens, named, with examples drawn from real code here.",
+    "value": "always — generic lenses find generic nothing"
+  },
+  "dep-update-landmines": {
+    "into": "/dep-update",
+    "purpose": "Dependencies that need extra scrutiny on upgrade, and why. The ones that have broken this repo before, or that sit under something load-bearing.",
+    "shape": "A list of package → what to check after upgrading it.",
+    "value": "when the repo has been burned by an upgrade"
+  },
+  "deploy": {
+    "into": "/deploy-test and /deploy-prod",
+    "purpose": "The actual deploy topology: environments, what each command does, how to verify it worked, and how to roll back.",
+    "shape": "Environments, then the sequence, then the verification. Be specific — this is the overlay where vagueness is most expensive.",
+    "value": "when the repo deploys anywhere"
+  },
+  "implement": {
+    "into": "tail of /implement",
+    "purpose": "Steps that must happen on every implementation here and aren't captured by the gates — a codegen step, a fixture to regenerate, a file to keep in sync.",
+    "shape": "A short checklist.",
+    "value": "when the repo has a build step with a manual counterpart"
+  },
+  "done": {
+    "into": "tail of /done",
+    "purpose": "Steps that must happen when work lands — a changelog, a doc to update, a notification.",
+    "shape": "A short checklist.",
+    "value": "when landing work has obligations beyond the merge"
+  }
+}

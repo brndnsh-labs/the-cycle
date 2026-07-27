@@ -52,7 +52,12 @@ routing table, `/scout`'s lens bodies, a repo's dependency landmines. Those inje
 
 Overlays are rendered with the same context, so they can use the full template language.
 
-Current overlay points (all optional unless noted):
+Every point is registered in `templates/overlays.jsonc` with its purpose, the shape its content
+should take, and when it's worth having. That file is what `cycle install --plan` hands to a
+guided setup, so **an overlay point with no manifest entry is one nothing will ever draft for** —
+`cycle lint` treats the omission as an error, in both directions.
+
+Current overlay points (all optional):
 
 | Overlay | Injected into |
 | --- | --- |

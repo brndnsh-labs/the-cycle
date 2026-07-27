@@ -165,6 +165,25 @@ export function lint({ CYCLE_HOME }) {
     for (const text of templates.values()) {
         for (const m of text.matchAll(/\{\{>\s*overlay\??:([\w-]+)\}\}/g)) used.add(m[1]);
     }
+    // The manifest is what `cycle install --plan` hands a guided setup, so a missing
+    // entry means an overlay point nothing will ever be drafted for — it silently
+    // stops existing as far as setup is concerned.
+    const manifestPath = join(tmplDir, 'overlays.jsonc');
+    if (!existsSync(manifestPath)) {
+        add(ERROR, 'overlays', 'templates/overlays.jsonc is missing', 'templates/');
+    } else {
+        const manifest = readJsonc(manifestPath);
+        for (const o of used) {
+            if (!manifest[o]) add(ERROR, 'overlays', `overlay "${o}" is injected but absent from overlays.jsonc`, 'templates/overlays.jsonc');
+        }
+        for (const o of Object.keys(manifest)) {
+            if (!used.has(o)) add(ERROR, 'overlays', `overlays.jsonc describes "${o}", which no template injects`, 'templates/overlays.jsonc');
+            else for (const field of ['into', 'purpose', 'shape', 'value']) {
+                if (!manifest[o][field]) add(WARN, 'overlays', `"${o}" has no ${field}`, 'templates/overlays.jsonc');
+            }
+        }
+    }
+
     const authoring = join(CYCLE_HOME, 'docs', 'AUTHORING.md');
     if (existsSync(authoring)) {
         const doc = readFileSync(authoring, 'utf8');
@@ -207,6 +226,30 @@ export function lint({ CYCLE_HOME }) {
                     add(WARN, 'cross-refs', `mentions /${ref}, absent from the "${pname}" profile that installs it`, rel);
                 }
             }
+        }
+    }
+
+    // --- the shipped setup skills -------------------------------------------
+    // These are static, not rendered, so the render suite never sees them. A bad
+    // `name` means Claude Code doesn't load the skill and the slash command is
+    // simply absent — silent, and confusing to diagnose.
+    const setupDir = join(CYCLE_HOME, 'skills');
+    if (existsSync(setupDir)) {
+        for (const name of readdirSync(setupDir)) {
+            const rel = `skills/${name}/SKILL.md`;
+            const p = join(setupDir, name, 'SKILL.md');
+            if (!existsSync(p)) {
+                add(ERROR, 'setup-skills', `${name}/ has no SKILL.md`, rel);
+                continue;
+            }
+            const fm = /^---\n([\s\S]*?)\n---\n/.exec(readFileSync(p, 'utf8'));
+            if (!fm) {
+                add(ERROR, 'setup-skills', 'no frontmatter', rel);
+                continue;
+            }
+            const declared = /^name:\s*(\S+)/m.exec(fm[1])?.[1];
+            if (declared !== name) add(ERROR, 'setup-skills', `frontmatter name "${declared}" ≠ directory "${name}"`, rel);
+            if (!/^description:\s*\S/m.test(fm[1])) add(ERROR, 'setup-skills', 'no description', rel);
         }
     }
 

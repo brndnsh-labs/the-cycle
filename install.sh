@@ -11,9 +11,10 @@ set -euo pipefail
 
 CYCLE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BIN_DIR="$HOME/.local/bin"
+SKILL_DIR="$HOME/.claude/skills"
 PATH_LINE='export PATH="$HOME/.local/bin:$PATH"'
 
-mkdir -p "$BIN_DIR"
+mkdir -p "$BIN_DIR" "$SKILL_DIR"
 
 echo "Linking bin/ tools into $BIN_DIR:"
 for src in "$CYCLE"/bin/*; do
@@ -26,6 +27,18 @@ for src in "$CYCLE"/bin/*; do
 done
 
 echo
+# The setup skills are PERSONAL, not per-repo: /cycle-setup has to be available in a
+# repo that doesn't have the-cycle installed yet, which is the entire point of it.
+# Symlinked so a `git pull` here updates them without re-running this script.
+echo "Linking setup skills into $SKILL_DIR:"
+for src in "$CYCLE"/skills/*/; do
+    [ -d "$src" ] || continue
+    name="$(basename "$src")"
+    ln -sfn "${src%/}" "$SKILL_DIR/$name"
+    echo "  /$name"
+done
+
+echo
 if printf '%s' ":$PATH:" | grep -q ":$BIN_DIR:"; then
     echo "✓ $BIN_DIR is already on PATH."
 else
@@ -35,4 +48,5 @@ else
 fi
 
 echo
-echo "Next: run 'cycle install' inside a repo to render the pipeline into it."
+echo "Next: run /cycle-setup inside a repo (guided), or 'cycle install' for the"
+echo "      seven-question version."

@@ -159,6 +159,88 @@ for (const backend of BACKENDS) {
     }
 }
 
+// `install --plan` is the seam between the deterministic renderer and a guided setup
+// that has judgment. Its contract: emit everything needed to fill in a config, write
+// nothing, and stay in step with the templates.
+describe('install --plan', () => {
+    const planOf = (dir) => JSON.parse(cycle(dir, ['install', '--plan']));
+
+    test('describes the repo without writing to it', () => {
+        const dir = scratchRepo('forgejo');
+        dirs.push(dir);
+        const plan = planOf(dir);
+
+        assert.equal(plan.detected.backend, 'forgejo');
+        assert.equal(plan.detected.slug, 'brandon/demo');
+        // The gate is how you *invoke* the script, not what the script runs.
+        assert.deepEqual(plan.detected.gates, { typecheck: 'npm run typecheck', test: 'npm test' });
+        assert.equal(plan.existing_config, null);
+        assert.equal(existsSync(join(dir, '.cycle')), false, '--plan must not write');
+        assert.equal(existsSync(join(dir, '.claude')), false, '--plan must not write');
+    });
+
+    test('every question carries a reason, not just a default', () => {
+        const dir = scratchRepo('forgejo');
+        dirs.push(dir);
+        const { questions } = planOf(dir);
+        assert.ok(questions.length >= 6);
+        for (const q of questions) {
+            assert.ok(q.path, 'question with no config path');
+            assert.ok(q.asks, `${q.path}: no question text`);
+            // The "why" is the load-bearing part: it's what stops a model from
+            // accepting the placeholder default and calling the setup done.
+            assert.ok(q.why && q.why.length > 40, `${q.path}: no substantive rationale`);
+        }
+        assert.ok(questions.some((q) => q.path === 'brakes'));
+        assert.ok(questions.some((q) => q.path === 'backend'));
+    });
+
+    test('surfaces what the chosen backend additionally requires', () => {
+        const dir = scratchRepo('github');
+        dirs.push(dir);
+        const { questions } = planOf(dir);
+        assert.ok(questions.some((q) => q.path === 'tracker.project'), 'github must ask for its board');
+        assert.ok(questions.some((q) => q.path === 'tracker.owner'));
+    });
+
+    test('lists every overlay point with the guidance needed to draft it', () => {
+        const dir = scratchRepo('forgejo');
+        dirs.push(dir);
+        const { overlays } = planOf(dir);
+
+        const manifest = JSON.parse(
+            readFileSync(join(HERE, '..', 'templates', 'overlays.jsonc'), 'utf8')
+                .replace(/^\s*\/\/.*$/gm, '')
+                .replace(/,(\s*[}\]])/g, '$1'),
+        );
+        assert.deepEqual(overlays.map((o) => o.name).sort(), Object.keys(manifest).sort());
+        for (const o of overlays) {
+            assert.ok(o.purpose && o.shape && o.into, `${o.name}: incomplete guidance`);
+            assert.equal(o.exists, false);
+            assert.match(o.path, /^\.cycle\/overlays\//);
+        }
+    });
+
+    test('the draft it emits is a config that actually renders', () => {
+        const dir = scratchRepo('forgejo');
+        dirs.push(dir);
+        const { draft, write } = planOf(dir);
+
+        mkdirSync(join(dir, '.cycle'), { recursive: true });
+        writeFileSync(join(dir, '.cycle', 'config.jsonc'), JSON.stringify(draft, null, 2));
+        assert.equal(write.then, 'cycle update');
+        cycle(dir, ['update']);
+        assert.match(cycle(dir, ['check']), /clean/);
+    });
+
+    test('reports an existing install rather than pretending to be a first run', () => {
+        const dir = scratchRepo('forgejo');
+        dirs.push(dir);
+        cycle(dir, ['install', '--profile', 'lean', '-y']);
+        assert.equal(planOf(dir).existing_config, '.cycle/config.jsonc');
+    });
+});
+
 // The whole point of the resolution chain is that a repo cloned onto a machine where
 // the-cycle lives somewhere else still works. Baked-path-only would pass every other
 // test here and fail on the second machine.
