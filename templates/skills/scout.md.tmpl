@@ -1,0 +1,101 @@
+---
+name: scout
+description: Discovery-driven finder for {{repo.name}} — fans out read-only agents across security · performance · hygiene · context · a11y lenses, verifies each finding against the real code, dedupes against open issues, and files the worth-keeping candidates as actionable issues. Read-only over code: it FINDS and FILES, it never fixes, branches, or merges. Usage `/scout` (all lenses, tightly capped) or `/scout <lens>` (one focused lens, higher cap).
+---
+
+# /scout — find {{repo.name}}'s next work, on demand
+
+Goal: surface maintenance and hardening work the code itself is hiding — before it becomes an
+incident — and land it in the same tracker every other skill already reads. Every other pipeline
+skill *consumes* the queue (`/next` picks, `/cycle` builds); `/scout` *generates* candidates from
+the code.
+
+**Shared rules in `.claude/skills/DOCTRINE.md` — read it if not already in context.** Scout files
+issues, so the filing mechanics are **§10** — dedup, the actionable bar, the body format, the
+budget. Don't restate them; apply them. Also leans on §1 (Status), §2 (the `scout` provenance
+stamp), §5 (a finding that touches an always-brake surface still gets filed, just clearly flagged),
+and §7 (the batch-write rule).
+
+## The cardinal rule: scout finds and files. It never fixes, branches, or merges.
+
+The surfaces scout is best at spotting — {{brakes|join:, }} — are exactly §5's always-brake class.
+Auto-merging a speculative fix there is how a real incident happens. Discovery is cheap and
+reversible; a shipped-without-review "fix" isn't. Scout's job stops at a well-specified issue.
+
+## Lenses
+
+Run **all lenses in one capped sweep** by default; pass a lens name for a focused, deeper pass.
+
+- **`security`** — the trust boundary, secrets handling, authn/authz surfaces, dependency CVEs.
+- **`performance`** — payload weight, render/hydration cost, query and index patterns, polling
+  cadence, work done that didn't need doing.
+- **`hygiene`** — type-safety erosion (`any`, unchecked casts, `@ts-expect-error`, non-null `!`),
+  dead code, and drift between near-duplicate modules.
+- **`context`** — **does the map still match the territory?** Do `CLAUDE.md`, the docs, and inline
+  comments still describe the code as it is? A stale claim here misleads the next cold reader
+  worse than no claim at all. Every finding in this lens must name **both** the wrong inference a
+  cold reader would draw **and** the concrete in-tree artifact that fixes it.
+- **`a11y`** — semantic HTML, focus management, touch-target size, reduced-motion, and anything
+  that encodes meaning in color alone.
+
+{{> overlay?:scout-lenses}}
+
+## The budget — quality over flood (load-bearing)
+
+**All-lenses run:** cap at **~2 findings per lens, ~8 total.** **Single-lens run:** cap at the top
+**3–5**. Rank by (impact × how-actionable); mention anything below the cut in the report without
+filing.
+
+**Filing zero because a lens is clean is a success, not a failure** — say so and stop. A flood of
+marginal issues is worse than a missed one: it burns trust in the whole queue.
+
+## Verify before filing (non-negotiable)
+
+Every finding is a **hypothesis with a citation** until you've read the cited code. Open the file,
+read the actual line, and confirm the claim — grep the *assignment*, not just a textual match. A
+finding that turns out to be a misread costs more than the one you didn't file, because it teaches
+{{repo.human}} to distrust the rest of the slate.
+
+## Shape each finding so the smallest human input unlocks it
+
+Prefer a **pre-drafted fix with a yes/no decision** over an open-ended question. A finding that
+arrives with the diff already written costs one glance; the same finding as a paragraph costs a
+work session. This is the difference between a queue that drains and one that grows.
+
+## Workflow
+
+1. **Pick the lenses** (all, or the named one).
+2. **Sweep, read-only.** Fan out across the lenses; each returns candidate findings with
+   `file:line` citations.
+3. **Verify each candidate against the real file.** Drop anything that doesn't survive.
+4. **Dedup against open issues** (§10) — search before filing; a near-twin gets a comment, not a
+   new issue.
+5. **Rank and cut to budget.**
+6. **Present the slate** — each finding with its lens, `file:line`, the drafted issue body, and
+   whether it lands on a §5 brake. **This is the checkpoint**; nothing is written before it.
+7. **File** (§7): `{{@issue_create "<title>" "<body>" "scout"}}`{{#if backend.has_board}}, then set
+   Status for **all of them in one batch** — never a loop:
+   ```
+   {{@batch "<file.json>"}}
+   ```
+{{/if}}   Tracker unreachable → say so and stop; don't pretend it filed.
+8. **Report.** What was filed (links, labels, which ones flag a §5 brake for later), what was found
+   but not filed (dups, below-the-cut, "clean on this lens"), and point at `/next`.
+
+## Guardrails
+
+- **Find and file only — never fix, branch, or merge.** If it's tempting to "just fix this one,"
+  file it instead and let `/cycle` do it with a human watching.
+- **Verify every finding against the real file before it reaches the slate.** Non-negotiable.
+- **Respect the budget.** Fewer, sharper issues beat a flood; zero is a fine outcome.
+- **Dedup is not optional.**
+- **Read-only until the step-6 confirmation.** Nothing is created before the slate is shown.
+- **Always-brake findings still get filed** — just clearly labeled as needing `/security-review` at
+  build time, never framed as a quick auto-mergeable patch.
+
+## How it fits the pipeline
+
+- **`/scout`** = code → candidate issues (the discovery front door).
+- **`/next`** = ranks and picks, including whatever `/scout` just filed.
+- **`/implement` / `/cycle`** = build a picked issue; §5 still brakes regardless of who filed it.
+- **`/burndown`** = curates the believed-safe subset and loops `/cycle` over it.

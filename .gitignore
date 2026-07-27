@@ -1,0 +1,6 @@
+node_modules/
+*.log
+.DS_Store
+
+# Scratch renders used when testing the renderer against a throwaway repo.
+/tmp/

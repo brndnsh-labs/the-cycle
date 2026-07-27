@@ -1,0 +1,22 @@
+// standard — lean, plus the session and decision-batching layer.
+{
+  "name": "standard",
+  "skills": [
+    "cycle",
+    "implement",
+    "review",
+    "patch",
+    "done",
+    "next",
+    "intake",
+    "scout",
+    "burndown",
+    "dep-update",
+    "deploy-test",
+    "deploy-prod",
+
+    "unblock",
+    "wrap-up",
+    "pre-compact"
+  ]
+}

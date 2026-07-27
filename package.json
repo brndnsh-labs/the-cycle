@@ -1,0 +1,12 @@
+{
+  "name": "the-cycle",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "An installable, self-updating work pipeline for Claude Code",
+  "bin": { "cycle": "bin/cycle.mjs" },
+  "scripts": {
+    "test": "node --test test/*.test.mjs"
+  },
+  "engines": { "node": ">=20" }
+}

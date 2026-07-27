@@ -1,0 +1,27 @@
+// full — everything: unattended operation, parallel batches, and test health.
+{
+  "name": "full",
+  "skills": [
+    "cycle",
+    "implement",
+    "review",
+    "patch",
+    "done",
+    "next",
+    "intake",
+    "scout",
+    "burndown",
+    "dep-update",
+    "deploy-test",
+    "deploy-prod",
+
+    "unblock",
+    "wrap-up",
+    "pre-compact",
+
+    "nightly",
+    "fan-out",
+    "cover",
+    "flake"
+  ]
+}

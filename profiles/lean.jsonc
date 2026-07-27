@@ -1,0 +1,19 @@
+// lean — the build chain plus the minimum maintenance layer.
+// The posture mend states outright: "add machinery only when the repo earns it."
+{
+  "name": "lean",
+  "skills": [
+    "cycle",
+    "implement",
+    "review",
+    "patch",
+    "done",
+    "next",
+    "intake",
+    "scout",
+    "burndown",
+    "dep-update",
+    "deploy-test",
+    "deploy-prod"
+  ]
+}

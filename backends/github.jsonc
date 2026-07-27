@@ -1,0 +1,89 @@
+// GitHub backend — issues + a real Projects v2 board with typed fields.
+//
+// `gh` covers most of it; the Projects GraphQL surface is awkward enough from the CLI
+// that field writes go through a small committed helper (scripts/gh-project.mjs) with
+// the same `status` / `set-field` / `batch` interface the Forgejo helper exposes. That
+// shared interface is what lets the skills stay backend-agnostic.
+{
+  "name": "github",
+
+  "semantics": {
+    // Routing values are real Project fields, set via the board, not labels.
+    "fields": "project",
+    // There IS a board, and an issue must be added to it to carry field values.
+    "has_board": true,
+    // `gh run view --log` works; no wrapper needed.
+    "job_logs": "api",
+    // `gh pr merge --auto` is correct ONLY with branch protection — without it the
+    // merge fires immediately with nothing to wait on. Repos without protection use
+    // the same poll-then-merge guard as Forgejo.
+    "auto_merge": false,
+    "has_shipped_status": true,
+    "unreachable_exit": 1
+  },
+
+  // Config this backend cannot render without. Checked before any template runs, so
+  // a missing value is one clear message rather than an "unresolved {{…}}" from deep
+  // inside a verb expansion.
+  "requires": {
+    "tracker.project": "the Projects v2 board number — `gh project list --owner <you>`",
+    "tracker.owner": "the board's owner (user or org login)"
+  },
+
+  // Rendered into the repo; `helper` names a file in the-cycle's helpers/ and `env`
+  // carries this repo's board bindings, so the helper hardcodes no target. (mend's
+  // hand-written copy baked OWNER/REPO/PROJECT_NUMBER in as literals — that is the
+  // config leak this whole design exists to close.)
+  "shims": [
+    {
+      "path": "scripts/gh-project.mjs",
+      "helper": "gh-project.mjs",
+      "env": {
+        "GH_OWNER": "{{tracker.owner}}",
+        "GH_PROJECT": "{{tracker.project}}",
+        "GH_REPO": "{{repo.slug}}"
+      }
+    }
+  ],
+
+  "verbs": {
+    "issue_list": "gh issue list --state open --json number,title,labels,milestone,url",
+    "issue_list_label": "gh issue list --state open --label $1 --json number,title,labels,milestone,url",
+    "issue_list_milestone": "gh issue list --state open --milestone $1 --json number,title,labels,milestone,url",
+    "issue_view": "gh issue view $1 --json number,title,state,url,labels,milestone,body",
+    "issue_create": "gh issue create --title $1 --body $2 --label $3",
+    "issue_edit_label": "gh issue edit $1 --add-label $2",
+    "issue_unlabel": "gh issue edit $1 --remove-label $2",
+    "issue_comment": "gh issue comment $1 --body $2",
+    "issue_close": "gh issue close $1",
+
+    "pr_create": "gh pr create --head $1 --base main --title $2 --body $3",
+    "pr_list": "gh pr list --state open",
+    "pr_view": "gh pr view $1",
+    "pr_close": "gh pr close $1",
+
+    // Two-step on purpose: --watch errors with "no checks reported" if it runs before
+    // any run exists, so wait for registration first. The && is the guard — merge only
+    // happens if every check passed.
+    "merge_guard": "(until gh pr checks $1 >/dev/null 2>&1; do sleep 5; done; gh pr checks $1 --watch --fail-fast && gh pr merge $1 --squash --delete-branch) &",
+
+    "set_field": "node scripts/gh-project.mjs set-field $1 $2 $3",
+    "set_status": "node scripts/gh-project.mjs status $1 $2",
+    "batch": "node scripts/gh-project.mjs batch $1",
+
+    // Board reads — GitHub-only; the Forgejo backend has no equivalent because the
+    // issue list IS the board.
+    "board_list": "gh project item-list {{tracker.project}} --owner {{tracker.owner}} --format json",
+    "board_add": "gh project item-add {{tracker.project}} --owner {{tracker.owner}} --url $1",
+
+    "ci_runs": "gh run list",
+    "ci_log": "gh run view $1 --log",
+    "ci_log_failed": "gh run view $1 --log-failed"
+  },
+
+  "notes": {
+    "routing_read": "Routing values are Project fields on the board item, not labels. `gh project item-list` returns `content` (`.number`, `.title`, `.url`, `.body`) alongside `status` and any custom fields. item-list carries no open/closed state, so intersect with `gh issue list --state open` on `number` — a closed item can linger on the board until archived, and this also catches an open issue not yet added to the board.",
+    "unreachable": "`gh` unauthenticated or offline: say so and stop. Never guess board state.",
+    "done_means": "`Closes #<n>` closes the issue on merge. If the board has no closed→Done automation, set Status explicitly after the merge lands."
+  }
+}
