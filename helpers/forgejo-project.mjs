@@ -92,6 +92,8 @@ const FIELD_NS = {
     ...JSON.parse(process.env.CYCLE_FIELD_NS || '{}'),
 };
 
+const TOKEN_FILE = process.env.FORGEJO_TOKEN_FILE ?? join(homedir(), '.config/forgejo/token');
+
 function token() {
     const t = process.env.FORGEJO_TOKEN ?? readFileSync(TOKEN_FILE, 'utf8').trim();
     if (!t) {
