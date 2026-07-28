@@ -1,0 +1,22 @@
+{
+  "upstream": "9429ca0-dirty",
+  "files": {
+    ".claude/skills/DOCTRINE.md": "7ad9edbec8b9",
+    ".claude/skills/cycle/SKILL.md": "c1e0d0dce9ef",
+    ".claude/skills/implement/SKILL.md": "f8717680b157",
+    ".claude/skills/review/SKILL.md": "6d01fc430738",
+    ".claude/skills/patch/SKILL.md": "b4541968ac84",
+    ".claude/skills/done/SKILL.md": "694d45c5d6f3",
+    ".claude/skills/next/SKILL.md": "5a2cb026e27c",
+    ".claude/skills/intake/SKILL.md": "609a1a8bd01d",
+    ".claude/skills/scout/SKILL.md": "7c4f604574cb",
+    ".claude/skills/burndown/SKILL.md": "74573808606f",
+    ".claude/skills/dep-update/SKILL.md": "b491f8fb56b8",
+    ".claude/skills/deploy-test/SKILL.md": "45abb8d4be73",
+    ".claude/skills/deploy-prod/SKILL.md": "41ad9d2f17db",
+    "scripts/forgejo.mjs": "e0c8a2282a57",
+    "scripts/forgejo-merge.mjs": "f0ad4734085b",
+    "scripts/forgejo-project.mjs": "c5a2bfbba9a8",
+    "scripts/ci-logs.mjs": "736e48fe9a1f"
+  }
+}

@@ -1,0 +1,92 @@
+// the-cycle bindings for this repo.
+// Everything repo-specific lives here; the skills in .claude/skills are rendered
+// from shared templates and should not be hand-edited (`cycle check` will tell you
+// if they have been). Re-render with `cycle update` after changing this file.
+{
+  "repo": {
+    "name": "the-cycle",
+    "slug": "brandon/the-cycle",
+    "human": "Brandon"
+  },
+  "profile": "lean",
+  "backend": "forgejo",
+  "tracker": {
+    "description": "the **Forgejo repo's issues** (`brandon/the-cycle`)",
+    "project": null,
+    "owner": "brandon",
+    "api": "https://git.brndn.zip/api/v1",
+    "fields": {},
+    "statuses": [
+      {
+        "name": "ready",
+        "meaning": "scoped + pickable",
+        "action": "`/next` ranks & picks; `/implement`/`/cycle` build"
+      },
+      {
+        "name": "in-progress",
+        "meaning": "being built",
+        "action": "don't re-pick"
+      },
+      {
+        "name": "in-review",
+        "meaning": "built, under review / PR open",
+        "action": "don't re-pick"
+      },
+      {
+        "name": "needs-decision",
+        "meaning": "blocked on a human call",
+        "action": "surface it; **don't build**"
+      },
+      {
+        "name": "blocked",
+        "meaning": "blocked on a dependency",
+        "action": "skip; name the blocker"
+      },
+      {
+        "name": "(none)",
+        "meaning": "the idea pile, not a scheduled story",
+        "action": "triage/scope it first; don't pick"
+      }
+    ],
+    "status": {
+      "pickable": "ready",
+      "active": "in-progress",
+      "done": "in-review"
+    },
+    "ranking": "**milestone first** (a real numbered epic beats no milestone), then **issue number** (lower first)",
+    "milestones": []
+  },
+  "routing": {
+    "model": "**opus for everything** (spawned agents included).",
+    "executor_default": "orchestrator-inline"
+  },
+  "gates": {
+    "test": "npm test"
+  },
+  "deps": {
+    "outdated": "npm outdated",
+    "audit": "npm audit",
+    "audit_fix": "npm audit fix",
+    "update": "npm update",
+    "install": "npm install",
+    "manifests": [
+      "package.json",
+      "package-lock.json"
+    ]
+  },
+  "brakes": [
+    "auth / tokens / secrets",
+    "schema / data migration",
+    "anything destructive or irreversible"
+  ],
+  "branch": {
+    "minor_edits_direct": true
+  },
+  "commit": {
+    "coauthor": "Claude Opus 5 <noreply@anthropic.com>"
+  },
+  "deploy": {
+    "test": "",
+    "prod": ""
+  }
+}
