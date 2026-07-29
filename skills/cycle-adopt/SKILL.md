@@ -27,6 +27,21 @@ cycle install --plan          # the same question/overlay spec /cycle-setup uses
 starting point with known blind spots — it reads prose with regexes, and it has under-extracted
 before.
 
+**Read its loss report first — it is the most important thing on the screen.** adopt renders the
+new skills in memory and compares them against what is on disk, then lists every section of the
+existing files whose substance does not appear in the output, ranked by size, with the overlay
+point that should carry it. That list *is* your extraction worklist.
+
+Two things about reading it. The `% carried` column separates the two kinds of hit: near-zero means
+the template never knew this content and it will genuinely vanish; a higher number usually means
+the template rewrote the same procedure in its own words, which is fine and needs nothing from you.
+And a section adopt could not route ("no overlay point covers this") is the interesting case — it
+is either something to propose upstream, or a sign this repo does something the shared pipeline has
+no concept of. Neither is solved by inventing an overlay for it.
+
+If the report says nothing is left behind, the conversion is genuinely mechanical. That is the
+uncommon case; treat it as a claim to spot-check, not a licence to skip §1.
+
 ## 1. Inventory before you reconcile
 
 - List the repo's existing skills. Which have a template upstream, which don't.

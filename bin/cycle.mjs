@@ -1183,7 +1183,7 @@ async function main() {
         case 'render': return cmdRender(rest);
         case 'adopt': {
             const { cmdAdopt } = await import('./adopt.mjs');
-            return cmdAdopt(rest, { CYCLE_HOME, findRepoRoot, detect, planRender, loadProfile, renderConfig });
+            return cmdAdopt(rest, { CYCLE_HOME, findRepoRoot, detect, planRender, loadProfile, renderConfig, readJsonc });
         }
         case 'lint': {
             const { cmdLint } = await import('./lint.mjs');

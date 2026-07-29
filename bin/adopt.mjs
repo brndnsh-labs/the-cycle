@@ -108,6 +108,138 @@ const extractRanking = (doctrine) =>
 const extractMinorEditsDirect = (doctrine) => /straight to `?main`?/i.test(section(doctrine, 9));
 
 // ---------------------------------------------------------------------------
+// content loss — what the render would drop on the floor
+// ---------------------------------------------------------------------------
+//
+// The failure this exists to prevent: every overlay point is optional, so a repo
+// with no overlays renders a complete-looking pipeline and adopt reports "renders
+// cleanly" — while the five scout lens bodies, the dep-update landmines and the
+// whole deploy topology quietly cease to exist. Converting mend lost ~300 lines
+// that way, and nothing said a word.
+//
+// adopt already holds both sides: the existing hand-written files, and the content
+// planRender would write over them. So it can just *look*.
+
+/** Words only — so the same sentence rewrapped at a different width isn't "lost". */
+const normalize = (s) =>
+    s
+        .toLowerCase()
+        .replace(/`[^`]*`/g, ' ')
+        .replace(/[^a-z0-9]+/g, ' ')
+        .trim();
+
+/**
+ * Word trigrams. Comparing whole lines would flag every reflowed paragraph, and
+ * comparing single words would match anything; three-word runs survive rewrapping
+ * and light editing but disappear when the content genuinely does.
+ */
+function trigrams(text) {
+    const words = normalize(text).split(' ').filter(Boolean);
+    const out = new Set();
+    for (let i = 0; i + 2 < words.length; i++) out.add(`${words[i]} ${words[i + 1]} ${words[i + 2]}`);
+    return out;
+}
+
+/**
+ * Split markdown into `## heading` → body chunks, plus whatever precedes the first.
+ *
+ * Fence-aware, because these files are full of shell snippets and `# comment` inside
+ * a ```block``` is not a heading — reading it as one shattered DOCTRINE into fragments
+ * titled things like "1. Wait for the run to REGISTER".
+ */
+export function sections(md) {
+    const body = md.replace(/^---\n[\s\S]*?\n---\n/, '').replace(/^<!--\s*cycle:rendered[^\n]*\n/m, '');
+    const lines = body.split('\n');
+    const out = [];
+    let fenced = false;
+    let cur = { title: '(preamble)', lines: [] };
+    for (const line of lines) {
+        if (/^\s*```/.test(line)) fenced = !fenced;
+        const h = !fenced && /^(#{1,4})\s+(.+)$/.exec(line);
+        if (h) {
+            out.push(cur);
+            cur = { title: h[2].trim(), lines: [] };
+        } else {
+            cur.lines.push(line);
+        }
+    }
+    out.push(cur);
+    return out.map((s) => ({ title: s.title, text: s.lines.join('\n') })).filter((s) => s.text.trim().length > 0);
+}
+
+/**
+ * Sections of `existing` whose substance does not survive into `rendered`.
+ *
+ * Deliberately biased toward over-reporting: a false positive costs one glance,
+ * while the false negative is the entire bug — 300 lines gone with a green tick
+ * next to it. The threshold is coverage, not identity, so a section the template
+ * rewrote in its own words reads as carried, and one it never knew about reads as
+ * lost.
+ */
+export function contentLoss(existing, rendered) {
+    const have = trigrams(rendered);
+    const lost = [];
+    for (const sec of sections(existing)) {
+        const tri = trigrams(sec.text);
+        // Too short to judge — a two-line section has no statistical signal, and at
+        // this size the reworded-procedure false positives outnumber the real losses.
+        if (tri.size < 20) continue;
+        let carried = 0;
+        for (const t of tri) if (have.has(t)) carried++;
+        const ratio = carried / tri.size;
+        if (ratio < 0.5) {
+            lost.push({
+                title: sec.title,
+                lines: sec.text.trim().split('\n').length,
+                carried: Math.round(ratio * 100),
+            });
+        }
+    }
+    // Biggest first: the 31-line landmine table matters and the 4-line one usually
+    // doesn't, and a human scanning this reads the top of the list.
+    return lost.sort((a, b) => b.lines - a.lines);
+}
+
+/** template rel path → the overlay names it declares, by reading the template itself. */
+function overlayPointsByTemplate(CYCLE_HOME) {
+    const dir = join(CYCLE_HOME, 'templates');
+    const map = new Map();
+    const walk = (d, prefix = '') => {
+        for (const e of readdirSync(d, { withFileTypes: true })) {
+            if (e.isDirectory()) {
+                walk(join(d, e.name), `${prefix}${e.name}/`);
+            } else if (e.name.endsWith('.tmpl')) {
+                const names = [...readFileSync(join(d, e.name), 'utf8').matchAll(/overlay\??:([\w-]+)\s*\}\}/g)].map(
+                    (m) => m[1],
+                );
+                if (names.length) map.set(`${prefix}${e.name}`, [...new Set(names)]);
+            }
+        }
+    };
+    walk(dir);
+    return map;
+}
+
+/**
+ * Which overlay should carry a lost section — but ONLY where that is knowable.
+ *
+ * DOCTRINE's eight points are addressable, because each manifest entry names its
+ * `§N`. A skill template usually declares exactly one point, and the tempting move is
+ * to route everything there — but that is how `/scout`'s "Workflow" and "Dedup"
+ * sections got labelled as belonging in `scout-lenses`, which is wrong and, worse,
+ * confidently wrong. Where the answer isn't derivable, say nothing and let the
+ * file-level list speak.
+ */
+export function overlayFor(sectionTitle, candidates, manifest) {
+    const n = /§\s*(\d+)/.exec(sectionTitle)?.[1];
+    if (n) return candidates.find((c) => new RegExp(`§\\s*${n}\\b`).test(manifest[c]?.into ?? '')) ?? null;
+    if (sectionTitle === '(preamble)' || /doctrine/i.test(sectionTitle)) {
+        return candidates.find((c) => /before §1/i.test(manifest[c]?.into ?? '')) ?? null;
+    }
+    return null;
+}
+
+// ---------------------------------------------------------------------------
 // the command
 // ---------------------------------------------------------------------------
 
@@ -222,6 +354,19 @@ export function cmdAdopt(args, ctx) {
     console.log(dim('      → diff each one before committing; anything this repo learned that the'));
     console.log(dim('        template does not know is a change to make UPSTREAM, not to keep here.'));
 
+    // Rendering is the easy half; the half that bites is a render that SUCCEEDS while
+    // dropping everything this repo knew. Run it read-only too — being told what you
+    // are about to lose is worth most *before* you have committed to anything.
+    let plan;
+    try {
+        plan = planRender(root, stripUndefined(cfg));
+    } catch (e) {
+        console.log(`\n${yellow('!')} render is not satisfiable yet:`);
+        console.log(`    ${e.message.split('\n').join('\n    ')}`);
+        plan = null;
+    }
+    if (plan) reportLoss(root, plan, ctx);
+
     if (!values.write) {
         console.log(`\n${dim('Read-only. Re-run with --write to create .cycle/config.jsonc + overlays/.')}`);
         console.log(dim('No skill file is touched either way — `cycle update` does that, once you are ready.'));
@@ -237,16 +382,79 @@ export function cmdAdopt(args, ctx) {
         writeFileSync(cfgPath, renderConfig(stripUndefined(cfg)));
         console.log(`\n${green('✓')} wrote ${relative(root, cfgPath)}`);
     }
+}
 
-    // A dry render surfaces missing overlays as errors, which is the most useful
-    // next instruction adopt can give.
-    try {
-        planRender(root, stripUndefined(cfg));
-        console.log(`${green('✓')} renders cleanly — run \`cycle update --dry-run\` to see the diffs`);
-    } catch (e) {
-        console.log(`${yellow('!')} render is not satisfiable yet:`);
-        console.log(`    ${e.message.split('\n').join('\n    ')}`);
+/**
+ * The part adopt was missing: say what the render would throw away.
+ *
+ * Overlays are optional by design — a greenfield install with none of them renders a
+ * complete pipeline, and that must stay true. Optionality is not the bug. Silence is.
+ */
+function reportLoss(root, plan, ctx) {
+    const { CYCLE_HOME, readJsonc } = ctx;
+    const manifestPath = join(CYCLE_HOME, 'templates', 'overlays.jsonc');
+    const manifest = existsSync(manifestPath) ? readJsonc(manifestPath) : {};
+    const pointsByTemplate = overlayPointsByTemplate(CYCLE_HOME);
+
+    const casualties = [];
+    for (const file of plan) {
+        if (!file.rel.startsWith(join('.claude', 'skills'))) continue;
+        if (!existsSync(file.path)) continue;
+        const lost = contentLoss(readFileSync(file.path, 'utf8'), file.content);
+        if (lost.length) {
+            casualties.push({ file, lost, points: pointsByTemplate.get(file.template) ?? [] });
+        }
     }
+
+    if (!casualties.length) {
+        console.log(`${green('✓')} renders cleanly, and no existing content is left behind`);
+        console.log(dim('  run `cycle update --dry-run` to see the diffs'));
+        return;
+    }
+
+    const weight = (c) => c.lost.reduce((m, l) => m + l.lines, 0);
+    casualties.sort((a, b) => weight(b) - weight(a));
+    const totalLines = casualties.reduce((n, c) => n + weight(c), 0);
+    console.log(
+        `\n${yellow('!')} ${bold(String(totalLines))} line(s) across ${bold(String(casualties.length))} file(s) are ${bold('not in the rendered output')}:\n`,
+    );
+
+    const SHOWN = 5;
+    const wanted = new Set();
+    for (const { file, lost, points } of casualties) {
+        // A file with exactly one overlay point has an unambiguous destination, so
+        // name it. DOCTRINE's eight get routed per-§N below instead of listed here,
+        // where they would wrap into an unreadable smear.
+        const via = points.length === 1 ? dim(`  → overlays/${points[0]}.md`) : '';
+        console.log(`  ${cyan(file.rel)}${via}`);
+        if (points.length === 1) wanted.add(points[0]);
+        for (const l of lost.slice(0, SHOWN)) {
+            const target = points.length > 1 ? overlayFor(l.title, points, manifest) : null;
+            if (target) wanted.add(target);
+            const where = target ? dim(` → overlays/${target}.md`) : '';
+            console.log(
+                `      ${l.title.slice(0, 44).padEnd(44)} ${String(l.lines).padStart(4)} lines  ${dim(`${l.carried}% carried`)}${where}`,
+            );
+        }
+        if (lost.length > SHOWN) console.log(dim(`      … and ${lost.length - SHOWN} smaller section(s)`));
+        console.log('');
+    }
+
+    if (wanted.size) {
+        console.log(`  ${bold('Write these before rendering:')}`);
+        for (const name of wanted) {
+            console.log(`    ${cyan(`.cycle/overlays/${name}.md`)}`);
+            if (manifest[name]?.purpose) console.log(dim(`      ${manifest[name].purpose}`));
+            if (manifest[name]?.shape) console.log(dim(`      shape: ${manifest[name].shape}`));
+        }
+        console.log('');
+    }
+
+    // The blunt version, because the previous behaviour here was a green tick.
+    console.log(dim('  This is a heuristic — a section the template rewrote in its own words reads as'));
+    console.log(dim('  carried; one it never knew about reads as lost. Read them before deciding.'));
+    console.log(dim('  Content that is genuinely portable belongs UPSTREAM, not in an overlay.'));
+    console.log(`\n  ${yellow('`cycle update` will not warn you again — it just writes.')}`);
 }
 
 function report(label, value, source) {
