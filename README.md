@@ -168,6 +168,7 @@ Full vocabulary, the honesty rule around capability flags, and how to add a thir
 ## Layout
 
 ```
+.forgejo/workflows/ci.yml   `npm test` on PR + push to main
 bin/
   cycle.mjs            the CLI — Node ESM, zero dependencies
   adopt.mjs            reverse-engineer an existing hand-written setup
