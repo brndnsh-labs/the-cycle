@@ -102,5 +102,17 @@
     "purpose": "A domain-specific flavor of the hands-on lane — when verification in this repo has its own shape (listened to on an instrument, checked on real hardware, felt in a live session) that the generic Works / Doesn't work / Not now verdicts flatten.",
     "shape": "The card format and verdict set for that lane, plus the rule for what qualifies. Keep 'Not now' first-class whatever the verdicts are called.",
     "value": "when hands-on verification needs more than a click-through"
+  },
+  "cycle": {
+    "into": "tail of /cycle",
+    "purpose": "How the loop's tail changes by issue type here — a different DoD, reviewer, or merge behavior per track/category, when the generic gate-green-means-merge shape doesn't fit every kind of work this repo does.",
+    "shape": "One short block per category: what sets it (a field, a label), its DoD, its reviewer, and anything unusual about how it merges.",
+    "value": "when different kinds of issues need a genuinely different loop tail, not just a different reviewer table"
+  },
+  "flake": {
+    "into": "tail of /flake",
+    "purpose": "How to actually reproduce and fix a flake *here* — exact repro commands per test runner, import paths for seeded-random helpers, framework-specific fixes (e.g. an e2e hydration/setup gotcha). Never a separate registry file: the tracker is the durable record (§7's rule against a frozen markdown tracker applies here too).",
+    "shape": "A short list of runner → repro command, plus any repo-specific fix pattern per flake class.",
+    "value": "when the repro commands or fixes aren't obvious from the test framework alone"
   }
 }

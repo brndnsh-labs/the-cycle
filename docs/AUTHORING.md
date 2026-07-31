@@ -77,6 +77,8 @@ Current overlay points (all optional):
 | `deploy` | `/deploy-test` and `/deploy-prod` — the actual topology |
 | `implement` · `done` | tail of those skills, for repo-specific steps |
 | `unblock` | tail of `/unblock` — a domain-specific hands-on lane (e.g. a by-ear verdict set) |
+| `cycle` | tail of `/cycle` — per-issue-type DoD/reviewer/merge-tail, when one gate-green-means-merge shape doesn't fit every kind of work |
+| `flake` | tail of `/flake` — repo-specific repro commands and fix specifics (never a separate registry file — the tracker is the durable record) |
 
 ## Adding a skill
 
