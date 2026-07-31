@@ -80,7 +80,9 @@
     "anything destructive or irreversible"
   ],
   "branch": {
-    "minor_edits_direct": true
+    // main is now server-protected (branch protection added 2026-07-31, requiring
+    // "CI / gates (pull_request)" green) — no direct pushes, no minor-edits carve-out.
+    "minor_edits_direct": false
   },
   "commit": {
     "coauthor": "Claude Opus 5 <noreply@anthropic.com>"

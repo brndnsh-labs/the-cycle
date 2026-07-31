@@ -1,7 +1,7 @@
 {
-  "upstream": "0ca196f-dirty",
+  "upstream": "6b4e936-dirty",
   "files": {
-    ".claude/skills/DOCTRINE.md": "8316887d70a8",
+    ".claude/skills/DOCTRINE.md": "da246dcbb675",
     ".claude/skills/cycle/SKILL.md": "7df092de0d13",
     ".claude/skills/implement/SKILL.md": "f8717680b157",
     ".claude/skills/review/SKILL.md": "cfa0e280dd8e",
