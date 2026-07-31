@@ -233,9 +233,28 @@ function slimIssue(i) {
 }
 
 async function listIssues(flags) {
-    const state = flags.open ? 'open' : flags.state && flags.state !== true ? flags.state : 'open';
+    // --open / --closed are sugar for --state. The old form silently ignored
+    // --closed and returned the OPEN set — the worst kind of wrong answer, so both
+    // spellings are first-class now.
+    const state = flags.open
+        ? 'open'
+        : flags.closed
+          ? 'closed'
+          : flags.state && flags.state !== true
+            ? flags.state
+            : 'open';
     const labels = asArray(flags.label).filter((x) => x !== true);
-    const qs = new URLSearchParams({ type: 'issues', state, limit: String(PAGE) });
+    // --limit N caps the result (newest first, single request); without it the
+    // endpoint pages to completion.
+    const cap = flags.limit && flags.limit !== true ? Number(flags.limit) : null;
+    if (cap !== null && (!Number.isInteger(cap) || cap <= 0)) {
+        fail('--limit requires a positive integer');
+    }
+    const qs = new URLSearchParams({
+        type: 'issues',
+        state,
+        limit: String(cap !== null ? Math.min(cap, PAGE) : PAGE),
+    });
     if (labels.length) {
         qs.set('labels', labels.join(','));
     }
@@ -247,6 +266,10 @@ async function listIssues(flags) {
         qs.set('page', String(page));
         const batch = await api('GET', `${R}/issues?${qs}`);
         out.push(...batch);
+        if (cap !== null && out.length >= cap) {
+            out.length = cap;
+            break;
+        }
         if (batch.length < PAGE) {
             break;
         }

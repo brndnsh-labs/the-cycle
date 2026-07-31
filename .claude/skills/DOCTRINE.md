@@ -1,4 +1,4 @@
-<!-- cycle:rendered template=DOCTRINE.md.tmpl hash=2ac0bb2e1062 — managed by the-cycle; edit the template, not this file -->
+<!-- cycle:rendered template=DOCTRINE.md.tmpl hash=2f613ce23e75 — managed by the-cycle; edit the template, not this file -->
 # Pipeline doctrine (shared)
 
 Single source of truth for the rules the the-cycle work-loop skills share. A skill that says
@@ -208,10 +208,14 @@ file* — neither fixes, branches, or merges.
    written costs Brandon one glance; the same finding as a paragraph costs a work session.
 4. **Body format:**
    ```
-   **Why:** <the problem, and what's wrong today>
+   **Why:** <the problem, and what's wrong today — with file:line evidence>
    **Touches:** <files / surfaces>
+   **Fix (drafted):** <the concrete change — a diff, or the exact edit>
    **Acceptance:** <the observable condition that means it's done>
    ```
+   The **Fix** line is mandatory for a machine-found finding (`/scout` read the code; the draft
+   is the point) and best-effort for a human-described idea (`/intake` interviews toward it but
+   files without it when the idea is scope, not a defect).
 5. **Classify, don't over-classify.** Set what you know; leave routing to the picking skill (§2).
 6. **Budget.** Filing zero is a success. A sweep that files 20 low-grade issues has made the queue
    worse, not better. Cap a focused pass at **3–5** findings; a multi-lens sweep caps *per lens* and

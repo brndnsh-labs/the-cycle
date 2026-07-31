@@ -2,7 +2,7 @@
 name: scout
 description: Discovery-driven finder for the-cycle — fans out read-only agents across security · performance · hygiene · context · a11y lenses, verifies each finding against the real code, dedupes against open issues, and files the worth-keeping candidates as actionable issues. Read-only over code: it FINDS and FILES, it never fixes, branches, or merges. Usage `/scout` (all lenses, tightly capped) or `/scout <lens>` (one focused lens, higher cap).
 ---
-<!-- cycle:rendered template=skills/scout.md.tmpl hash=7c4f604574cb — managed by the-cycle; edit the template, not this file -->
+<!-- cycle:rendered template=skills/scout.md.tmpl hash=98be695ee508 — managed by the-cycle; edit the template, not this file -->
 
 # /scout — find the-cycle's next work, on demand
 
@@ -54,10 +54,25 @@ read the actual line, and confirm the claim — grep the *assignment*, not just 
 finding that turns out to be a misread costs more than the one you didn't file, because it teaches
 Brandon to distrust the rest of the slate.
 
-## Shape each finding so the smallest human input unlocks it
+## File the fix already drafted (the fleshing-out rule)
 
-Shape every finding per §10.3 — a pre-drafted fix with a yes/no decision, not an open-ended
-question. That is the difference between a queue that drains and one that grows.
+A diagnosis-only issue hands Brandon homework; a drafted fix hands them a decision
+(§10.3). Scout has already done the reading — it knows the file, the line, and what right looks
+like — so the body carries that knowledge instead of describing where someone else might find
+it. Every filed issue includes:
+
+- **Evidence** — `file:line` plus a **verbatim quote** of the offending code, and, where one
+  exists, the in-repo pattern that already does it right (the strongest possible spec: "make it
+  match its sibling").
+- **The failure scenario** — the concrete inputs/state → wrong outcome, and why it matters here.
+- **The drafted fix** — the concrete change: a diff block, or the exact edit stated precisely
+  enough to apply without re-deriving the analysis. The decision becomes *"ship this? y/n"*, and
+  the eventual builder starts from the draft instead of from zero.
+- **Acceptance** a gate or a look can actually verify.
+
+A finding you can't draft a fix for usually isn't actionable enough to file — put it in the
+report as an observation instead. The one exception: a genuine defect whose fix needs a design
+call — file it with the options sketched and flag it as needing a decision, not as pickable.
 
 ## Workflow
 
@@ -67,8 +82,9 @@ question. That is the difference between a queue that drains and one that grows.
 3. **Verify each candidate against the real file.** Drop anything that doesn't survive.
 4. **Dedup against open issues** (§10.1) — search before filing.
 5. **Rank and cut to budget.**
-6. **Present the slate** — each finding with its lens, `file:line`, the drafted issue body, and
-   whether it lands on a §5 brake. **This is the checkpoint**; nothing is written before it.
+6. **Present the slate** — each finding with its lens, `file:line`, the drafted issue body
+   **including its drafted fix**, and whether it lands on a §5 brake. **This is the checkpoint**;
+   nothing is written before it.
 7. **File** (§7): `node scripts/forgejo.mjs issue create --title "<title>" --body "<body>" --label "scout"`   Tracker unreachable → say so and stop; don't pretend it filed.
 8. **Report.** What was filed (links, labels, which ones flag a §5 brake for later), what was found
    but not filed (dups, below-the-cut, "clean on this lens"), and point at `/next`.

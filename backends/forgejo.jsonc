@@ -53,7 +53,7 @@
   // $1..$9 are the arguments passed at the call site.
   "verbs": {
     "issue_list": "node scripts/forgejo.mjs list --open",
-    "issue_list_closed": "node scripts/forgejo.mjs list --closed --limit 20",
+    "issue_list_closed": "node scripts/forgejo.mjs list --state closed --limit 20",
     "issue_list_label": "node scripts/forgejo.mjs list --open --label $1",
     "issue_list_milestone": "node scripts/forgejo.mjs list --open --milestone $1",
     "issue_view": "node scripts/forgejo.mjs issue view $1",

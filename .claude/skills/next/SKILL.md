@@ -2,7 +2,7 @@
 name: next
 description: Pick up the next the-cycle work story. Finds the highest-priority pickable issue, the in-flight work, and the finding pile, and lays out enough to choose /implement (one issue) vs /cycle (full loop). Add `--board` for the whole-queue orientation view instead of a single pick. Plan-first — read-only, no spawn, no edit. Use at session start or whenever deciding what to pick up.
 ---
-<!-- cycle:rendered template=skills/next.md.tmpl hash=87af3a0ea731 — managed by the-cycle; edit the template, not this file -->
+<!-- cycle:rendered template=skills/next.md.tmpl hash=d4c6ac368442 — managed by the-cycle; edit the template, not this file -->
 
 # /next — surface the next work story
 
@@ -60,7 +60,7 @@ mechanics, including the "unreachable → stop" rule). Don't restate them; apply
 ```
 
 With `--board`, replace the single pick with: tallies by Status and milestone, what closed
-recently (`node scripts/forgejo.mjs list --closed --limit 20` — the open set won't tell you), anything blocked on
+recently (`node scripts/forgejo.mjs list --state closed --limit 20` — the open set won't tell you), anything blocked on
 Brandon, the untriaged pile, and `git status` in-flight work — then a one-line
 **Suggested entry point**.
 
