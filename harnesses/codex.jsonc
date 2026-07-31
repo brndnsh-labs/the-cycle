@@ -1,0 +1,30 @@
+// Codex CLI — the second render target, and proof the harness abstraction isn't
+// Claude Code with a coat of paint.
+//
+// Skills are the same open agent-skills format Claude Code uses (SKILL.md +
+// name/description frontmatter), so almost nothing here differs from claude.jsonc.
+// Verified against the current release (2026-07), not assumed:
+//   - discovery path: developers.openai.com/codex/skills — .agents/skills/<name>/SKILL.md
+//     at the repo root (also .agents/skills at a parent, ~/.agents/skills, but the
+//     repo-root path is what a rendered install writes to).
+//   - subagents: GA 2026-03-14 — parallel spawn from a single task, so /fan-out and
+//     /cover's per-unit spawn apply here too.
+//   - structured questions: `ask_user_question` — a tabbed, recommendation-first
+//     choice tool, functionally equivalent to Claude Code's AskUserQuestion.
+{
+  "name": "codex",
+  "display": "Codex CLI",
+
+  "root": ".agents/skills",
+  "skill_file": "SKILL.md",
+
+  "capabilities": {
+    "has_menus": true,
+    "has_subagents": true
+  },
+
+  "notes": {
+    "attribution": "🤖 Generated with [Codex CLI](https://developers.openai.com/codex/cli)",
+    "ask": "`ask_user_question`"
+  }
+}

@@ -55,9 +55,12 @@ skill at `/cycle` time, from what the diff actually touches, not at filing time.
 
 - **Model:** {{routing.model}}
 - **Executor:** **`{{routing.executor_default}}` by default** — the main thread builds directly,
-  keeping accumulated context. **Spawn parallel agents only for independent mechanical work** (the
-  same change across several files); keep shared-file edits (indexes, schema) and the validation
-  gates on the main thread.
+  keeping accumulated context. {{#if harness.has_subagents}}**Spawn parallel agents only for
+  independent mechanical work** (the same change across several files); keep shared-file edits
+  (indexes, schema) and the validation gates on the main thread.{{/if}}{{#unless harness.has_subagents}}
+  **This harness has no parallel-subagent tool** — `/fan-out` and `/cover`'s per-unit spawn are
+  unavailable here; do mechanical fan-out work serially instead (`/burndown`, or one story at a
+  time) rather than approximating parallelism with a single session.{{/unless}}
 - **Reviewer** (`/review` routes by the diff):
   - The **inline correctness pass** — any non-trivial diff. The orchestrator reviews the diff
     itself (logic, edges, error paths, contracts, invariants). The heavyweight `/code-review` is
@@ -186,7 +189,7 @@ other workarounds.
   **with `Closes #<n>`** (closing the issue is the done-signal), title = the Conventional-Commit
   subject. PR bodies end with:
   ```
-  🤖 Generated with [Claude Code](https://claude.com/claude-code)
+  {{harness.attribution}}
   ```
 - The `Closes/Fixes/Resolves #N` keyword fires **anywhere** in the body regardless of surrounding
   prose — writing "`Closes #844` is NOT set" still closes #844. When carving one item out of a

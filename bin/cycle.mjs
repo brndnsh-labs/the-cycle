@@ -455,6 +455,35 @@ function loadProfile(name) {
     return readJsonc(p);
 }
 
+function loadHarness(name) {
+    const p = join(CYCLE_HOME, 'harnesses', `${name}.jsonc`);
+    if (!existsSync(p)) {
+        const have = readdirSync(join(CYCLE_HOME, 'harnesses'))
+            .filter((f) => f.endsWith('.jsonc'))
+            .map((f) => basename(f, '.jsonc'));
+        fail(`unknown harness "${name}"`, `available: ${have.join(', ')}`);
+    }
+    return readJsonc(p);
+}
+
+// Which harness trees a render targets. Absent/empty means "just Claude Code" — every
+// config written before this field existed renders exactly as it always did.
+const harnessNames = (cfg) => (cfg.harnesses?.length ? cfg.harnesses : ['claude']);
+
+/** The `harness.*` object templates branch on — one instance per configured harness. */
+function buildHarnessContext(h) {
+    return {
+        name: h.name,
+        display: h.display,
+        root: h.root,
+        doctrine_path: `${h.root}/DOCTRINE.md`,
+        has_menus: h.capabilities?.has_menus ?? false,
+        has_subagents: h.capabilities?.has_subagents ?? false,
+        attribution: h.notes?.attribution ?? '',
+        ask: h.notes?.ask ?? '',
+    };
+}
+
 /** config + backend semantics, as the object templates resolve paths against. */
 function buildContext(cfg, backend) {
     const gates = { ...(cfg.gates ?? {}) };
@@ -531,10 +560,10 @@ function planRender(root, cfg) {
     const overlays = overlayDir(root);
     const plan = [];
 
-    const render = (tmplRel, outRel, extra) => {
+    const render = (tmplRel, outRel, extra, base = ctx) => {
         const src = templatePath(tmplRel);
         if (!existsSync(src)) fail(`missing template ${tmplRel}`, `expected at ${src}`);
-        const body = renderTemplate(readFileSync(src, 'utf8'), extra ? { ...ctx, ...extra } : ctx, {
+        const body = renderTemplate(readFileSync(src, 'utf8'), extra ? { ...base, ...extra } : base, {
             where: tmplRel,
             overlays,
             verbs,
@@ -551,9 +580,16 @@ function planRender(root, cfg) {
         });
     };
 
-    render('DOCTRINE.md.tmpl', join('.claude', 'skills', 'DOCTRINE.md'));
-    for (const skill of profile.skills ?? []) {
-        render(join('skills', `${skill}.md.tmpl`), join('.claude', 'skills', skill, 'SKILL.md'));
+    // One full skill tree per configured harness (default: just Claude Code). The
+    // doctrine spine and every skill are identical prose across harnesses — only the
+    // output root and the {{harness.*}} branches inside the templates differ.
+    for (const name of harnessNames(cfg)) {
+        const harness = loadHarness(name);
+        const harnessCtx = { ...ctx, harness: buildHarnessContext(harness) };
+        render('DOCTRINE.md.tmpl', join(harness.root, 'DOCTRINE.md'), undefined, harnessCtx);
+        for (const skill of profile.skills ?? []) {
+            render(join('skills', `${skill}.md.tmpl`), join(harness.root, skill, harness.skill_file), undefined, harnessCtx);
+        }
     }
 
     // The backend's helper shims. Without these, `cycle install` renders skills that
@@ -790,6 +826,10 @@ export function draftConfig(root, { backend: wanted, profile } = {}) {
         },
         profile: profile ?? 'lean',
         backend,
+        // Which harness trees to render. Claude Code only, by default — add another
+        // (e.g. "codex") by hand to also render into that harness's discovery root.
+        // See harnesses/*.jsonc and docs/HARNESSES.md.
+        harnesses: ['claude'],
         tracker: {
             description: backend === 'github'
                 ? `**GitHub issues** (\`${d.slug ?? ''}\`)`
@@ -1021,7 +1061,7 @@ function cmdCheck(args) {
     const orphans = Object.keys(state?.files ?? {}).filter((rel) => !plan.some((f) => f.rel === rel));
 
     if (!values.quiet) {
-        console.log(`${bold('the-cycle')} ${dim(`profile=${cfg.profile} backend=${cfg.backend}`)}`);
+        console.log(`${bold('the-cycle')} ${dim(`profile=${cfg.profile} backend=${cfg.backend} harnesses=${harnessNames(cfg).join(',')}`)}`);
         console.log(dim(`rendered from ${state?.upstream ?? 'unknown'}; the-cycle is now at ${upstreamSha()}\n`));
     }
 
@@ -1114,18 +1154,31 @@ function cmdEject(args) {
     const root = findRepoRoot();
     const [name] = args;
     if (!name) fail('usage: cycle eject <skill>');
-    const path = join(root, '.claude', 'skills', name, 'SKILL.md');
-    if (!existsSync(path)) fail(`no rendered skill at ${relative(root, path)}`);
-    const text = readFileSync(path, 'utf8');
-    if (!readProvenance(text)) fail(`${name} is already unmanaged`);
-    writeFileSync(path, stripProvenance(text).replace(/^\n+/, ''));
-
     const cfg = loadConfig(root);
+
+    // A repo can render this skill into more than one harness tree; eject every copy
+    // that exists, so "own it here" doesn't leave a still-managed twin re-rendering
+    // the ejected file's sibling tree out from under it.
+    const paths = harnessNames(cfg)
+        .map((n) => loadHarness(n))
+        .map((h) => join(root, h.root, name, h.skill_file))
+        .filter((p) => existsSync(p));
+    if (!paths.length) fail(`no rendered skill "${name}" in any configured harness`);
+
     const state = readState(root) ?? { files: {} };
-    delete state.files[relative(root, path)];
+    let ejected = 0;
+    for (const path of paths) {
+        const text = readFileSync(path, 'utf8');
+        if (!readProvenance(text)) continue; // already unmanaged in this tree
+        writeFileSync(path, stripProvenance(text).replace(/^\n+/, ''));
+        delete state.files[relative(root, path)];
+        ejected++;
+        console.log(`${green('✓')} ejected ${dim(relative(root, path))}`);
+    }
+    if (!ejected) fail(`${name} is already unmanaged in every configured harness`);
     writeFileSync(statePath(root), `${JSON.stringify(state, null, 2)}\n`);
 
-    console.log(`${green('✓')} ejected ${bold(name)} — it is now yours to maintain in this repo`);
+    console.log(`${bold(name)} is now yours to maintain in this repo`);
     console.log(dim(`  remove it from the "${cfg.profile}" profile, or it will be re-rendered by \`cycle update\``));
 }
 
@@ -1171,6 +1224,9 @@ const USAGE = `${bold('cycle')} — render the-cycle's work pipeline into a repo
 
   ${bold('cycle render')} [filter]
       Print rendered output to stdout without writing. Debugging aid.
+
+  Renders into every harness in .cycle/config.jsonc's "harnesses" array (default
+  ["claude"] — .claude/skills/). See harnesses/*.jsonc and docs/HARNESSES.md.
 `;
 
 async function main() {

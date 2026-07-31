@@ -8,7 +8,7 @@ description: Deploy {{repo.name}} to the test environment — low ceremony, for 
 Goal: get the current work somewhere it can be looked at, with enough verification that a failure
 is legible rather than mysterious.
 
-**Shared rules in `.claude/skills/DOCTRINE.md` — read it if not already in context.** Test is the
+**Shared rules in `{{harness.doctrine_path}}` — read it if not already in context.** Test is the
 low-ceremony sibling of `/deploy-prod`: **no gate, no explicit go.** Deploying a branch here is how
 by-eye work gets checked *before* it merges.
 
@@ -30,7 +30,7 @@ by-eye work gets checked *before* it merges.
    `Acceptance:` line. **Derive it; don't invent it.** No generic "click around and see if it
    works" filler: only *user-visible* surfaces earn a checkbox, and each one names what changed and
    what should now be true.
-5. **Ask for a verdict** — `AskUserQuestion` with **Works** / **Something's off** / **Haven't
+5. **Ask for a verdict** — via {{harness.ask}}, with **Works** / **Something's off** / **Haven't
    checked**. Skip this step entirely when nothing observable shipped (a refactor, a test-only
    change); asking for a verdict on an invisible change trains people to click through.
 6. **On "Something's off": capture, don't debug.** Get {{repo.human}}'s description verbatim first

@@ -63,6 +63,13 @@ export function lint({ CYCLE_HOME }) {
     for (const f of readdirSync(join(CYCLE_HOME, 'backends')).filter((x) => x.endsWith('.jsonc'))) {
         backends.set(basename(f, '.jsonc'), readJsonc(join(CYCLE_HOME, 'backends', f)));
     }
+    const harnesses = new Map();
+    const harnessDir = join(CYCLE_HOME, 'harnesses');
+    if (existsSync(harnessDir)) {
+        for (const f of readdirSync(harnessDir).filter((x) => x.endsWith('.jsonc'))) {
+            harnesses.set(basename(f, '.jsonc'), readJsonc(join(harnessDir, f)));
+        }
+    }
     const profiles = new Map();
     for (const f of readdirSync(join(CYCLE_HOME, 'profiles')).filter((x) => x.endsWith('.jsonc'))) {
         profiles.set(basename(f, '.jsonc'), readJsonc(join(CYCLE_HOME, 'profiles', f)));
@@ -194,6 +201,63 @@ export function lint({ CYCLE_HOME }) {
             } else if (!existsSync(join(CYCLE_HOME, 'helpers', shim.helper))) {
                 add(ERROR, 'shims', `${shim.path} → helpers/${shim.helper}, which does not exist`, `backends/${name}.jsonc`);
             }
+        }
+    }
+
+    // --- harness registry ----------------------------------------------------
+    // `harness.*` is engine-computed (buildHarnessContext in bin/cycle.mjs), not
+    // per-file declared like backend.semantics — every harness gets the same field
+    // set. So the risk isn't a mismatched declaration, it's a typo'd field name: inside
+    // a {{#if harness.foo}}/{{#unless}} block an unresolved path is silently falsy
+    // rather than a hard error (only a bare scalar {{harness.foo}} fails loudly), so a
+    // typo there renders a skill with a section quietly missing.
+    const HARNESS_FIELDS = new Set([
+        'name', 'display', 'root', 'doctrine_path', 'has_menus', 'has_subagents', 'attribution', 'ask',
+    ]);
+    const harnessBranchedOn = new Set();
+    for (const text of templates.values()) {
+        for (const m of text.matchAll(/\{\{[#/]?(?:if|unless)?\s*harness\.(\w+)/g)) harnessBranchedOn.add(m[1]);
+        for (const m of text.matchAll(/\{\{\s*harness\.(\w+)/g)) harnessBranchedOn.add(m[1]);
+    }
+    for (const field of harnessBranchedOn) {
+        if (!HARNESS_FIELDS.has(field)) {
+            add(
+                ERROR,
+                'harnesses',
+                `templates branch on harness.${field}, which buildHarnessContext never populates (has: ${[...HARNESS_FIELDS].join(', ')})`,
+                'bin/cycle.mjs',
+            );
+        }
+    }
+
+    // A harness file's own declared "name" must match its filename — loadHarness keys
+    // off the filename (cfg.harnesses: ["codex"] → harnesses/codex.jsonc), so a
+    // mismatch here is invisible until someone greps the wrong field.
+    for (const [file, h] of harnesses) {
+        if (h.name !== file) {
+            add(ERROR, 'harnesses', `declares name "${h.name}", which does not match its filename`, `harnesses/${file}.jsonc`);
+        }
+        if (!h.root) add(ERROR, 'harnesses', `${file}: no "root" — the engine has nowhere to place its skill tree`, `harnesses/${file}.jsonc`);
+        if (!h.skill_file) add(ERROR, 'harnesses', `${file}: no "skill_file"`, `harnesses/${file}.jsonc`);
+        if (typeof h.capabilities?.has_menus !== 'boolean') {
+            add(ERROR, 'harnesses', `${file}: capabilities.has_menus must be true or false`, `harnesses/${file}.jsonc`);
+        }
+        if (typeof h.capabilities?.has_subagents !== 'boolean') {
+            add(ERROR, 'harnesses', `${file}: capabilities.has_subagents must be true or false`, `harnesses/${file}.jsonc`);
+        }
+        if (!h.notes?.attribution) add(WARN, 'harnesses', `${file}: no notes.attribution — the §8 PR trailer renders empty`, `harnesses/${file}.jsonc`);
+        if (!h.notes?.ask) add(WARN, 'harnesses', `${file}: no notes.ask — any {{harness.ask}} reference renders empty`, `harnesses/${file}.jsonc`);
+    }
+
+    // Two harnesses rendering to the same root would silently overwrite each other's
+    // tree the moment a repo configured both in .cycle/config.jsonc's "harnesses".
+    const harnessRoots = new Map();
+    for (const [file, h] of harnesses) {
+        if (!h.root) continue;
+        if (harnessRoots.has(h.root)) {
+            add(ERROR, 'harnesses', `shares root "${h.root}" with ${harnessRoots.get(h.root)} — configuring both would collide`, `harnesses/${file}.jsonc`);
+        } else {
+            harnessRoots.set(h.root, file);
         }
     }
 

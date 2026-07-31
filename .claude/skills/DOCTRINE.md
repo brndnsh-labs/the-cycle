@@ -1,4 +1,4 @@
-<!-- cycle:rendered template=DOCTRINE.md.tmpl hash=2f613ce23e75 — managed by the-cycle; edit the template, not this file -->
+<!-- cycle:rendered template=DOCTRINE.md.tmpl hash=35adc10e73db — managed by the-cycle; edit the template, not this file -->
 # Pipeline doctrine (shared)
 
 Single source of truth for the rules the the-cycle work-loop skills share. A skill that says
@@ -52,9 +52,9 @@ skill at `/cycle` time, from what the diff actually touches, not at filing time.
 
 - **Model:** **opus for everything** (spawned agents included).
 - **Executor:** **`orchestrator-inline` by default** — the main thread builds directly,
-  keeping accumulated context. **Spawn parallel agents only for independent mechanical work** (the
-  same change across several files); keep shared-file edits (indexes, schema) and the validation
-  gates on the main thread.
+  keeping accumulated context. **Spawn parallel agents only for
+  independent mechanical work** (the same change across several files); keep shared-file edits
+  (indexes, schema) and the validation gates on the main thread.
 - **Reviewer** (`/review` routes by the diff):
   - The **inline correctness pass** — any non-trivial diff. The orchestrator reviews the diff
     itself (logic, edges, error paths, contracts, invariants). The heavyweight `/code-review` is

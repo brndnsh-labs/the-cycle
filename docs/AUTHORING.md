@@ -18,6 +18,7 @@ Deliberately small. If you find yourself wanting more, the thing you want is pro
 | `{{> overlay:name}}` | inject `.cycle/overlays/name.md` — **required**, missing is fatal |
 | `{{> overlay?:name}}` | same, **optional** — missing renders nothing |
 | `{{@verb "arg"}}` | expand a backend verb; `$1`–`$9` are the args |
+| `{{harness.X}}` / `{{#if harness.X}}` | a harness-target field or capability — see `docs/HARNESSES.md` |
 
 Three rules the engine enforces, each because the alternative failed silently:
 
@@ -37,13 +38,17 @@ This is the whole design decision, so it's worth being explicit.
 | Procedure, judgment, safety rules, output formats | **the template** |
 | A value that varies per repo (a command, a name, a number) | **`.cycle/config.jsonc`** |
 | A command that varies per *tracker* | **a backend verb** |
+| A tool name or capability that varies per *AI harness* | **a `harness.*` field** (`docs/HARNESSES.md`) |
 | A table or list only this repo could write | **an overlay** |
 | A rule every skill in the repo shares | **DOCTRINE**, cited as `§N` |
 
 **The failure mode to avoid is inlining a repo fact into prose.** That is exactly how the three
 original copies drifted: every skill restated `npm run typecheck`, and so every skill had to be
 edited when it changed. If you're typing a command, a person's name, or a project number into a
-template, stop — it belongs in config.
+template, stop — it belongs in config. The same applies to a harness-specific path or tool name —
+`.claude/skills/DOCTRINE.md` and `AskUserQuestion` were both literal strings in every skill until
+Codex support made them wrong in a second tree; use `{{harness.doctrine_path}}` / `{{harness.ask}}`
+instead of naming one harness's mechanics in portable prose.
 
 ## Overlays
 

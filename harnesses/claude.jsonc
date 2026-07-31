@@ -1,0 +1,28 @@
+// Claude Code — the reference harness. Every template was written against this one
+// first, so its capabilities are the baseline the others are measured against.
+{
+  "name": "claude",
+  "display": "Claude Code",
+
+  // Where a rendered skill tree lands, relative to the repo root. Claude Code
+  // discovers skills at .claude/skills/<name>/SKILL.md.
+  "root": ".claude/skills",
+  "skill_file": "SKILL.md",
+
+  // Capability flags a template branches on via {{#if harness.…}}. `cycle lint`
+  // fails the build if a template branches on a flag no harness declares, or a
+  // harness declares one no template reads — same discipline as backend.semantics.
+  "capabilities": {
+    // A structured, recommendation-first multiple-choice tool (AskUserQuestion).
+    "has_menus": true,
+    // A native tool for spawning parallel subagents (the Agent tool) — what
+    // /fan-out and /cover's per-unit spawn rely on.
+    "has_subagents": true
+  },
+
+  // Prose spliced in where harnesses genuinely diverge.
+  "notes": {
+    "attribution": "🤖 Generated with [Claude Code](https://claude.com/claude-code)",
+    "ask": "`AskUserQuestion`"
+  }
+}

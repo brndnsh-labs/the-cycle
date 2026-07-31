@@ -24,7 +24,7 @@ after(() => dirs.forEach((d) => rmSync(d, { recursive: true, force: true })));
 function sandbox() {
     const dir = mkdtempSync(join(tmpdir(), 'cycle-lint-'));
     dirs.push(dir);
-    for (const part of ['templates', 'backends', 'profiles', 'helpers', 'docs']) {
+    for (const part of ['templates', 'backends', 'harnesses', 'profiles', 'helpers', 'docs']) {
         cpSync(join(CYCLE_HOME, part), join(dir, part), { recursive: true });
     }
     return dir;
@@ -159,5 +159,30 @@ describe('lint', () => {
         const dir = sandbox();
         edit(dir, 'templates/skills/burndown.md.tmpl', (t) => `${t}\n\nRead the board: {{@board_list}}\n`);
         assert.ok(errors(dir).some((f) => f.check === 'verbs' && /board_list/.test(f.message)));
+    });
+
+    // harness.* is engine-computed, so unlike backend.semantics a typo can't be caught
+    // by "declared but unused" — only by checking against the field set the engine
+    // actually populates.
+    test('catches a template branching on a harness field the engine never populates', () => {
+        const dir = sandbox();
+        edit(dir, 'templates/skills/done.md.tmpl', (t) => `${t}\n{{#if harness.has_wings}}x{{/if}}\n`);
+        assert.ok(errors(dir).some((f) => f.check === 'harnesses' && /has_wings/.test(f.message)));
+    });
+
+    test('catches a harness file whose declared name does not match its filename', () => {
+        const dir = sandbox();
+        edit(dir, 'harnesses/codex.jsonc', (t) => t.replace('"name": "codex",', '"name": "codecks",'));
+        assert.ok(errors(dir).some((f) => f.check === 'harnesses' && /codecks/.test(f.message)));
+    });
+
+    test('catches two harnesses declaring the same root', () => {
+        const dir = sandbox();
+        edit(dir, 'harnesses/codex.jsonc', (t) => t.replace('".agents/skills"', '".claude/skills"'));
+        assert.ok(errors(dir).some((f) => f.check === 'harnesses' && /collide/.test(f.message)));
+    });
+
+    test('the shipped harnesses are consistent', () => {
+        assert.ok(!errors(CYCLE_HOME).some((f) => f.check === 'harnesses'));
     });
 });

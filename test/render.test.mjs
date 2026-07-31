@@ -285,6 +285,88 @@ describe('shim resolution', () => {
     });
 });
 
+// Multi-harness: one config renders more than one skill tree. The engine-level
+// concern is that the second tree is genuinely independent — its own root, its own
+// {{harness.*}} substitutions — not a copy that happens to share output with Claude
+// Code's.
+describe('multi-harness render', () => {
+    let dir;
+    before(() => {
+        dir = scratchRepo('forgejo');
+        dirs.push(dir);
+        cycle(dir, ['install', '--profile', 'standard', '-y']);
+        const p = join(dir, '.cycle', 'config.jsonc');
+        writeFileSync(p, readFileSync(p, 'utf8').replace(
+            '"harnesses": [\n    "claude"\n  ],',
+            '"harnesses": ["claude", "codex"],',
+        ));
+        cycle(dir, ['update']);
+    });
+
+    test('renders a second tree at the codex harness root, alongside the untouched claude one', () => {
+        assert.ok(existsSync(join(dir, '.claude', 'skills', 'DOCTRINE.md')));
+        assert.ok(existsSync(join(dir, '.agents', 'skills', 'DOCTRINE.md')));
+        assert.ok(existsSync(join(dir, '.agents', 'skills', 'cycle', 'SKILL.md')));
+    });
+
+    test('every codex-tree skill has parseable frontmatter and a provenance stamp', () => {
+        for (const s of readdirSync(join(dir, '.agents', 'skills'), { withFileTypes: true })
+            .filter((e) => e.isDirectory()).map((e) => e.name)) {
+            const text = readFileSync(join(dir, '.agents', 'skills', s, 'SKILL.md'), 'utf8');
+            const fm = /^---\n([\s\S]*?)\n---\n/.exec(text);
+            assert.ok(fm, `${s}: no frontmatter`);
+            assert.equal(new RegExp(`^name: ${s}$`, 'm').test(fm[1]), true, `${s}: name mismatch`);
+            assert.match(text, /<!-- cycle:rendered /, `${s}: no provenance`);
+        }
+    });
+
+    test('no unrendered template syntax survives in the codex tree', () => {
+        for (const s of ['DOCTRINE.md', 'cycle/SKILL.md', 'intake/SKILL.md', 'unblock/SKILL.md', 'done/SKILL.md']) {
+            const text = readFileSync(join(dir, '.agents', 'skills', s), 'utf8');
+            const leftover = (text.match(/\{\{[^}]*\}\}/g) ?? []).filter(
+                (m, i, all) => !text.includes(`$${all[i]}`),
+            );
+            assert.deepEqual(leftover, [], `${s}: unrendered ${leftover.join(', ')}`);
+        }
+    });
+
+    test('each tree self-references its own doctrine path and attribution, not the other harness\'s', () => {
+        const claudeDoctrine = readFileSync(join(dir, '.claude', 'skills', 'DOCTRINE.md'), 'utf8');
+        const codexDoctrine = readFileSync(join(dir, '.agents', 'skills', 'DOCTRINE.md'), 'utf8');
+        assert.match(claudeDoctrine, /Generated with \[Claude Code\]/);
+        assert.match(codexDoctrine, /Generated with \[Codex CLI\]/);
+
+        const claudeCycle = readFileSync(join(dir, '.claude', 'skills', 'cycle', 'SKILL.md'), 'utf8');
+        const codexCycle = readFileSync(join(dir, '.agents', 'skills', 'cycle', 'SKILL.md'), 'utf8');
+        assert.match(claudeCycle, /Shared rules in `\.claude\/skills\/DOCTRINE\.md`/);
+        assert.match(codexCycle, /Shared rules in `\.agents\/skills\/DOCTRINE\.md`/);
+    });
+
+    test('the structured-menu tool name differs per harness, both wrapped correctly', () => {
+        const claudeIntake = readFileSync(join(dir, '.claude', 'skills', 'intake', 'SKILL.md'), 'utf8');
+        const codexIntake = readFileSync(join(dir, '.agents', 'skills', 'intake', 'SKILL.md'), 'utf8');
+        assert.match(claudeIntake, /`AskUserQuestion`/);
+        assert.doesNotMatch(claudeIntake, /ask_user_question/);
+        assert.match(codexIntake, /`ask_user_question`/);
+        assert.doesNotMatch(codexIntake, /AskUserQuestion/);
+    });
+
+    test('check reports clean across both trees, and re-render is a byte-identical no-op', () => {
+        assert.match(cycle(dir, ['check']), /clean/);
+        const before = readFileSync(join(dir, '.agents', 'skills', 'cycle', 'SKILL.md'), 'utf8');
+        cycle(dir, ['update']);
+        assert.equal(readFileSync(join(dir, '.agents', 'skills', 'cycle', 'SKILL.md'), 'utf8'), before);
+    });
+
+    test('eject removes provenance from every configured harness tree, not just one', () => {
+        const out = cycle(dir, ['eject', 'wrap-up']);
+        assert.match(out, /\.claude\/skills\/wrap-up\/SKILL\.md/);
+        assert.match(out, /\.agents\/skills\/wrap-up\/SKILL\.md/);
+        assert.doesNotMatch(readFileSync(join(dir, '.claude', 'skills', 'wrap-up', 'SKILL.md'), 'utf8'), /cycle:rendered/);
+        assert.doesNotMatch(readFileSync(join(dir, '.agents', 'skills', 'wrap-up', 'SKILL.md'), 'utf8'), /cycle:rendered/);
+    });
+});
+
 describe('drift detection', () => {
     let dir;
     before(() => {

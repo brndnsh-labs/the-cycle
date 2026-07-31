@@ -9,7 +9,7 @@ Goal: stop a good idea from evaporating, or from landing as a vague one-liner th
 work. Every other pipeline skill *reads* the tracker (`/next` picks, `/cycle` builds, `/burndown`
 grinds); this one *writes* a well-formed issue into it from a plain-English idea.
 
-**Shared rules in `.claude/skills/DOCTRINE.md` — read it if not already in context.** The filing
+**Shared rules in `{{harness.doctrine_path}}` — read it if not already in context.** The filing
 mechanics — dedup, the actionable bar, body format, budget — are **§10**; don't restate them,
 apply them. Classification maps onto §2 (Labels) and §1 (Status). The write step uses §7.
 
@@ -31,8 +31,10 @@ the issue. So:
   operator-side fix, not both stacks — sound right?"* beats *"what's the scope?"*
 - **Stop the moment it's actionable.** Three crisp exchanges is great; ten is a slog.
 
-Use `AskUserQuestion` only for a genuinely discrete single choice (2–4 options, recommendation
-first) — never to fire several at once.
+{{#if harness.has_menus}}Use {{harness.ask}} only for a genuinely discrete single choice (2–4
+options, recommendation first) — never to fire several at once.{{/if}}{{#unless harness.has_menus}}
+This harness has no structured menu tool — ask each question directly in chat, one at a time,
+leading with a recommendation, and wait for the reply.{{/unless}}
 
 ## Workflow
 

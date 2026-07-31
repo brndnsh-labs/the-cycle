@@ -2,7 +2,7 @@
 name: intake
 description: The front door to the backlog — turn a plain-English idea into an actionable the-cycle issue. Interviews Brandon ONE question at a time until the issue is genuinely implementable, then drafts it, classifies it, and files it. Plan-first — always shows the shaped issue before writing. Shares /scout's filing mechanics (DOCTRINE §10). Usage `/intake <the idea>` (or bare, and it'll ask).
 ---
-<!-- cycle:rendered template=skills/intake.md.tmpl hash=609a1a8bd01d — managed by the-cycle; edit the template, not this file -->
+<!-- cycle:rendered template=skills/intake.md.tmpl hash=8a30db4b0c2e — managed by the-cycle; edit the template, not this file -->
 
 # /intake — turn an idea into an actionable issue
 
@@ -32,8 +32,8 @@ the issue. So:
   operator-side fix, not both stacks — sound right?"* beats *"what's the scope?"*
 - **Stop the moment it's actionable.** Three crisp exchanges is great; ten is a slog.
 
-Use `AskUserQuestion` only for a genuinely discrete single choice (2–4 options, recommendation
-first) — never to fire several at once.
+Use `AskUserQuestion` only for a genuinely discrete single choice (2–4
+options, recommendation first) — never to fire several at once.
 
 ## Workflow
 

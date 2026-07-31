@@ -1,6 +1,7 @@
 # the-cycle
 
-An installable, self-updating work pipeline for Claude Code.
+An installable, self-updating work pipeline for AI coding harnesses — Claude Code and Codex CLI
+today, with more on the way (`docs/HARNESSES.md`).
 
 `the-cycle` renders a set of skills — `/cycle`, `/implement`, `/review`, `/patch`, `/done` and a
 maintenance layer around them — into any repo, adapted to that repo's gates, tracker, and risk
@@ -50,10 +51,13 @@ the-cycle/                          a consuming repo/
   templates/                          .cycle/
     DOCTRINE.md.tmpl        ─────▶      config.jsonc      the bindings
     skills/*.md.tmpl                    overlays/         repo-specific inserts
-    shim.mjs.tmpl                     .claude/skills/
-  backends/                             DOCTRINE.md       rendered
-    forgejo.jsonc                       <skill>/SKILL.md  rendered + provenance
-    github.jsonc                      scripts/
+    shim.mjs.tmpl                     .claude/skills/       one tree per
+  backends/                             DOCTRINE.md         configured harness
+    forgejo.jsonc                       <skill>/SKILL.md    — rendered + provenance
+    github.jsonc                      .agents/skills/       (Codex, if configured)
+  harnesses/                           DOCTRINE.md
+    claude.jsonc                       <skill>/SKILL.md
+    codex.jsonc                      scripts/
   helpers/                              forgejo.mjs       shim → helpers/, with
     forgejo*.mjs · gh-project.mjs       gh-project.mjs      this repo's bindings
 ```
@@ -146,6 +150,21 @@ bindings. The backends differ in only four places:
 | job logs | no API → `ci-logs` wrapper | `gh run view --log` |
 | merge | `forgejo-merge <pr>` guard | poll-then-merge; `--auto` needs branch protection |
 
+## Harnesses
+
+Which AI coding tool runs the rendered skills sits behind `{{harness.*}}` fields, the same way the
+tracker sits behind backend verbs. `.cycle/config.jsonc`'s `harnesses` array (default `["claude"]`)
+picks one or more; `cycle update` renders a complete, independent skill tree per harness.
+
+| | Claude Code | Codex CLI |
+| --- | --- | --- |
+| skills discovered at | `.claude/skills/<name>/SKILL.md` | `.agents/skills/<name>/SKILL.md` |
+| structured questions | `AskUserQuestion` | `ask_user_question` |
+| parallel subagents | the Agent tool | subagents (GA 2026-03-14) |
+
+Full vocabulary, the honesty rule around capability flags, and how to add a third harness:
+`docs/HARNESSES.md`.
+
 ## Layout
 
 ```
@@ -163,11 +182,13 @@ templates/
   overlays.jsonc       the overlay points, and what each is for
 helpers/               the tracker executables, single-sourced
 backends/*.jsonc       verb → command tables, shim declarations
+harnesses/*.jsonc      discovery path, tool names, capability flags per AI harness
 profiles/*.jsonc       which skills each profile installs
-test/                  node --test; renders every profile × backend
+test/                  node --test; renders every profile × backend × harness
 docs/
   AUTHORING.md         writing a template; the overlay points
   BACKENDS.md          the verb vocabulary; adding a backend
+  HARNESSES.md         the harness.* vocabulary; adding a harness
   PATTERNS.md          reviewer-agent skeleton, hooks, permissions
 ```
 

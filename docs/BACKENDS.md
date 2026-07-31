@@ -6,6 +6,10 @@ command. Swapping trackers is one line in `.cycle/config.jsonc`.
 This isn't speculative generality — it's a mechanical port that has already been done by hand
 twice, and the hand-written cheat-sheet that guided it is what this file generalizes.
 
+(There's a second, structurally identical abstraction for *which AI coding tool* runs the rendered
+skills — `harnesses/*.jsonc` and `{{harness.*}}` fields, documented in `docs/HARNESSES.md`. Same
+idea, different axis: this file is about the tracker, that one is about the harness.)
+
 ## The verb vocabulary
 
 | Verb | Args | Purpose |
