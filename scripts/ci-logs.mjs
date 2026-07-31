@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// cycle:rendered template=shim.mjs.tmpl hash=736e48fe9a1f — managed by the-cycle; edit the template, not this file
+// cycle:rendered template=shim.mjs.tmpl hash=a181093fb08a — managed by the-cycle; edit the template, not this file
 //
 // ci-logs.mjs — shim → the-cycle's canonical helpers/ci-logs.sh.
 //
@@ -27,7 +27,9 @@ function cycleHome() {
     const tries = [process.env.CYCLE_HOME];
     for (const dir of (process.env.PATH ?? '').split(delimiter)) {
         const bin = join(dir, 'cycle');
-        if (!existsSync(bin)) continue;
+        if (!existsSync(bin)) {
+            continue;
+        }
         try {
             tries.push(resolve(dirname(realpathSync(bin)), '..'));
         } catch {

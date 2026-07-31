@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// cycle:rendered template=shim.mjs.tmpl hash=e0c8a2282a57 — managed by the-cycle; edit the template, not this file
+// cycle:rendered template=shim.mjs.tmpl hash=c600d91f24c9 — managed by the-cycle; edit the template, not this file
 //
 // forgejo.mjs — shim → the-cycle's canonical helpers/forgejo.mjs.
 //
@@ -27,7 +27,9 @@ function cycleHome() {
     const tries = [process.env.CYCLE_HOME];
     for (const dir of (process.env.PATH ?? '').split(delimiter)) {
         const bin = join(dir, 'cycle');
-        if (!existsSync(bin)) continue;
+        if (!existsSync(bin)) {
+            continue;
+        }
         try {
             tries.push(resolve(dirname(realpathSync(bin)), '..'));
         } catch {

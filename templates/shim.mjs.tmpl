@@ -26,7 +26,9 @@ function cycleHome() {
     const tries = [process.env.CYCLE_HOME];
     for (const dir of (process.env.PATH ?? '').split(delimiter)) {
         const bin = join(dir, 'cycle');
-        if (!existsSync(bin)) continue;
+        if (!existsSync(bin)) {
+            continue;
+        }
         try {
             tries.push(resolve(dirname(realpathSync(bin)), '..'));
         } catch {
