@@ -1,0 +1,30 @@
+name: CI
+
+# the-cycle has one gate: `npm test` (node --test, zero dependencies — no install
+# step needed). The poll-then-merge guard (helpers/forgejo-merge.mjs) watches this
+# check and only merges a PR once it's green; main should be branch-protected with
+# "CI / gates (pull_request)" as the required context so the guard has something to
+# wait on (keep that name in sync with the job name below).
+#
+# Runs on the same self-hosted Forgejo Actions runner (ghrunner01, `self-hosted`
+# label) songsiknow/ensemble/mend use.
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gates:
+    name: gates
+    runs-on: [self-hosted]
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - run: npm test
