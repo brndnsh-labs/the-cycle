@@ -1,4 +1,4 @@
-<!-- cycle:rendered template=DOCTRINE.md.tmpl hash=35adc10e73db — managed by the-cycle; edit the template, not this file -->
+<!-- cycle:rendered template=DOCTRINE.md.tmpl hash=8316887d70a8 — managed by the-cycle; edit the template, not this file -->
 # Pipeline doctrine (shared)
 
 Single source of truth for the rules the the-cycle work-loop skills share. A skill that says
@@ -28,7 +28,7 @@ Why / Touches / Acceptance; its **labels** hold routing (§3). **Milestones = ep
 
 **Ranking pickable work** (`/next`): **milestone first** (a real numbered epic beats no milestone), then **issue number** (lower first).
 
-**A closed issue is "done."** A **closed issue is done**. There is no `status/shipped`; `issue close` is the terminal step, and the merge guard drops any lingering `status/*` label as it closes — a closed issue never keeps one. Pass `--open` when picking work. The pipeline doesn't argue with the
+**A closed issue is "done."** There is no `status/shipped`; `issue close` is the terminal step, and the merge guard drops any lingering `status/*` label as it closes — a closed issue never keeps one. Pass `--open` when picking work. The pipeline doesn't argue with the
 close; it lets the close speak.
 
 **A stale-*open* issue may already be shipped.** An umbrella/parent issue's slices often ship
