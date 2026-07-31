@@ -295,6 +295,37 @@ function closesReferences(body) {
     return out;
 }
 
+// A closed issue is done — a lingering `status/*` label on it is stale by definition
+// (there is no `status/shipped`; the close IS the terminal state). Board-backed
+// trackers flip a column on close; label-namespace trackers have nothing to flip, so
+// the guard drops the namespace itself. Best-effort and soft throughout: the merge
+// and the close have already landed, so a label hiccup is reported, never fatal.
+async function clearStatusLabels(issueNum) {
+    const labels = await api(
+        'GET',
+        `/repos/${OWNER}/${REPO}/issues/${issueNum}/labels`,
+        undefined,
+        { soft: true },
+    );
+    if (!labels.ok || !Array.isArray(labels.data)) return;
+    for (const l of labels.data) {
+        if (!l?.name?.startsWith('status/')) continue;
+        const r = await api(
+            'DELETE',
+            `/repos/${OWNER}/${REPO}/issues/${issueNum}/labels/${l.id}`,
+            undefined,
+            { soft: true },
+        );
+        if (r.ok || r.status === 204) {
+            console.log(`forgejo-merge: #${issueNum} — dropped stale label ${l.name} (closed = done)`);
+        } else {
+            console.error(
+                `forgejo-merge: #${issueNum} — could not drop ${l.name}: ${r.status} ${r.data?.message ?? r.text?.slice(0, 200)}`,
+            );
+        }
+    }
+}
+
 // Close every issue the PR closes, after a successful merge. Best-effort per issue
 // (already-closed is fine; a failure is reported but doesn't fail the merge, which
 // already happened) — never left silent, unlike the keyword-scan gap this replaces.
@@ -339,6 +370,7 @@ async function closeReferencedIssues(prNum, body, explicitCloses) {
         );
         if (r.ok) {
             console.log(`forgejo-merge: closed #${n} (via ${source})`);
+            await clearStatusLabels(n);
         } else {
             allOk = false;
             console.error(

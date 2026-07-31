@@ -84,8 +84,9 @@
 
   // Prose the doctrine splices in where the two backends genuinely diverge.
   "notes": {
+    "merge_guard": "**Always pass `--closes`** — the issue number(s) already in hand, or **`none`** when the merge should close nothing (a multi-phase PR: \"Phase 2a of #539\"). The guard's body-regex scan is only a fallback for an ad-hoc merge with no `--closes`, and it fires on any `Closes #n` token in prose — even \"will close #539 later\" (bit on a real PR). Editing the body after launch doesn't help; the guard snapshots it at registration.",
     "routing_read": "Routing values are label namespaces. Read one by finding the label with the prefix and stripping it: `labels.find(l => l.startsWith('status/'))?.slice('status/'.length)`. `forgejo-project.mjs` enforces one label per namespace and preserves workflow labels (`bug`, `area:*`, `finding`, `scout`).",
     "unreachable": "All three scripts exit **3** and print `unreachable` on a connection failure. Stop and say so — never fall back to a cached list or a frozen markdown tracker.",
-    "done_means": "A **closed issue is done**. There is no `status/shipped`; `issue close` is the terminal step. Pass `--open` when picking work."
+    "done_means": "A **closed issue is done**. There is no `status/shipped`; `issue close` is the terminal step, and the merge guard drops any lingering `status/*` label as it closes — a closed issue never keeps one. Pass `--open` when picking work."
   }
 }

@@ -1,4 +1,4 @@
-<!-- cycle:rendered template=DOCTRINE.md.tmpl hash=7ad9edbec8b9 — managed by the-cycle; edit the template, not this file -->
+<!-- cycle:rendered template=DOCTRINE.md.tmpl hash=2ac0bb2e1062 — managed by the-cycle; edit the template, not this file -->
 # Pipeline doctrine (shared)
 
 Single source of truth for the rules the the-cycle work-loop skills share. A skill that says
@@ -28,7 +28,7 @@ Why / Touches / Acceptance; its **labels** hold routing (§3). **Milestones = ep
 
 **Ranking pickable work** (`/next`): **milestone first** (a real numbered epic beats no milestone), then **issue number** (lower first).
 
-**A closed issue is "done."** A **closed issue is done**. There is no `status/shipped`; `issue close` is the terminal step. Pass `--open` when picking work. The pipeline doesn't argue with the
+**A closed issue is "done."** A **closed issue is done**. There is no `status/shipped`; `issue close` is the terminal step, and the merge guard drops any lingering `status/*` label as it closes — a closed issue never keeps one. Pass `--open` when picking work. The pipeline doesn't argue with the
 close; it lets the close speak.
 
 **A stale-*open* issue may already be shipped.** An umbrella/parent issue's slices often ship
@@ -56,7 +56,10 @@ skill at `/cycle` time, from what the diff actually touches, not at filing time.
   same change across several files); keep shared-file edits (indexes, schema) and the validation
   gates on the main thread.
 - **Reviewer** (`/review` routes by the diff):
-  - **`/code-review`** — correctness, any non-trivial diff.
+  - The **inline correctness pass** — any non-trivial diff. The orchestrator reviews the diff
+    itself (logic, edges, error paths, contracts, invariants). The heavyweight `/code-review` is
+    **human-triggered** — the loop cannot invoke it; offer it on a large or risky diff and leave
+    the call to Brandon.
   - **`/security-review`** — **additionally**, whenever the diff touches auth / tokens / secrets, schema / data migration, anything destructive or irreversible.
   - A **second-model angle** (a Sonnet pass over an opus diff, or vice-versa) is a cheap way to
     catch same-prior blind spots on a meaty diff.
@@ -120,6 +123,8 @@ harness-blocked):
 ```bash
 node scripts/forgejo-merge.mjs "<pr>" --closes "<n>" &
 ```
+
+**Always pass `--closes`** — the issue number(s) already in hand, or **`none`** when the merge should close nothing (a multi-phase PR: "Phase 2a of #539"). The guard's body-regex scan is only a fallback for an ad-hoc merge with no `--closes`, and it fires on any `Closes #n` token in prose — even "will close #539 later" (bit on a real PR). Editing the body after launch doesn't help; the guard snapshots it at registration.
 
 **Reading a red gate.** Logs come from `node scripts/ci-logs.mjs "<run>"`.
 The most recent *failing* run is `node scripts/ci-logs.mjs --failed` — it scans

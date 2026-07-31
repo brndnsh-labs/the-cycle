@@ -71,6 +71,7 @@ Current overlay points (all optional):
 | `dep-update-landmines` | `/dep-update` — the high-scrutiny dependency list |
 | `deploy` | `/deploy-test` and `/deploy-prod` — the actual topology |
 | `implement` · `done` | tail of those skills, for repo-specific steps |
+| `unblock` | tail of `/unblock` — a domain-specific hands-on lane (e.g. a by-ear verdict set) |
 
 ## Adding a skill
 

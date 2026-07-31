@@ -1,8 +1,8 @@
 ---
 name: review
-description: Review the current uncommitted the-cycle diff. Inspects git status + diff --stat to route reviewers — `/code-review` for any non-trivial change, plus `/security-review` whenever the diff touches an always-brake surface (auth / tokens / secrets, schema / data migration, anything destructive or irreversible), and optionally a second-model angle on a meaty diff. Presents the reviewer plan before running. Does NOT change Status — review happens within in-progress. Use after /implement, before /done.
+description: Review the current uncommitted the-cycle diff. Inspects git status + diff --stat to route reviewers — an inline correctness pass for any non-trivial change, plus `/security-review` whenever the diff touches an always-brake surface (auth / tokens / secrets, schema / data migration, anything destructive or irreversible), and optionally a second-model angle on a meaty diff. Presents the reviewer plan before running. Does NOT change Status — review happens within in-progress. Use after /implement, before /done.
 ---
-<!-- cycle:rendered template=skills/review.md.tmpl hash=6d01fc430738 — managed by the-cycle; edit the template, not this file -->
+<!-- cycle:rendered template=skills/review.md.tmpl hash=cfa0e280dd8e — managed by the-cycle; edit the template, not this file -->
 
 # /review — review the uncommitted tree
 
@@ -20,7 +20,7 @@ story stays `in-progress` through review and patch.
 
    | If the diff touches... | Run |
    | :- | :- |
-   | Any non-trivial code change | **`/code-review`** — the baseline correctness pass (logic, edges, error paths, contracts, invariants). Match depth to risk. Tests **alongside** prod code stay supporting cast — review the behavior change; the prod diff is the subject. |
+   | Any non-trivial code change | the **inline correctness pass** — the orchestrator reviews the diff itself, across the angles a heavyweight reviewer would cover (logic, edges, error paths, contracts, invariants). Match depth to risk. Tests **alongside** prod code stay supporting cast — review the behavior change; the prod diff is the subject. |
    | **auth / tokens / secrets** | **`/security-review`** *in addition* — non-optional here (§5). Reason about this flow's specific threat model, not just generic categories. |
    | **schema / data migration** | **`/security-review`** *in addition* — non-optional here (§5). Reason about this flow's specific threat model, not just generic categories. |
    | **anything destructive or irreversible** | **`/security-review`** *in addition* — non-optional here (§5). Reason about this flow's specific threat model, not just generic categories. |
@@ -28,11 +28,18 @@ story stays `in-progress` through review and patch.
    | A meaty diff built by the default model | optionally a **second-model angle** (below). |
    | Docs only (`*.md`) and no code | None — report "docs-only, skipping review." |
 
+   **`/code-review` is human-triggered, not a loop step.** The heavyweight multi-angle cloud review
+   exists, but only Brandon can invoke it — no skill can run it, and a routing table that
+   names it as the baseline just teaches the loop to skip that row. The loop's baseline is the
+   inline pass + the second-model angle; when a diff is large or risky enough to deserve the
+   heavyweight pass, *say so* in the findings ("worth a human `/code-review`") and leave the call
+   to Brandon.
+
    ### Second-model angle (cheap, orthogonal)
 
    A reviewer with a **different model than the implementer** shares fewer blind spots — a
    different prior catches what same-model review lets slide. Spawn a reviewer on the other tier
-   for a meaty diff, alongside `/code-review`. Prompt it for correctness bugs *and* anything that
+   for a meaty diff, alongside the inline pass. Prompt it for correctness bugs *and* anything that
    "feels off" — the different weighting is the point, so don't over-constrain it. It's cheap; run
    it freely on a substantial diff.
 

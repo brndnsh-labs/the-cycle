@@ -2,7 +2,7 @@
 name: next
 description: Pick up the next the-cycle work story. Finds the highest-priority pickable issue, the in-flight work, and the finding pile, and lays out enough to choose /implement (one issue) vs /cycle (full loop). Add `--board` for the whole-queue orientation view instead of a single pick. Plan-first — read-only, no spawn, no edit. Use at session start or whenever deciding what to pick up.
 ---
-<!-- cycle:rendered template=skills/next.md.tmpl hash=5a2cb026e27c — managed by the-cycle; edit the template, not this file -->
+<!-- cycle:rendered template=skills/next.md.tmpl hash=87af3a0ea731 — managed by the-cycle; edit the template, not this file -->
 
 # /next — surface the next work story
 
@@ -47,7 +47,7 @@ mechanics, including the "unreachable → stop" rule). Don't restate them; apply
 ## Next: #<n> — <title>   ( <milestone> )
 
 **Status:** ready   **Executor:** orchestrator-inline (default, §3)
-**Reviewer:** /code-review<, + /security-review if the diff touches an always-brake surface (§3)>
+**Reviewer:** inline pass<, + /security-review if the diff touches an always-brake surface (§3)>
 
 **Why / Touches / Acceptance:** <from the issue body>
 

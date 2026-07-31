@@ -96,5 +96,11 @@
     "purpose": "Steps that must happen when work lands — a changelog, a doc to update, a notification.",
     "shape": "A short checklist.",
     "value": "when landing work has obligations beyond the merge"
+  },
+  "unblock": {
+    "into": "tail of /unblock",
+    "purpose": "A domain-specific flavor of the hands-on lane — when verification in this repo has its own shape (listened to on an instrument, checked on real hardware, felt in a live session) that the generic Works / Doesn't work / Not now verdicts flatten.",
+    "shape": "The card format and verdict set for that lane, plus the rule for what qualifies. Keep 'Not now' first-class whatever the verdicts are called.",
+    "value": "when hands-on verification needs more than a click-through"
   }
 }

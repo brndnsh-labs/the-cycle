@@ -41,7 +41,7 @@ unattended.
    ## Cycle plan
    **Issue:** #<n> — <title>   **Milestone:** <…>
    **Executor:** {{routing.executor_default}} (default — parallel agents only for independent mechanical work, §3)
-   **Reviewer:** /code-review<, + /security-review if the diff lands on an always-brake surface (§3)>
+   **Reviewer:** inline pass<, + /security-review if the diff lands on an always-brake surface (§3)>
    **Chain:** /implement → /review → /patch (if findings) → /done (PR + Closes #<n> → §6 merge) <→ /deploy-test if --deploy>
    **Auto-pause points:** judgment call (§5) · gates/CI red · (--until-blocked) blocked-on-{{repo.human}} / milestone boundary
    ```

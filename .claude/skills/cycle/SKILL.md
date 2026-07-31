@@ -2,7 +2,7 @@
 name: cycle
 description: Run the full the-cycle story loop on one issue or a chain — composes /implement → /review → /patch → /done (→ optional /deploy-test), interrupting only on a judgment call. Usage `/cycle #<n>` · `/cycle next` · `/cycle next --until-blocked` · add `--deploy`.
 ---
-<!-- cycle:rendered template=skills/cycle.md.tmpl hash=c1e0d0dce9ef — managed by the-cycle; edit the template, not this file -->
+<!-- cycle:rendered template=skills/cycle.md.tmpl hash=7df092de0d13 — managed by the-cycle; edit the template, not this file -->
 
 # /cycle — full loop on one story or a chain
 
@@ -42,7 +42,7 @@ unattended.
    ## Cycle plan
    **Issue:** #<n> — <title>   **Milestone:** <…>
    **Executor:** orchestrator-inline (default — parallel agents only for independent mechanical work, §3)
-   **Reviewer:** /code-review<, + /security-review if the diff lands on an always-brake surface (§3)>
+   **Reviewer:** inline pass<, + /security-review if the diff lands on an always-brake surface (§3)>
    **Chain:** /implement → /review → /patch (if findings) → /done (PR + Closes #<n> → §6 merge) <→ /deploy-test if --deploy>
    **Auto-pause points:** judgment call (§5) · gates/CI red · (--until-blocked) blocked-on-Brandon / milestone boundary
    ```

@@ -85,6 +85,7 @@
   },
 
   "notes": {
+    "merge_guard": "Closing rides on the PR body's `Closes #<n>` keyword — GitHub fires it anywhere in the body regardless of surrounding prose (§8), so a multi-phase PR must never place that token next to an issue number it shouldn't close.",
     "routing_read": "Routing values are Project fields on the board item, not labels. `gh project item-list` returns `content` (`.number`, `.title`, `.url`, `.body`) alongside `status` and any custom fields. item-list carries no open/closed state, so intersect with `gh issue list --state open` on `number` — a closed item can linger on the board until archived, and this also catches an open issue not yet added to the board.",
     "unreachable": "`gh` unauthenticated or offline: say so and stop. Never guess board state.",
     "done_means": "`Closes #<n>` closes the issue on merge. If the board has no closed→Done automation, set Status explicitly after the merge lands."

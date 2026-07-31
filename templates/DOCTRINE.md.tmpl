@@ -59,7 +59,10 @@ skill at `/cycle` time, from what the diff actually touches, not at filing time.
   same change across several files); keep shared-file edits (indexes, schema) and the validation
   gates on the main thread.
 - **Reviewer** (`/review` routes by the diff):
-  - **`/code-review`** — correctness, any non-trivial diff.
+  - The **inline correctness pass** — any non-trivial diff. The orchestrator reviews the diff
+    itself (logic, edges, error paths, contracts, invariants). The heavyweight `/code-review` is
+    **human-triggered** — the loop cannot invoke it; offer it on a large or risky diff and leave
+    the call to {{repo.human}}.
   - **`/security-review`** — **additionally**, whenever the diff touches {{brakes|join:, }}.
   - A **second-model angle** (a Sonnet pass over an opus diff, or vice-versa) is a cheap way to
     catch same-prior blind spots on a meaty diff.
@@ -130,6 +133,8 @@ harness-blocked):
 ```bash
 {{@merge_guard "<pr>" "<n>"}}
 ```
+
+{{backend.notes.merge_guard}}
 {{/unless}}
 
 **Reading a red gate.** {{#if backend.job_logs}}Logs come from `{{@ci_log "<run>"}}`.

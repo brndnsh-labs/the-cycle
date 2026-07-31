@@ -13,7 +13,8 @@
 
 import { test, describe, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
+import { createServer } from 'node:http';
 import { mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -76,6 +77,91 @@ describe('helpers', () => {
             assert.ok(out.trim().length > 0, `${file} exited ${status} with no message`);
         });
     }
+
+    // The dead-port tests stop at the first request, so nothing below the merge —
+    // the close + label-clear path — ever executes in them. That is exactly the
+    // unexecuted-path class this file exists for, so drive one green merge against a
+    // mock Forgejo and watch what the guard actually does to the closed issue.
+    test('a green merge closes the issue and drops only its stale status/* label', async () => {
+        const requests = [];
+        const routes = {
+            'GET /repos/owner/repo/pulls/1': [
+                200,
+                { merged: false, body: 'feature', head: { sha: 'abc123', ref: 'feat' } },
+            ],
+            'GET /repos/owner/repo/commits/abc123/status': [
+                200,
+                { state: 'success', statuses: [{ context: 'ci', status: 'success' }] },
+            ],
+            'POST /repos/owner/repo/pulls/1/merge': [200, {}],
+            'POST /repos/owner/repo/issues/5/comments': [201, {}],
+            'PATCH /repos/owner/repo/issues/5': [201, {}],
+            'GET /repos/owner/repo/issues/5/labels': [
+                200,
+                [
+                    { id: 11, name: 'status/in-progress' },
+                    { id: 12, name: 'bug' },
+                ],
+            ],
+            'DELETE /repos/owner/repo/issues/5/labels/11': [204, null],
+        };
+        const server = createServer((req, res) => {
+            const key = `${req.method} ${req.url.replace('/api/v1', '')}`;
+            requests.push(key);
+            const hit = routes[key];
+            if (!hit) {
+                res.writeHead(500, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ message: `unmocked: ${key}` }));
+                return;
+            }
+            res.writeHead(hit[0], { 'Content-Type': 'application/json' });
+            res.end(hit[1] === null ? '' : JSON.stringify(hit[1]));
+        });
+        await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+        const { port } = server.address();
+        try {
+            const { code, out } = await new Promise((resolve) => {
+                const child = spawn(
+                    process.execPath,
+                    [join(HELPERS, 'forgejo-merge.mjs'), '1', '--closes', '5'],
+                    {
+                        timeout: 20_000,
+                        env: {
+                            ...process.env,
+                            FORGEJO_API: `http://127.0.0.1:${port}/api/v1`,
+                            FORGEJO_REPO: 'owner/repo',
+                            FORGEJO_TOKEN: 'test-token',
+                        },
+                    },
+                );
+                let buf = '';
+                child.stdout.on('data', (d) => {
+                    buf += d;
+                });
+                child.stderr.on('data', (d) => {
+                    buf += d;
+                });
+                child.on('close', (c) => resolve({ code: c, out: buf }));
+            });
+            assert.equal(code, 0, `guard should exit 0 on a clean run:\n${out}`);
+            assert.match(out, /closed #5/, `issue #5 was not closed:\n${out}`);
+            assert.match(
+                out,
+                /dropped stale label status\/in-progress/,
+                `status label was not cleared:\n${out}`,
+            );
+            assert.ok(
+                requests.includes('DELETE /repos/owner/repo/issues/5/labels/11'),
+                `no DELETE for the status/* label — saw: ${requests.join(', ')}`,
+            );
+            assert.ok(
+                !requests.some((r) => r.endsWith('/labels/12')),
+                'a workflow label (bug) must survive the close — only status/* is stale',
+            );
+        } finally {
+            server.close();
+        }
+    });
 
     // The bug was one missing const in one helper. The others were fine by luck, so
     // pin the whole set rather than the one file that broke.
