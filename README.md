@@ -88,6 +88,17 @@ git clone https://git.brndn.zip/brandon/the-cycle ~/code/the-cycle
 ~/code/the-cycle/install.sh          # symlinks bin/cycle → ~/.local/bin
 ```
 
+`git.brndn.zip/brandon/the-cycle` is canonical — PRs and CI happen there. `github.com/brndnsh/the-cycle`
+is a read-only push mirror, kept in sync automatically, for machines that can't reach the personal
+Forgejo host (e.g. a work laptop):
+
+```sh
+git clone https://github.com/brndnsh/the-cycle ~/code/the-cycle
+~/code/the-cycle/install.sh
+```
+
+Don't push to the GitHub mirror directly — the next sync from Forgejo overwrites it.
+
 `install.sh` also links `/cycle-setup` and `/cycle-adopt` into `~/.claude/skills` as personal
 skills — they have to work in a repo that doesn't have the-cycle yet.
 
