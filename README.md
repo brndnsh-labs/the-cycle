@@ -10,76 +10,29 @@ when a copy has drifted.
 
 ## Why this exists
 
-The same pipeline was copy-pasted into three repos and diverged in all three:
-
-| | ensemble | songsiknow | mend |
-| --- | --- | --- | --- |
-| `DOCTRINE.md` | 392 L | 203 L | 197 L |
-| `scout` | 193 L | 259 L | 193 L |
-| `intake` | 142 L | 176 L | 143 L |
-
-Every shared skill differs from every other copy — most by **more changed lines than the file
-contains**. `scout` alone is 380 changed lines between two of them. An improvement made in one repo
-reached the others only if hand-carried, and usually didn't. One symptom: a hardcoded
-`Co-Authored-By: Claude Opus 4.8` trailer sat in `DOCTRINE §8` in multiple repos long after it went
-stale.
-
-The divergence wasn't the real problem. **Silent** divergence was. So the two features that matter
-most here are `cycle update` (propagate) and `cycle check` (make drift visible).
+The same pipeline was copy-pasted into three repos and diverged in all three — hand-carried fixes
+usually didn't make it to the other copies, so bugs (and a stale hardcoded model name) sat fixed in
+one repo and broken in the others. The divergence wasn't the problem; **silent** divergence was. So
+the two features that matter most here are `cycle update` (propagate) and `cycle check` (make drift
+visible).
 
 ## The design
 
-Three observations made this tractable:
+Every repo-specific value lives in one generated binding file, and skill templates become fully
+portable:
 
-1. **The `§1–§9` doctrine spine is structurally identical across all three repos.** Same nine
-   sections, same order, same meaning — only the contents vary. That spine is the portable
-   contract.
-2. **Skills already indirect through it.** They say "see DOCTRINE §5" rather than restating rules.
-   The habit exists; it just *leaks* — skills also inline `npm run typecheck`, project numbers, and
-   brake surfaces. That leak is exactly where they drifted.
-3. **Executables were already single-sourced.** `dotfiles` held one canonical `forgejo.mjs` and
-   each repo committed a thin real-file shim. This repo reuses that pattern rather than
-   reinventing it — and then inverts it: the executables moved *here*, into `helpers/`, so
-   installing the pipeline takes one clone instead of two. `dotfiles` keeps the PATH entry points
-   and now shims in this direction.
+- **Backends** (`backends/*.jsonc`) bind tracker verbs — skills call `{{@issue_view "$1"}}`, never a
+  literal `gh` or Forgejo command. `docs/BACKENDS.md`.
+- **Harnesses** (`harnesses/*.jsonc`) bind which AI tool runs the skills, behind `{{harness.*}}`
+  fields. `docs/HARNESSES.md`.
+- **Overlays** (`.cycle/overlays/*.md`) hold the irreducibly repo-specific blocks a template can't
+  generalize away — a reviewer routing table, scout lens bodies — injected at named points. A
+  missing required overlay fails the render loudly rather than shipping a skill with a hole in it.
+- **Drift detection**: every rendered file carries a provenance comment. `cycle check` reports
+  *local drift* (hand-edited since rendering) and *upstream drift* (the template moved on)
+  independently.
 
-So the core move is to **plug the leak**: every repo-specific value lives in one generated binding
-file, and skill templates become fully portable.
-
-```
-the-cycle/                          a consuming repo/
-  templates/                          .cycle/
-    DOCTRINE.md.tmpl        ─────▶      config.jsonc      the bindings
-    skills/*.md.tmpl                    overlays/         repo-specific inserts
-    shim.mjs.tmpl                     .claude/skills/       one tree per
-  backends/                             DOCTRINE.md         configured harness
-    forgejo.jsonc                       <skill>/SKILL.md    — rendered + provenance
-    github.jsonc                      .agents/skills/       (Codex, if configured)
-  harnesses/                           DOCTRINE.md
-    claude.jsonc                       <skill>/SKILL.md
-    codex.jsonc                      scripts/
-  helpers/                              forgejo.mjs       shim → helpers/, with
-    forgejo*.mjs · gh-project.mjs       gh-project.mjs      this repo's bindings
-```
-
-Skill templates never name a tracker command; they call verbs the backend binds. The helpers those
-verbs invoke live upstream in `helpers/` — a repo gets a generated shim, not a copy — so a fresh
-machine needs one clone and nothing else.
-
-### Overlays
-
-Some skills are portable procedure wrapped around irreducibly local content — `/review`'s reviewer
-routing table, `/scout`'s lens bodies. Those inject from `.cycle/overlays/` at named points, so the
-procedure stays shared while the repo owns its table. A missing overlay fails the render loudly; it
-never emits a skill with a hole in it.
-
-### Drift detection
-
-Every rendered file carries a provenance comment after its frontmatter, recording the upstream
-commit it came from and a hash of its own body. `cycle check` reports two independent axes:
-
-- **local drift** — the file was hand-edited after rendering
-- **upstream drift** — the template has moved on since this copy was rendered
+Full rationale for all of the above: `docs/AUTHORING.md`.
 
 ## Install
 
@@ -90,7 +43,7 @@ git clone https://git.brndn.zip/brandon/the-cycle ~/code/the-cycle
 
 `git.brndn.zip/brandon/the-cycle` is canonical — PRs and CI happen there. `github.com/brndnsh/the-cycle`
 is a read-only push mirror, kept in sync automatically, for machines that can't reach the personal
-Forgejo host (e.g. a work laptop):
+Forgejo host:
 
 ```sh
 git clone https://github.com/brndnsh/the-cycle ~/code/the-cycle
@@ -117,22 +70,12 @@ cycle update                         # re-render, show the diff
 cycle adopt                          # reverse-engineer an existing hand-written setup
 ```
 
-### Why setup is guided
+`cycle install` can detect a repo's name, remote, and gate commands, but not what breaks it
+irreversibly or what "ready" means there — so setup is guided rather than defaulted:
+`cycle install --plan` emits every open question and overlay point, and `/cycle-setup` reads the
+codebase to answer what it can, asking only the rest.
 
-`cycle install` can detect a repo's name, remote and gate commands. It cannot know what breaks
-this codebase irreversibly, which directories deserve which reviewer, or what "ready" means here —
-and those answers are what make the pipeline worth having. Accepting the generic defaults produces
-a pipeline that renders cleanly and advises badly.
-
-So the split is: `cycle install --plan` emits what must be decided — detected values, each open
-question with *why it matters*, every overlay point with the shape its content should take —
-and `/cycle-setup` reads the codebase to answer it, asking only what reading can't settle.
-
-The renderer stays pure. A model fills in **data**; it never writes a skill, and `/cycle-setup` is
-forbidden from touching `.claude/skills/` at all. That keeps the whole pipeline testable, and
-keeps drift detection meaningful.
-
-And when working on the-cycle itself:
+When working on the-cycle itself:
 
 ```sh
 cycle lint                           # §N citations, verb bindings, shim coverage,
@@ -211,10 +154,7 @@ token at `~/.config/forgejo/token`; GitHub repos need `gh` authed with the `proj
 
 ## Adopting an existing repo
 
-`cycle adopt` reads a hand-written pipeline and drafts the config from it — gates out of DOCTRINE
-§4, brake surfaces out of §5, the status table out of §1, the commit trailer out of §8 — then
-reports what it *couldn't* decide.
-
-It is read-only by default and never touches a skill file. Where a repo's doctrine and the shared
-template disagree, that's a judgment call, so adopt surfaces the delta and stops rather than
-quietly picking a winner.
+`cycle adopt` reads a hand-written pipeline and drafts the config from it — gates, brake surfaces,
+status table, commit trailer — then reports what it *couldn't* decide. It's read-only by default and
+never touches a skill file; where a repo's doctrine and the shared template disagree, `adopt`
+surfaces the delta rather than quietly picking a winner.
