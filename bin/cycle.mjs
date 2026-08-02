@@ -17,6 +17,7 @@
 import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { createInterface } from 'node:readline/promises';
 import { execFileSync } from 'node:child_process';
+import { homedir } from 'node:os';
 import { basename, dirname, extname, join, relative, resolve } from 'node:path';
 import { parseArgs, styleText } from 'node:util';
 import { createHash } from 'node:crypto';
@@ -484,6 +485,9 @@ function buildHarnessContext(h) {
     };
 }
 
+/** False for an npm/npx install — CYCLE_HOME has no .git to probe (same signal upstreamSha() uses). */
+const cycleHomeIsClone = () => !!git(['rev-parse', '--short', 'HEAD'], CYCLE_HOME);
+
 /** config + backend semantics, as the object templates resolve paths against. */
 function buildContext(cfg, backend) {
     const gates = { ...(cfg.gates ?? {}) };
@@ -518,8 +522,11 @@ function buildContext(cfg, backend) {
         },
         backend: { name: cfg.backend, ...(backend.semantics ?? {}), notes: backend.notes ?? {} },
         profile: { name: cfg.profile, ...(cfg.profileFlags ?? {}) },
-        // Where this render happened, for the shim's last-resort lookup.
-        cycle: { home: CYCLE_HOME },
+        // Where this render happened, for the shim's last-resort lookup. An npm/npx
+        // install has no .git here — baking THIS path (npx's ephemeral, version-keyed
+        // cache) into every shim would plant a default that dangles on cache eviction,
+        // so fall back to the conventional clone location instead.
+        cycle: { home: cycleHomeIsClone() ? CYCLE_HOME : join(homedir(), 'code', 'the-cycle') },
     };
 }
 
@@ -938,6 +945,13 @@ async function cmdInstall(args) {
     console.log(`\n${green('✓')} rendered ${bold(String(plan.length))} files from the-cycle@${upstreamSha()}`);
     for (const f of plan) console.log(`  ${dim(f.rel)}`);
     console.log(`\n${dim('next:')} review .cycle/config.jsonc, then commit. \`cycle check\` reports drift.`);
+    if (!cycleHomeIsClone()) {
+        console.log(
+            `${dim('note:')} this ran from an npm/npx install, not a durable clone — rendered shims fall ` +
+                `back to ${bold(join(homedir(), 'code', 'the-cycle'))}. Clone the-cycle there and run ` +
+                'install.sh (or export CYCLE_HOME) for cycle update/check and the /cycle-setup · /cycle-adopt skills.',
+        );
+    }
 }
 
 /**

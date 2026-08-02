@@ -36,6 +36,18 @@ Full rationale for all of the above: `docs/AUTHORING.md`.
 
 ## Install
 
+Bootstrap, no clone required:
+
+```sh
+npx @brndnsh/the-cycle install       # runs the interview, renders into the current repo
+```
+
+npx is for a one-off first render — the fetched copy lives in npx's ephemeral cache, so `cycle
+update` / `cycle check` and the personal `/cycle-setup` · `/cycle-adopt` skills need the durable
+clone below. `cycle install`'s own output says as much when it ran this way.
+
+For everyday use:
+
 ```sh
 git clone https://git.brndn.zip/brandon/the-cycle ~/code/the-cycle
 ~/code/the-cycle/install.sh          # symlinks bin/cycle → ~/.local/bin

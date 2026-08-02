@@ -424,4 +424,21 @@ describe('version stamp — no .git in CYCLE_HOME (an npm/npx install)', () => {
         const state = JSON.parse(readFileSync(join(dir, '.cycle', 'state.json'), 'utf8'));
         assert.equal(state.upstream, expectedVersion);
     });
+
+    test('a shim rendered from a gitless copy never bakes in the ephemeral package dir', () => {
+        const dir = scratchRepo('forgejo');
+        dirs.push(dir);
+        gitlessCli(dir, ['install', '--profile', 'lean', '-y']);
+        const shim = readFileSync(join(dir, 'scripts', 'forgejo.mjs'), 'utf8');
+        assert.ok(!shim.includes(gitlessHome), 'the baked path must not point into the npx-style cache dir');
+        assert.match(shim, /['"].*[/\\]code[/\\]the-cycle['"]/, 'expected the conventional clone location baked in instead');
+    });
+
+    test('gitless `cycle install` points at the durable clone for cycle update/check and the setup skills', () => {
+        const dir = scratchRepo('forgejo');
+        dirs.push(dir);
+        const out = gitlessCli(dir, ['install', '--profile', 'lean', '-y']);
+        assert.match(out, /npm\/npx install/);
+        assert.match(out, /cycle-setup/);
+    });
 });
