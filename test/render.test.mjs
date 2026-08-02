@@ -8,7 +8,7 @@
 import { test, describe, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync, existsSync } from 'node:fs';
+import { cpSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -392,5 +392,36 @@ describe('drift detection', () => {
         cycle(dir, ['update', '--force']);
         assert.doesNotMatch(readFileSync(join(dir, '.claude/skills/patch/SKILL.md'), 'utf8'), /hand-written/);
         assert.match(cycle(dir, ['check']), /clean/);
+    });
+});
+
+describe('version stamp — no .git in CYCLE_HOME (an npm/npx install)', () => {
+    let gitlessHome;
+    let expectedVersion;
+
+    before(() => {
+        gitlessHome = mkdtempSync(join(tmpdir(), 'cycle-gitless-'));
+        dirs.push(gitlessHome);
+        for (const part of ['bin', 'templates', 'backends', 'harnesses', 'profiles', 'helpers', 'skills', 'docs', 'package.json']) {
+            cpSync(join(HERE, '..', part), join(gitlessHome, part), { recursive: true });
+        }
+        expectedVersion = `v${JSON.parse(readFileSync(join(HERE, '..', 'package.json'), 'utf8')).version}`;
+    });
+
+    const gitlessCli = (cwd, args) =>
+        execFileSync(process.execPath, [join(gitlessHome, 'bin', 'cycle.mjs'), ...args], {
+            cwd, encoding: 'utf8', env: { ...process.env, NO_COLOR: '1' },
+        });
+
+    test('--version falls back to the package version instead of "unknown"', () => {
+        assert.equal(gitlessCli(gitlessHome, ['--version']).trim(), expectedVersion);
+    });
+
+    test('a render from a gitless copy stamps state.json with the package version', () => {
+        const dir = scratchRepo('forgejo');
+        dirs.push(dir);
+        gitlessCli(dir, ['install', '--profile', 'lean', '-y']);
+        const state = JSON.parse(readFileSync(join(dir, '.cycle', 'state.json'), 'utf8'));
+        assert.equal(state.upstream, expectedVersion);
     });
 });

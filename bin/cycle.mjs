@@ -675,9 +675,20 @@ function printDiff(rel, a, b, { context = 2 } = {}) {
 // ---------------------------------------------------------------------------
 
 const upstreamSha = () => {
-    const sha = git(['rev-parse', '--short', 'HEAD'], CYCLE_HOME) || 'unknown';
-    const dirty = git(['status', '--porcelain'], CYCLE_HOME);
-    return dirty ? `${sha}-dirty` : sha;
+    const sha = git(['rev-parse', '--short', 'HEAD'], CYCLE_HOME);
+    if (sha) {
+        const dirty = git(['status', '--porcelain'], CYCLE_HOME);
+        return dirty ? `${sha}-dirty` : sha;
+    }
+    // No .git here — an npm/npx install, not a clone. Fall back to the package
+    // version rather than reporting "unknown" for every render this copy ever does.
+    try {
+        const pkg = JSON.parse(readFileSync(join(CYCLE_HOME, 'package.json'), 'utf8'));
+        if (pkg.version) return `v${pkg.version}`;
+    } catch {
+        /* fall through */
+    }
+    return 'unknown';
 };
 
 function writeState(root, plan) {
