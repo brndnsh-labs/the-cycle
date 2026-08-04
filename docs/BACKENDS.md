@@ -149,17 +149,23 @@ Forgejo → GitHub in one pass; this is what that actually took.
    *dim, informational, and not counted in the exit code*, so nothing fails and it's easy to miss.
    It doesn't stay harmless: a repo whose knip config sets `files: "error"` fails its own gate on
    the now-unreferenced `scripts/forgejo*.mjs`, and that failure surfaces far from its cause.
-5. **Fix the overlays that name the tracker in prose.** Verbs are abstracted; sentences aren't.
+5. **Check for a hand-written helper left over from a previous life on the destination forge.**
+   One repo carried its own `scripts/gh-project.mjs` from an earlier GitHub stint, hardcoded to a
+   long-dead personal Project #4 with `Todo`/`In Progress`/`Done`. `cycle update` **refused to
+   overwrite it** — "no provenance header, not managed by the-cycle" — which is the only reason it
+   surfaced instead of silently routing every status write to a board nobody reads. Treat that
+   refusal as a finding, not an obstacle: `git rm` the file and re-render.
+6. **Fix the overlays that name the tracker in prose.** Verbs are abstracted; sentences aren't.
    Grep `.cycle/overlays/` for the old forge's name — and edit the overlay, not the rendered copy
    under `.claude/skills/`, or the next `cycle update` reverts you.
-6. **Then re-run `cycle update` and actually confirm it ran.** Editing overlays during a migration
+7. **Then re-run `cycle update` and actually confirm it ran.** Editing overlays during a migration
    and never re-rendering leaves the skills — the files the agent reads — stale against their own
    source. `cycle check` reports that drift; a repo with more than one harness renders a tree per
    harness (`.claude/skills/` *and* `.agents/skills/`), and both go stale together.
-7. **Going to `has_board: true` adds a failure mode Forgejo doesn't have.** There, an open issue is
+8. **Going to `has_board: true` adds a failure mode Forgejo doesn't have.** There, an open issue is
    by definition routable. Here an issue can be open but *not on the board*, carrying no field
    values at all — not broken, just invisible. Expect to reconcile a few by hand after a bulk move.
-8. **Check whether issue numbers survived.** If the destination repo already had history, the
+9. **Check whether issue numbers survived.** If the destination repo already had history, the
    migration renumbers, and a `#N` baked into a doc, a test comment or a commit message now points
    somewhere else. Keep the old→new map as a committed artifact — it's the only thing that makes
    those references readable afterwards, and it has to outlive the migration runbook.
