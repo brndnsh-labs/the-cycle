@@ -125,6 +125,45 @@ path alone would pass every test and fail on the other laptop.
 6. `npm test` renders every profile against every backend in `backends/`, runs each shim, and
    checks it reached its helper.
 
+## Switching an existing repo's backend
+
+Adding a backend is authoring `backends/*.jsonc`. Moving a repo that *already has history* onto a
+different one is a different job, with traps a fresh `cycle install` never hits. Ten repos went
+Forgejo → GitHub in one pass; this is what that actually took.
+
+1. **Edit `.cycle/config.jsonc`.** Set `backend`, and add whatever the new backend `requires` —
+   GitHub needs `tracker.project` and `tracker.owner`. Update `repo.slug` if the slug moved (an
+   org rename counts). **Delete keys the old backend owned:** `tracker.api` is bound only by
+   `backends/forgejo.jsonc`, so on GitHub it is inert while still reading like live config.
+2. **Re-map the routing vocabulary — it is not portable.** This is the step that silently
+   half-works. Forgejo routes on label namespaces, GitHub on board fields, and the *values* differ
+   by more than spelling: `status/in-progress` becomes the field value `In progress`. They're
+   compared as exact strings, so a leftover `in-progress` in `status.pickable` / `status.active`
+   reads as "nothing is active" rather than as an error. Recase every status list, then decide
+   **per label** whether it became a field or stayed a label — typically only status-shaped ones
+   become fields, while `size/*`, `area:*` and workflow labels (`bug`, `finding`, `scout`) stay
+   labels on both sides.
+3. **`cycle update`** to re-render the skills and drop in the new backend's shims.
+4. **Delete the old backend's shims by hand.** `cycle update` renders the new ones; it never
+   removes the old ones. `cycle check` lists them as `· N file(s) no longer in this profile` —
+   *dim, informational, and not counted in the exit code*, so nothing fails and it's easy to miss.
+   It doesn't stay harmless: a repo whose knip config sets `files: "error"` fails its own gate on
+   the now-unreferenced `scripts/forgejo*.mjs`, and that failure surfaces far from its cause.
+5. **Fix the overlays that name the tracker in prose.** Verbs are abstracted; sentences aren't.
+   Grep `.cycle/overlays/` for the old forge's name — and edit the overlay, not the rendered copy
+   under `.claude/skills/`, or the next `cycle update` reverts you.
+6. **Then re-run `cycle update` and actually confirm it ran.** Editing overlays during a migration
+   and never re-rendering leaves the skills — the files the agent reads — stale against their own
+   source. `cycle check` reports that drift; a repo with more than one harness renders a tree per
+   harness (`.claude/skills/` *and* `.agents/skills/`), and both go stale together.
+7. **Going to `has_board: true` adds a failure mode Forgejo doesn't have.** There, an open issue is
+   by definition routable. Here an issue can be open but *not on the board*, carrying no field
+   values at all — not broken, just invisible. Expect to reconcile a few by hand after a bulk move.
+8. **Check whether issue numbers survived.** If the destination repo already had history, the
+   migration renumbers, and a `#N` baked into a doc, a test comment or a commit message now points
+   somewhere else. Keep the old→new map as a committed artifact — it's the only thing that makes
+   those references readable afterwards, and it has to outlive the migration runbook.
+
 ## Unreachable is a stop, not a fallback
 
 Every backend must make this true: if the tracker can't be reached, the skill **stops and says
