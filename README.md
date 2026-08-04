@@ -49,20 +49,15 @@ clone below. `cycle install`'s own output says as much when it ran this way.
 For everyday use:
 
 ```sh
-git clone https://git.brndn.zip/brandon/the-cycle ~/code/the-cycle
+git clone https://github.com/brndnsh-labs/the-cycle ~/code/the-cycle
 ~/code/the-cycle/install.sh          # symlinks bin/cycle → ~/.local/bin
 ```
 
-`git.brndn.zip/brandon/the-cycle` is canonical — PRs and CI happen there. `github.com/brndnsh/the-cycle`
-is a read-only push mirror, kept in sync automatically, for machines that can't reach the personal
-Forgejo host:
+`github.com/brndnsh-labs/the-cycle` is canonical — issues, PRs and CI all happen there.
+`git.brndn.zip/brandon/the-cycle` is a read-only pull mirror of it, kept in sync
+automatically, for machines that would rather not reach GitHub.
 
-```sh
-git clone https://github.com/brndnsh/the-cycle ~/code/the-cycle
-~/code/the-cycle/install.sh
-```
-
-Don't push to the GitHub mirror directly — the next sync from Forgejo overwrites it.
+Don't push to the Forgejo mirror directly — the next sync from GitHub overwrites it.
 
 `install.sh` also links `/cycle-setup` and `/cycle-adopt` into `~/.claude/skills` as personal
 skills — they have to work in a repo that doesn't have the-cycle yet.
@@ -134,7 +129,7 @@ Full vocabulary, the honesty rule around capability flags, and how to add a thir
 ## Layout
 
 ```
-.forgejo/workflows/ci.yml   `npm test` on PR + push to main
+.github/workflows/ci.yml    `npm test` on PR + push to main
 bin/
   cycle.mjs            the CLI — Node ESM, zero dependencies
   adopt.mjs            reverse-engineer an existing hand-written setup

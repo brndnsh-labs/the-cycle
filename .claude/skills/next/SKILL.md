@@ -2,7 +2,7 @@
 name: next
 description: Pick up the next the-cycle work story. Finds the highest-priority pickable issue, the in-flight work, and the finding pile, and lays out enough to choose /implement (one issue) vs /cycle (full loop). Add `--board` for the whole-queue orientation view instead of a single pick. Plan-first — read-only, no spawn, no edit. Use at session start or whenever deciding what to pick up.
 ---
-<!-- cycle:rendered template=skills/next.md.tmpl hash=d4c6ac368442 — managed by the-cycle; edit the template, not this file -->
+<!-- cycle:rendered template=skills/next.md.tmpl hash=cb66d479235e — managed by the-cycle; edit the template, not this file -->
 
 # /next — surface the next work story
 
@@ -21,13 +21,16 @@ mechanics, including the "unreachable → stop" rule). Don't restate them; apply
 
 ## Data sources (§7)
 
-- **The open set** — `node scripts/forgejo.mjs list --open`
+- **The open set** — `gh issue list --state open --json number,title,labels,milestone,url`
+- **The board** — `gh project item-list 1 --owner brndnsh-labs --format json`. `item-list` carries no open/closed state, so **intersect on
+  `number`** to keep only open issues — a closed item can linger on the board until archived, and
+  this also catches an open issue not yet on the board.
 - **Unreachable → stop** (§7). Say so plainly; never guess tracker state or fall back to a cached
   list.
 
 ## Workflow
 
-1. **Pull the open set**.
+1. **Pull the open set** and the board; join by issue `number`.
 2. **Partition by Status** (§1): pickable · in flight (note, don't re-pick) · done/closed (ignore) ·
    the `finding` pile (review debt — count and sample, don't pick) · **unrouted** (no Status at all).
    Unrouted is not an empty bucket: §10 has `/intake` and `/scout` file without routing on purpose,
@@ -46,7 +49,7 @@ mechanics, including the "unreachable → stop" rule). Don't restate them; apply
 ```
 ## Next: #<n> — <title>   ( <milestone> )
 
-**Status:** ready   **Executor:** orchestrator-inline (default, §3)
+**Status:** Ready   **Executor:** orchestrator-inline (default, §3)
 **Reviewer:** inline pass<, + /security-review if the diff touches an always-brake surface (§3)>
 
 **Why / Touches / Acceptance:** <from the issue body>
@@ -60,7 +63,7 @@ mechanics, including the "unreachable → stop" rule). Don't restate them; apply
 ```
 
 With `--board`, replace the single pick with: tallies by Status and milestone, what closed
-recently (`node scripts/forgejo.mjs list --state closed --limit 20` — the open set won't tell you), anything blocked on
+recently (`gh issue list --state closed --limit 20 --json number,title,closedAt,url` — the open set won't tell you), anything blocked on
 Brandon, the untriaged pile, and `git status` in-flight work — then a one-line
 **Suggested entry point**.
 
@@ -69,5 +72,6 @@ Brandon, the untriaged pile, and `git status` in-flight work — then a one-line
 - **No pickable issues:** say so plainly — the queue is drained. List anything in flight (a merge
   may be pending, §6) and the `finding` count. Suggest scoping the next epic, or a `/scout` sweep.
 - **All issues shipped/closed:** say so; suggest scoping the next milestone's stories.
+- **An open issue not on the board:** surface it; note it should be added during triage.
 - **A pickable issue that's really a design call:** `/next` still surfaces it (it *is* pickable),
   but flag in the body read that it lands on a §5 always-brake surface — `/cycle` will pause there.

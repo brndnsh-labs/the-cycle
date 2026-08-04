@@ -1,8 +1,8 @@
 ---
 name: implement
-description: Implement a single the-cycle work story from its issue. Reads the spec from the issue body (Why / Touches / Acceptance), picks the executor (orchestrator-inline by default; a parallel agent only for independent mechanical work across several files), sets Status → in-progress, and presents a plan before building. Plan-first. Usage `/implement #<n>`.
+description: Implement a single the-cycle work story from its issue. Reads the spec from the issue body (Why / Touches / Acceptance), picks the executor (orchestrator-inline by default; a parallel agent only for independent mechanical work across several files), sets Status → In progress, and presents a plan before building. Plan-first. Usage `/implement #<n>`.
 ---
-<!-- cycle:rendered template=skills/implement.md.tmpl hash=f8717680b157 — managed by the-cycle; edit the template, not this file -->
+<!-- cycle:rendered template=skills/implement.md.tmpl hash=b69023538a4f — managed by the-cycle; edit the template, not this file -->
 
 # /implement #<n> — ship a single story
 
@@ -16,10 +16,10 @@ claims), §4 Gates, §9 Branch policy. The procedure below is just the ordering.
 
 1. **Parse the issue ref** — `#<n>` (or a bare number).
 2. **Read the issue:**
-   - `node scripts/forgejo.mjs issue view "<n>"` — Why / Touches / Acceptance (body), labels (§2), epic (milestone).
+   - `gh issue view "<n>" --json number,title,state,url,labels,milestone,body` — Why / Touches / Acceptance (body), labels (§2), epic (milestone).
    - Its current Status (§1).
    - The relevant docs + `CLAUDE.md`.
-3. **Check it's pickable** (§1). `ready` → pick. `in-progress` →
+3. **Check it's pickable** (§1). `Ready` → pick. `In progress` →
    likely mid-flight; confirm before re-building. No Status → warn it's untriaged; proceed only if
    genuinely scoped (the write below promotes it).
 4. **Pick the executor** (§3) — **`orchestrator-inline` by default**: the main thread
@@ -27,7 +27,7 @@ claims), §4 Gates, §9 Branch policy. The procedure below is just the ordering.
    agent re-derives brittle detail and ships latent bugs). **Spawn a parallel agent only for
    independent mechanical work** (the same change across several files); keep shared-file edits
    (indexes, schema) and the §4 gates on the main thread.
-5. **Set Status → in-progress:** `node scripts/forgejo-project.mjs status "<n>" "in-progress"`
+5. **Set Status → In progress:** `node scripts/gh-project.mjs status "<n>" "In progress"`
 6. **Branch check** (§9) — if on `main`, branch first (`git checkout -b <short-slug>`); reuse an
    epic branch if one exists. Never build on `main`.
 7. **Present the plan** (a status update, not a gate — §5):
@@ -35,7 +35,7 @@ claims), §4 Gates, §9 Branch policy. The procedure below is just the ordering.
    ```
    ## Plan: #<n> — <title>
 
-   **Issue:** #<n>  ( <milestone> )   **Status:** in-progress
+   **Issue:** #<n>  ( <milestone> )   **Status:** In progress
    **Executor:** orchestrator-inline | parallel agent   **Branch:** <branch>
    **Files I expect to touch:** <from Touches in the body>
    **Acceptance gates:** §4
@@ -69,5 +69,5 @@ claims), §4 Gates, §9 Branch policy. The procedure below is just the ordering.
 - **Agent returns Blocked:** present the blocker; don't auto-retry. Common causes: the spec no
   longer matches the code (refresh the issue body), or the acceptance criterion can't be measured.
 - **Gates red:** report; don't hand off to `/review` against a broken build.
-- **Build abandoned** (not handed to `/review`): roll Status back to `ready`
-  (`node scripts/forgejo-project.mjs status "<n>" "ready"`) so nothing is stranded mid-flight.
+- **Build abandoned** (not handed to `/review`): roll Status back to `Ready`
+  (`node scripts/gh-project.mjs status "<n>" "Ready"`) so nothing is stranded mid-flight.

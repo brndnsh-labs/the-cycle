@@ -1,4 +1,4 @@
-<!-- cycle:rendered template=DOCTRINE.md.tmpl hash=da246dcbb675 — managed by the-cycle; edit the template, not this file -->
+<!-- cycle:rendered template=DOCTRINE.md.tmpl hash=86b5739b0514 — managed by the-cycle; edit the template, not this file -->
 # Pipeline doctrine (shared)
 
 Single source of truth for the rules the the-cycle work-loop skills share. A skill that says
@@ -12,23 +12,21 @@ restate it. The skills hold only their *unique* procedure.
 
 ## §1 Tracker & readiness
 
-The tracker is the **Forgejo repo's issues** (`brandon/the-cycle`). A **story = an issue**: its **body** holds
-Why / Touches / Acceptance; its **labels** hold routing (§3). **Milestones = epics.**
-
-**Labels are the source of truth**; any board/project *view* is eyes-only — no skill writes it.
+The tracker is the **GitHub repo's issues** (`brndnsh-labs/the-cycle`), routed on org project #1. A **story = an issue**: its **body** holds
+Why / Touches / Acceptance; routing lives on the board (§3). **Milestones = epics.**
 
 | Status | Meaning | Pipeline action |
 | --- | --- | --- |
-| **ready** | scoped + pickable | `/next` ranks & picks; `/implement`/`/cycle` build |
-| **in-progress** | being built | don't re-pick |
-| **in-review** | built, under review / PR open | don't re-pick |
-| **needs-decision** | blocked on a human call | surface it; **don't build** |
-| **blocked** | blocked on a dependency | skip; name the blocker |
-| **(none)** | the idea pile, not a scheduled story | triage/scope it first; don't pick |
+| **Ready** | scoped + pickable | `/next` ranks & picks; `/implement`/`/cycle` build |
+| **In progress** | being built | don't re-pick |
+| **In review** | built, under review / PR open | don't re-pick |
+| **Needs decision** | blocked on a human call | surface it; **don't build** |
+| **Blocked** | blocked on a dependency | skip; name the blocker |
+| **(none)** | the idea pile, not a scheduled story — not on the board at all | triage/scope it first; don't pick |
 
 **Ranking pickable work** (`/next`): **milestone first** (a real numbered epic beats no milestone), then **issue number** (lower first).
 
-**A closed issue is "done."** There is no `status/shipped`; `issue close` is the terminal step, and the merge guard drops any lingering `status/*` label as it closes — a closed issue never keeps one. Pass `--open` when picking work. The pipeline doesn't argue with the
+**A closed issue is "done."** `Closes #<n>` closes the issue on merge. If the board has no closed→Done automation, set Status explicitly after the merge lands. The pipeline doesn't argue with the
 close; it lets the close speak.
 
 **A stale-*open* issue may already be shipped.** An umbrella/parent issue's slices often ship
@@ -121,14 +119,15 @@ immediately. Run the guard in the **background** (the poll takes minutes; a fore
 harness-blocked):
 
 ```bash
-node scripts/forgejo-merge.mjs "<pr>" --closes "<n>" &
+(until gh pr checks "<pr>" >/dev/null 2>&1; do sleep 5; done; gh pr checks "<pr>" --watch --fail-fast && gh pr merge "<pr>" --squash --delete-branch) &
 ```
 
-**Always pass `--closes`** — the issue number(s) already in hand, or **`none`** when the merge should close nothing (a multi-phase PR: "Phase 2a of #539"). The guard's body-regex scan is only a fallback for an ad-hoc merge with no `--closes`, and it fires on any `Closes #n` token in prose — even "will close #539 later" (bit on a real PR). Editing the body after launch doesn't help; the guard snapshots it at registration.
+Closing rides on the PR body's `Closes #<n>` keyword — GitHub fires it anywhere in the body regardless of surrounding prose (§8), so a multi-phase PR must never place that token next to an issue number it shouldn't close.
 
-**Reading a red gate.** Logs come from `node scripts/ci-logs.mjs "<run>"`.
-The most recent *failing* run is `node scripts/ci-logs.mjs --failed` — it scans
-back through the run list. A red CI is diagnosable, so **"retry and see" is not
+**Reading a red gate.** Logs come from `gh run view "<run>" --log`.
+`gh run view "<run>" --log-failed`
+narrows one run to its failed steps, but it does **not** search backwards: list the runs first
+(`gh run list`) and pass the id of the one that actually failed. A red CI is diagnosable, so **"retry and see" is not
 an acceptable first move** — read the log, then decide transient-vs-real. §5 still makes an
 unexplained red a hard stop.
 
@@ -144,17 +143,17 @@ other workarounds.
 
 ## §7 Tracker mechanics
 
-Routing values are label namespaces. Read one by finding the label with the prefix and stripping it: `labels.find(l => l.startsWith('status/'))?.slice('status/'.length)`. `forgejo-project.mjs` enforces one label per namespace and preserves workflow labels (`bug`, `area:*`, `finding`, `scout`).
+Routing values are Project fields on the board item, not labels. `gh project item-list` returns `content` (`.number`, `.title`, `.url`, `.body`) alongside `status` and any custom fields. item-list carries no open/closed state, so intersect with `gh issue list --state open` on `number` — a closed item can linger on the board until archived, and this also catches an open issue not yet added to the board.
 
-- **Read the tracker:** `node scripts/forgejo.mjs list --open`
-- **Read one issue:** `node scripts/forgejo.mjs issue view "<n>"`
-- **Write a routing value:** `node scripts/forgejo-project.mjs status "<n>" "<Status>"` (or `node scripts/forgejo-project.mjs set-field "<n>" "<Field>" "<Value>"`)
-- **Bulk writes:** **always** `node scripts/forgejo-project.mjs batch "<file.json>"` — an array of `{issue, field, value}`,
+- **Read the tracker:** `gh issue list --state open --json number,title,labels,milestone,url`
+- **Read one issue:** `gh issue view "<n>" --json number,title,state,url,labels,milestone,body`
+- **Write a routing value:** `node scripts/gh-project.mjs status "<n>" "<Status>"` (or `node scripts/gh-project.mjs set-field "<n>" "<Field>" "<Value>"`)
+- **Bulk writes:** **always** `node scripts/gh-project.mjs batch "<file.json>"` — an array of `{issue, field, value}`,
   grouped into one read + one write per issue. Never loop single-op writes.
-- **Issue/PR ops:** `node scripts/forgejo.mjs issue create --title "<title>" --body "<body>" --label "<label>"` · `node scripts/forgejo.mjs issue comment "<n>" "<text>"` ·
-  `node scripts/forgejo.mjs issue close "<n>"` · `node scripts/forgejo.mjs pr create --head "<branch>" --base main --title "<title>" --body "<body>"`
+- **Issue/PR ops:** `gh issue create --title "<title>" --body "<body>" --label "<label>"` · `gh issue comment "<n>" --body "<text>"` ·
+  `gh issue close "<n>"` · `gh pr create --head "<branch>" --base main --title "<title>" --body "<body>"`
 
-**Unreachable → STOP.** All three scripts exit **3** and print `unreachable` on a connection failure. Stop and say so — never fall back to a cached list or a frozen markdown tracker.
+**Unreachable → STOP.** `gh` unauthenticated or offline: say so and stop. Never guess board state.
 
 ## §8 Commit & PR conventions
 

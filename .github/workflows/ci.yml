@@ -1,0 +1,38 @@
+name: CI
+
+# the-cycle has one gate: `npm test` (node --test, zero dependencies — no install
+# step needed). The poll-then-merge guard watches this check and only merges a PR
+# once it's green; main is branch-protected with `gates` as the required context.
+# On GitHub the context is the bare job name — NOT Forgejo's
+# "CI / gates (pull_request)" — so keep it in sync with the job name below.
+#
+# Runs on GitHub-hosted runners, not ghrunner01: this repo is public, and the org's
+# self-hosted runner group sets allows_public_repositories=false (a fork PR would
+# otherwise execute arbitrary code on the box). A public repo pinned to
+# `self-hosted` queues forever with no error, so do not "fix" it that way.
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  gates:
+    name: gates
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm test

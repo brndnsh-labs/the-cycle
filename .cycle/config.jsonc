@@ -5,53 +5,56 @@
 {
   "repo": {
     "name": "the-cycle",
-    "slug": "brandon/the-cycle",
+    "slug": "brndnsh-labs/the-cycle",
     "human": "Brandon"
   },
   "profile": "lean",
-  "backend": "forgejo",
+  "backend": "github",
   "tracker": {
-    "description": "the **Forgejo repo's issues** (`brandon/the-cycle`)",
-    "project": null,
-    "owner": "brandon",
-    "api": "https://git.brndn.zip/api/v1",
+    // Routing lives in the shared org board's fields, not in labels. Status names
+    // below must match the board's option names EXACTLY — helpers/gh-project.mjs
+    // compares with `o.name === value`, so a casing or separator slip fails to
+    // route with no error. Board: github.com/orgs/brndnsh-labs/projects/1
+    "description": "the **GitHub repo's issues** (`brndnsh-labs/the-cycle`), routed on org project #1",
+    "project": 1,
+    "owner": "brndnsh-labs",
     "fields": {},
     "statuses": [
       {
-        "name": "ready",
+        "name": "Ready",
         "meaning": "scoped + pickable",
         "action": "`/next` ranks & picks; `/implement`/`/cycle` build"
       },
       {
-        "name": "in-progress",
+        "name": "In progress",
         "meaning": "being built",
         "action": "don't re-pick"
       },
       {
-        "name": "in-review",
+        "name": "In review",
         "meaning": "built, under review / PR open",
         "action": "don't re-pick"
       },
       {
-        "name": "needs-decision",
+        "name": "Needs decision",
         "meaning": "blocked on a human call",
         "action": "surface it; **don't build**"
       },
       {
-        "name": "blocked",
+        "name": "Blocked",
         "meaning": "blocked on a dependency",
         "action": "skip; name the blocker"
       },
       {
         "name": "(none)",
-        "meaning": "the idea pile, not a scheduled story",
+        "meaning": "the idea pile, not a scheduled story — not on the board at all",
         "action": "triage/scope it first; don't pick"
       }
     ],
     "status": {
-      "pickable": "ready",
-      "active": "in-progress",
-      "done": "in-review"
+      "pickable": "Ready",
+      "active": "In progress",
+      "done": "In review"
     },
     "ranking": "**milestone first** (a real numbered epic beats no milestone), then **issue number** (lower first)",
     "milestones": []
@@ -80,8 +83,10 @@
     "anything destructive or irreversible"
   ],
   "branch": {
-    // main is now server-protected (branch protection added 2026-07-31, requiring
-    // "CI / gates (pull_request)" green) — no direct pushes, no minor-edits carve-out.
+    // main is server-protected — no direct pushes, no minor-edits carve-out.
+    // On GitHub the required status check is the bare job name `gates`; Forgejo's
+    // "CI / gates (pull_request)" form creates a check that never reports, so no
+    // PR could ever merge and the merge guard would hang forever.
     "minor_edits_direct": false
   },
   "commit": {

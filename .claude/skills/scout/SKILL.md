@@ -2,7 +2,7 @@
 name: scout
 description: Discovery-driven finder for the-cycle — fans out read-only agents across security · performance · hygiene · context · a11y lenses, verifies each finding against the real code, dedupes against open issues, and files the worth-keeping candidates as actionable issues. Read-only over code: it FINDS and FILES, it never fixes, branches, or merges. Usage `/scout` (all lenses, tightly capped) or `/scout <lens>` (one focused lens, higher cap).
 ---
-<!-- cycle:rendered template=skills/scout.md.tmpl hash=98be695ee508 — managed by the-cycle; edit the template, not this file -->
+<!-- cycle:rendered template=skills/scout.md.tmpl hash=c6bda433419b — managed by the-cycle; edit the template, not this file -->
 
 # /scout — find the-cycle's next work, on demand
 
@@ -85,7 +85,12 @@ call — file it with the options sketched and flag it as needing a decision, no
 6. **Present the slate** — each finding with its lens, `file:line`, the drafted issue body
    **including its drafted fix**, and whether it lands on a §5 brake. **This is the checkpoint**;
    nothing is written before it.
-7. **File** (§7): `node scripts/forgejo.mjs issue create --title "<title>" --body "<body>" --label "scout"`   Tracker unreachable → say so and stop; don't pretend it filed.
+7. **File** (§7): `gh issue create --title "<title>" --body "<body>" --label "scout"`, then set
+   Status for **all of them in one batch** — never a loop:
+   ```
+   node scripts/gh-project.mjs batch "<file.json>"
+   ```
+   Tracker unreachable → say so and stop; don't pretend it filed.
 8. **Report.** What was filed (links, labels, which ones flag a §5 brake for later), what was found
    but not filed (dups, below-the-cut, "clean on this lens"), and point at `/next`.
 

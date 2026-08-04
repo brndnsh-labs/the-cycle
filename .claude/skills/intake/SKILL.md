@@ -2,7 +2,7 @@
 name: intake
 description: The front door to the backlog — turn a plain-English idea into an actionable the-cycle issue. Interviews Brandon ONE question at a time until the issue is genuinely implementable, then drafts it, classifies it, and files it. Plan-first — always shows the shaped issue before writing. Shares /scout's filing mechanics (DOCTRINE §10). Usage `/intake <the idea>` (or bare, and it'll ask).
 ---
-<!-- cycle:rendered template=skills/intake.md.tmpl hash=8a30db4b0c2e — managed by the-cycle; edit the template, not this file -->
+<!-- cycle:rendered template=skills/intake.md.tmpl hash=abb524bfb6ac — managed by the-cycle; edit the template, not this file -->
 
 # /intake — turn an idea into an actionable issue
 
@@ -61,9 +61,10 @@ options, recommendation first) — never to fire several at once.
    and the classification you'd apply. **This is the checkpoint**: nothing is written until it's
    seen it.
 
-5. **File it** (§7): `node scripts/forgejo.mjs issue create --title "<title>" --body "<body>" --label "<label>"` — the label is a §2 workflow
+5. **File it** (§7): `gh issue create --title "<title>" --body "<body>" --label "<label>"` — the label is a §2 workflow
    label describing *what kind of work it is* (`bug` and the `area:*` set), never a routing value:
-   §10.5 leaves routing to the picking skill. No fitting label is fine; file it bare..
+   §10.5 leaves routing to the picking skill. No fitting label is fine; file it bare., then
+   add it to the board and set Status: `node scripts/gh-project.mjs status "<n>" "Ready"`.
    Batch the field writes into one call (§7).
 
 6. **Report** the issue number and URL, and suggest `/cycle #<n>` if it's ready to build now.

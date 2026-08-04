@@ -1,0 +1,6 @@
+# Deliberately empty.
+#
+# CI lives in .github/workflows/ci.yml since the 2026-08 GitHub flip. This
+# directory is kept because its mere existence makes Forgejo ignore
+# .github/workflows entirely — without it, the read-only Forgejo pull mirror
+# would happily run our GitHub workflow on every sync.

@@ -16,8 +16,10 @@ installed via symlink, so no module resolution games).
 ## This repo dogfoods itself
 
 **`.claude/skills/**` in this checkout is *rendered output*, not hand-written.** the-cycle installs
-its own pipeline into itself (`.cycle/config.jsonc`, profile `lean`) to manage its own Forgejo
-backlog. Every file under `.claude/skills/` carries a provenance comment and must never be hand-edited
+its own pipeline into itself (`.cycle/config.jsonc`, profile `lean`, backend `github`) to manage its
+own backlog — issues in `brndnsh-labs/the-cycle`, routed on org project #1, which also makes this repo
+the live proof that the `github` backend works.
+Every file under `.claude/skills/` carries a provenance comment and must never be hand-edited
 — `cycle check` will flag it as drifted.
 
 - To change pipeline **behavior/procedure**: edit `templates/DOCTRINE.md.tmpl` or
@@ -94,6 +96,8 @@ into the template or config, don't force over it.
 
 ## CI
 
-`.forgejo/workflows/ci.yml` — one `gates` job, `npm test`, on a self-hosted runner, no install step
-(zero dependencies). `main` is branch-protected; PRs merge via the poll-then-merge guard
-(`helpers/forgejo-merge.mjs`) once CI is green, not a server-side auto-merge.
+`.github/workflows/ci.yml` — one `gates` job, `npm test`, on `ubuntu-latest`, no install step
+(zero dependencies). GitHub-hosted rather than ghrunner01 because this repo is public and the org's
+runner group refuses public repos. `main` is branch-protected on the bare context name `gates` (not
+Forgejo's `CI / gates (pull_request)` form); PRs merge via the backend's poll-then-merge guard once
+CI is green, not a server-side auto-merge.

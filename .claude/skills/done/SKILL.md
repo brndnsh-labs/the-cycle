@@ -2,7 +2,7 @@
 name: done
 description: Ship a the-cycle story — commit the reviewed work, push, open a PR that Closes #<n>, and (for a safe story) merge it via the background poll-then-merge guard; a judgment-call story's PR is left for Brandon's manual merge. Done = the issue closes on merge. Plan-first. Usage `/done #<n>`. Use after /review (+ /patch) pass clean.
 ---
-<!-- cycle:rendered template=skills/done.md.tmpl hash=0c93be970a74 — managed by the-cycle; edit the template, not this file -->
+<!-- cycle:rendered template=skills/done.md.tmpl hash=bd458933c244 — managed by the-cycle; edit the template, not this file -->
 
 # /done #<n> — ship a story
 
@@ -33,17 +33,18 @@ mechanics, §8 Commit & PR conventions, §9 Branch policy. The procedure below i
 7. **Commit** (§8) — Conventional Commit, explicit paths (never `-A` / `.`), the `Co-Authored-By`
    trailer, HEREDOC body.
 8. **Push** — `git push -u origin <branch>`.
-9. **Open the PR** (§8) — `node scripts/forgejo.mjs pr create --head "<branch>" --base main --title "<title>" --body "<body>"` — base `main`, the
+9. **Open the PR** (§8) — `gh pr create --head "<branch>" --base main --title "<title>" --body "<body>"` — base `main`, the
    narrative body, **`Closes #<n>`**, the attribution trailer at the end (§8), the
    Conventional-Commit subject as title.
-10. **Post a one-line issue comment** linking the PR: `node scripts/forgejo.mjs issue comment "<n>" "<text>"`
+10. **Post a one-line issue comment** linking the PR: `gh issue comment "<n>" --body "<text>"`
 11. **Land it — the auto-merge decision (§5 + §6):**
     - **Safe story** — none of §5's always-brake classes (auth / tokens / secrets, schema / data migration, anything destructive or irreversible) **and** green CI →
       run the **poll-then-merge guard in the background**:
       ```bash
-      node scripts/forgejo-merge.mjs "<pr>" --closes "<n>" &
+      (until gh pr checks "<pr>" >/dev/null 2>&1; do sleep 5; done; gh pr checks "<pr>" --watch --fail-fast && gh pr merge "<pr>" --squash --delete-branch) &
       ```
-      After it lands, sync local main and prune the branch.
+      After it lands, sync local main and prune the branch, then set
+      Status explicitly: `node scripts/gh-project.mjs status "<n>" "In review"`.
     - **Judgment-call story** → **leave the PR open**, report "ready for your merge: <url>" + *why*
       it's gated. Do NOT auto-merge.
 12. **Suggest next:** `/deploy-test`, `/next`, or `/cycle` continues.
@@ -59,4 +60,4 @@ mechanics, §8 Commit & PR conventions, §9 Branch policy. The procedure below i
   don't retry with workarounds.
 - **Whole epic done:** note it; suggest a docs shipped note if warranted — don't auto-restructure.
 - **Issue didn't close after merge** (a `Closes #<n>` typo, or a non-default base): close it
-  explicitly — `node scripts/forgejo.mjs issue close "<n>"`.
+  explicitly — `gh issue close "<n>"`.
