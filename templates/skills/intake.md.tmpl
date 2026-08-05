@@ -63,10 +63,12 @@ leading with a recommendation, and wait for the reply.{{/unless}}
    seen it.
 
 5. **File it** (§7): `{{@issue_create "<title>" "<body>" "<label>"}}` — the label is a §2 workflow
-   label describing *what kind of work it is* (`bug` and the `area:*` set), never a routing value:
-   §10.5 leaves routing to the picking skill. No fitting label is fine; file it bare, then
-   add it to the board and set Status: `{{@set_status "<n>" "{{tracker.status.pickable}}"}}`.
-   Batch the field writes into one call (§7).
+   label describing *what kind of work it is* (`bug` and the `area:*` set); no fitting label is
+   fine. Then route it by §10.5's certainty call — which the interview already made: an idea that
+   reached the actionable bar is pickable, `{{@set_status "<n>" "{{tracker.status.pickable}}"}}`;
+   one that's really a decision (step 3) gets `{{@set_status "<n>" "{{tracker.status.decision}}"}}`
+   instead. There is nothing to add it *to* — an open issue is already in the queue; the status
+   label is the only write.
 
 6. **Report** the issue number and URL, and suggest `/cycle #<n>` if it's ready to build now.
 
@@ -80,7 +82,8 @@ show the set together, then file with a **single batched field write** (§7).
 - **Actionable, or don't file** (§10). If the interview stalls short of that bar, say so and stop —
   a placeholder issue is debt, not capture.
 - **Read-only until {{repo.human}} confirms the draft.** No issue is created mid-interview.
-- **Don't over-classify** (§10) — set what you know; routing is the picking skill's job.
+- **Route honestly** (§10.5) — pickable only when the interview genuinely reached actionable; a
+  decision-shaped idea files as `{{tracker.status.decision}}`, never as pickable-with-caveats.
 - **Don't fix anything.** `/intake` files; `/cycle` builds. Even a one-line fix goes through the
   pipeline.
 

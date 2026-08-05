@@ -2,7 +2,7 @@
 name: done
 description: Ship a the-cycle story — commit the reviewed work, push, open a PR that Closes #<n>, and (for a safe story) merge it via the background poll-then-merge guard; a judgment-call story's PR is left for Brandon's manual merge. Done = the issue closes on merge. Plan-first. Usage `/done #<n>`. Use after /review (+ /patch) pass clean.
 ---
-<!-- cycle:rendered template=skills/done.md.tmpl hash=bd458933c244 — managed by the-cycle; edit the template, not this file -->
+<!-- cycle:rendered template=skills/done.md.tmpl hash=d61c4ea7b120 — managed by the-cycle; edit the template, not this file -->
 
 # /done #<n> — ship a story
 
@@ -41,10 +41,10 @@ mechanics, §8 Commit & PR conventions, §9 Branch policy. The procedure below i
     - **Safe story** — none of §5's always-brake classes (auth / tokens / secrets, schema / data migration, anything destructive or irreversible) **and** green CI →
       run the **poll-then-merge guard in the background**:
       ```bash
-      (until gh pr checks "<pr>" >/dev/null 2>&1; do sleep 5; done; gh pr checks "<pr>" --watch --fail-fast && gh pr merge "<pr>" --squash --delete-branch) &
+      (until gh pr checks "<pr>" >/dev/null 2>&1; do sleep 30; done; gh pr checks "<pr>" --watch --interval 30 --fail-fast && gh pr merge "<pr>" --squash --delete-branch) &
       ```
       After it lands, sync local main and prune the branch, then set
-      Status explicitly: `node scripts/gh-project.mjs status "<n>" "In review"`.
+      Status explicitly: `gh issue edit "<n>" --remove-label "status:ready,status:in-progress,status:in-review,status:needs-decision,status:blocked" --add-label "status:in-review"`.
     - **Judgment-call story** → **leave the PR open**, report "ready for your merge: <url>" + *why*
       it's gated. Do NOT auto-merge.
 12. **Suggest next:** `/deploy-test`, `/next`, or `/cycle` continues.

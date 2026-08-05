@@ -17,7 +17,7 @@ installed via symlink, so no module resolution games).
 
 **`.claude/skills/**` in this checkout is *rendered output*, not hand-written.** the-cycle installs
 its own pipeline into itself (`.cycle/config.jsonc`, profile `lean`, backend `github`) to manage its
-own backlog — issues in `brndnsh-labs/the-cycle`, routed on org project #1, which also makes this repo
+own backlog — issues in `brndnsh-labs/the-cycle`, routed by `status:*` labels, which also makes this repo
 the live proof that the `github` backend works.
 Every file under `.claude/skills/` carries a provenance comment and must never be hand-edited
 — `cycle check` will flag it as drifted.
@@ -38,7 +38,7 @@ npm test                                    # the only gate — node --test test
 node --test test/render.test.mjs            # a single test file
 node --test --test-name-pattern="drift"     # a single test by name, across files
 cycle lint                                  # internal consistency: §N citations, verb bindings,
-                                             #   shim coverage, overlay docs, profile membership,
+                                             #   overlay docs, profile membership,
                                              #   cross-skill refs, inlined-fact detection
 ```
 

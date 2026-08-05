@@ -31,13 +31,13 @@ unattended pass.
 
 Qualifies only if **all** hold — read the issue body; don't just pattern-match the labels:
 
-- **Status `{{tracker.status.pickable}}`** — pickable, not already in flight.
+- **Labeled `{{tracker.status.pickable}}`** — pickable, not already in flight.
 - **Doesn't pose an open decision.** An issue framed "decide one of: A / B" is a human `/cycle`
   candidate regardless of how small the eventual diff is — a decision is a judgment call by
   construction.
 - **Doesn't touch a §5 always-brake surface** ({{brakes|join:, }}). Labels are a first-pass signal,
   **not the filter**: a clean dependency CVE bump under a `security` label can be perfectly safe,
-  and an unlabelled issue can still be risky. **Read the body and the touched area before
+  and an unlabeled issue can still be risky. **Read the body and the touched area before
   deciding.**
 - **Well-specified and bounded** — clear acceptance, single area, no "TBD" scope.
 - **Gate-verifiable** (§4) — not something whose correctness needs a live or manual glance.

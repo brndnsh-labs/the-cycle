@@ -30,15 +30,19 @@ idea, different axis: this file is about the tracker, that one is about the harn
 | `pr_create` | `$1` branch `$2` title `$3` body | open a PR against `main` |
 | `pr_list` / `pr_view` / `pr_close` | `$1` number | PR surface |
 | `merge_guard` | `$1` pr `$2` issue | **backgrounded** poll-then-merge on green |
-| `set_status` | `$1` number `$2` status | write the status value |
-| `set_field` | `$1` number `$2` field `$3` value | write any routing value |
-| `batch` | `$1` file | one grouped write for many issues |
+| `set_status` | `$1` number `$2` status label | write the status value |
 | `ci_runs` | — | list CI runs |
 | `ci_log` / `ci_log_failed` | `$1` run | read one run's log / its failed steps |
-| `board_list` | — | GitHub only — read the board |
+
+There is no `board_list`: **the open issue list is the board**, so `issue_list` is the whole read
+path. There is no `batch` either — the status write is a single REST call against the 5,000/hr
+core pool, not GraphQL points, so an ordinary loop is correct and a batching verb would only be a
+second way to do the same thing.
 
 A verb's value is itself a template, so it can embed config:
-`"board_list": "gh project item-list {{tracker.project}} --owner {{tracker.owner}} --format json"`.
+`"set_status": "gh issue edit $1 --remove-label \"{{tracker.status_labels}}\" --add-label $2"`.
+`tracker.status_labels` is derived at render time from `tracker.statuses`, so the clear-list can
+never disagree with the table DOCTRINE §1 prints from the same source.
 
 ## Semantic flags
 
@@ -61,9 +65,17 @@ Set `auto_merge: true` only for a repo that actually has protection configured.
 
 ## Reading routing values
 
-`gh project item-list` returns `content` plus the fields. It carries **no open/closed state**, so
-intersect with `gh issue list --state open` on `number` — a closed item can linger on the board
-until archived, and the intersection also catches an open issue not yet added to it.
+`issue_list` returns `labels` alongside `number`, `title`, `milestone` and `url`, so one call
+returns the work *and* its routing. Because it queries issues directly it carries open/closed
+state intrinsically: there is nothing to intersect and no way for a stale row to linger.
+
+Status is exactly one `status:*` label. `set_status` clears the whole set and adds the target in a
+single call — removing a label the issue doesn't carry is a no-op that still exits 0, and the add
+is applied after the removes, so the call is idempotent and needs no read first.
+
+The labels must **exist in the repo**. `gh` fails loudly on one that doesn't, which is the
+intended behavior — `cycle install` prints the `gh label create` lines for the configured
+vocabulary.
 
 ## Required config
 
@@ -71,45 +83,25 @@ A backend declares what it can't render without, in `requires`. That's validated
 template runs, so a missing value is one clear instruction rather than an "unresolved `{{…}}`"
 from four levels inside a verb expansion.
 
-GitHub requires `tracker.project` and `tracker.owner` — there's no way to know which board to
-write to otherwise.
+GitHub declares **no** `requires`. Every verb is a plain `gh` call against the repo `gh` already
+resolves from the checkout, so there is nothing a repo can bind wrong. (It used to require
+`tracker.project` and `tracker.owner` for the Projects v2 board; both retired with it.)
 
-## Shims and helpers
+## No installed executables
 
-A backend declares the helper scripts its verbs call. The real logic lives **once**, in
-`helpers/`, and each repo commits a thin real-file shim that spawns it:
+A render is **prose and nothing else**. Nothing is installed into a consuming repo, so a rendered
+command can never point at a script the repo doesn't have.
 
-```jsonc
-"shims": [
-  {
-    "path": "scripts/gh-project.mjs",           // where it lands in the repo
-    "helper": "gh-project.mjs",                 // which helpers/ file it runs
-    "env": { "GH_REPO": "{{repo.slug}}" }        // this repo's bindings, baked in
-  }
-]
-```
+This wasn't always true. Backends used to declare `shims`: a real file rendered into `scripts/`
+that spawned a canonical script in the-cycle's `helpers/`, with the repo's bindings baked in as
+env. That machinery — the shim template, the `helpers/` directory, the `CYCLE_HOME` resolution
+chain, the real-file-not-a-symlink workaround for isolated CI checkouts — existed solely to carry
+the Projects v2 board helper, because the Projects GraphQL surface was too awkward to drive from
+verb strings. Labels need no helper, so all of it retired with the board.
 
-The shim is a **real file, not a symlink**, on purpose: a committed symlink dangles in an isolated
-CI checkout (the runner clones one repo, with no siblings), which breaks any gate that checks a
-file exists. A real file is always present, and CI never *runs* it — only the local pipeline does.
-
-**`env` is what keeps the helpers portable.** A helper never learns which repo it is being run
-from by reading the filesystem — the shim tells it, from `config.jsonc`. Values resolve as
-templates and empty ones are dropped, so a blank binding falls through to the helper's own
-detection instead of overriding it with `""`. An explicitly exported variable still wins over the
-baked-in value.
-
-That indirection is not decoration. The hand-written `gh-project.mjs` in one repo opened with
-`const OWNER = 'brndnsh'; const REPO = 'brndnsh/mend'; const PROJECT_NUMBER = '4'` — three literals
-that made the file unshareable. So the shipped helper has no defaults at all — an unresolvable
-target is an error, never a guess.
-
-### Finding the helpers
-
-The shim looks for the-cycle in this order: `CYCLE_HOME`, then wherever the `cycle` command on
-`PATH` really resolves to, then the path it was rendered from, then `~/code/the-cycle`. The `PATH`
-probe is what lets a repo work on a second machine that keeps its clone somewhere else — the baked
-path alone would pass every test and fail on the other laptop.
+What's left is the invariant: **a verb may not name a `scripts/` executable.** `cycle lint` and
+`npm test` both enforce it. If a future backend genuinely needs an executable, reintroducing shims
+is a deliberate change to those two checks first — not something that can happen by accident.
 
 ## Adding a backend
 
@@ -123,14 +115,15 @@ path alone would pass every test and fail on the other laptop.
    ("closed issue is done") and §7 (tracker-mechanics opening, "unreachable → stop") currently read
    as GitHub-specific prose, hardcoded directly into the template rather than spliced from a
    per-backend note — that's correct only because GitHub is the sole backend today. If the new
-   backend's board semantics, close-on-merge behavior, or unreachable condition genuinely differ,
+   backend's routing model, close-on-merge behavior, or unreachable condition genuinely differ,
    those sections need real `{{#if backend.…}}` branches again, the way `has_board` used to fork
    §1's board-vs-labels paragraph before the label-only Forgejo backend was retired (#5/#6). Don't
    silently reuse GitHub's prose for a backend it doesn't describe.
-5. Put any executable it needs in `helpers/` and declare a shim for it. Every `scripts/*` path a
-   verb mentions must have one; `cycle lint` fails the build if it doesn't.
-6. `npm test` renders every profile against every backend in `backends/`, runs each shim, and
-   checks it reached its helper.
+5. **Bind it to commands, not to an executable.** A verb may not name a `scripts/` path — nothing
+   installs one. If the tracker's API is too awkward to drive from a verb string, that's a design
+   conversation, not a helper you add quietly; see "No installed executables" above.
+6. `npm test` renders every profile against every backend in `backends/` and checks that the render
+   is prose only.
 
 ## Migrating off a backend (history)
 
@@ -142,23 +135,24 @@ under a repo's own name) recur for *any* tracker migration, not just this one. R
 below as stand-ins for "the old backend" / "the new backend" if this ever needs doing again.
 
 1. **Edit `.cycle/config.jsonc`.** Set `backend`, and add whatever the new backend `requires` —
-   GitHub needs `tracker.project` and `tracker.owner`. Update `repo.slug` if the slug moved (an
+   GitHub declares none today. Update `repo.slug` if the slug moved (an
    org rename counts). **Delete keys the old backend owned:** `tracker.api` was bound only by the
    Forgejo backend, so on GitHub it is inert while still reading like live config.
 2. **Re-map the routing vocabulary — it is not portable.** This is the step that silently
-   half-works. Forgejo routed on label namespaces, GitHub routes on board fields, and the *values*
-   differ by more than spelling: `status/in-progress` becomes the field value `In progress`.
-   They're compared as exact strings, so a leftover `in-progress` in `status.pickable` /
-   `status.active` reads as "nothing is active" rather than as an error. Recase every status list,
-   then decide **per label** whether it became a field or stayed a label — typically only
-   status-shaped ones become fields, while `size/*`, `area:*` and workflow labels (`bug`, `finding`,
-   `scout`) stay labels on both sides.
-3. **`cycle update`** to re-render the skills and drop in the new backend's shims.
-4. **Delete the old backend's shims by hand.** `cycle update` renders the new ones; it never
-   removes the old ones. `cycle check` lists them as `· N file(s) no longer in this profile` —
-   *dim, informational, and not counted in the exit code*, so nothing fails and it's easy to miss.
-   It doesn't stay harmless: a repo whose knip config sets `files: "error"` fails its own gate on
-   the now-unreferenced `scripts/forgejo*.mjs`, and that failure surfaces far from its cause.
+   half-works. Values are compared as exact strings, so a leftover spelling in `status.pickable` /
+   `status.active` reads as "nothing is active" rather than as an error. Re-spell every status
+   entry, and check what each one *is* on the destination — Forgejo used `status/in-progress` label
+   namespaces, GitHub used Projects v2 field values (`In progress`) until Aug 2026, and now uses
+   `status:in-progress` labels again. Workflow labels (`bug`, `finding`, `scout`, `area:*`) stayed
+   labels throughout.
+3. **`cycle update`** to re-render the skills.
+4. **Delete files the old backend rendered, by hand.** `cycle update` writes the current profile's
+   files; it never removes ones that dropped out of it. `cycle check` lists them as
+   `· N file(s) no longer in this profile` — *dim, informational, and not counted in the exit
+   code*, so nothing fails and it's easy to miss. It doesn't stay harmless: a repo whose knip
+   config sets `files: "error"` fails its own gate on a now-unreferenced `scripts/*.mjs`, and that
+   failure surfaces far from its cause. (Retiring the board hit exactly this: `cycle check`
+   reported the orphaned `scripts/gh-project.mjs` rather than deleting it.)
 5. **Check for a hand-written helper left over from a previous life on the destination forge.**
    One repo carried its own `scripts/gh-project.mjs` from an earlier GitHub stint, hardcoded to a
    long-dead personal Project #4 with `Todo`/`In Progress`/`Done`. `cycle update` **refused to
@@ -172,9 +166,11 @@ below as stand-ins for "the old backend" / "the new backend" if this ever needs 
    and never re-rendering leaves the skills — the files the agent reads — stale against their own
    source. `cycle check` reports that drift; a repo with more than one harness renders a tree per
    harness (`.claude/skills/` *and* `.agents/skills/`), and both go stale together.
-8. **Going to `has_board: true` adds a failure mode Forgejo doesn't have.** There, an open issue is
-   by definition routable. Here an issue can be open but *not on the board*, carrying no field
-   values at all — not broken, just invisible. Expect to reconcile a few by hand after a bulk move.
+8. **Prefer a routing model where an open issue is routable by definition.** A separate board is a
+   second artifact an issue can be missing from: it can be open but *not on the board*, carrying no
+   routing at all — not broken, just invisible, and needing hand reconciliation after a bulk move.
+   Labels have no such state, which is one of the reasons the board was retired. If a destination
+   forces a separate board, budget for reconciling it.
 9. **Check whether issue numbers survived.** If the destination repo already had history, the
    migration renumbers, and a `#N` baked into a doc, a test comment or a commit message now points
    somewhere else. Keep the old→new map as a committed artifact — it's the only thing that makes
@@ -183,6 +179,6 @@ below as stand-ins for "the old backend" / "the new backend" if this ever needs 
 ## Unreachable is a stop, not a fallback
 
 Every backend must make this true: if the tracker can't be reached, the skill **stops and says
-so**. It never falls back to a cached list, a stale board read, or a frozen markdown tracker.
+so**. It never falls back to a cached list, a stale read, or a frozen markdown tracker.
 Guessing tracker state produces confidently wrong work, which is the most expensive failure this
 pipeline can have.

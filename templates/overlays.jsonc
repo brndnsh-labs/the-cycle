@@ -106,7 +106,7 @@
   "cycle": {
     "into": "tail of /cycle",
     "purpose": "How the loop's tail changes by issue type here — a different DoD, reviewer, or merge behavior per track/category, when the generic gate-green-means-merge shape doesn't fit every kind of work this repo does.",
-    "shape": "One short block per category: what sets it (a field, a label), its DoD, its reviewer, and anything unusual about how it merges.",
+    "shape": "One short block per category: which label sets it, its DoD, its reviewer, and anything unusual about how it merges.",
     "value": "when different kinds of issues need a genuinely different loop tail, not just a different reviewer table"
   },
   "flake": {

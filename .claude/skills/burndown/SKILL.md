@@ -2,7 +2,7 @@
 name: burndown
 description: Autonomously grind through the SAFE, self-contained subset of the the-cycle backlog — pre-filters out anything touching DOCTRINE §5's always-brake surfaces (auth / tokens / secrets, schema / data migration, anything destructive or irreversible) or posing an open decision, then loops `/cycle #<n>` over the rest, plus standing hygiene (`/dep-update`, a bounded dead-code sweep) when the issue queue is thin. A judgment call parks that item and the loop moves on; the run itself stops at 5 shipped items, a red gate, or a dry queue. Plan-first. Never touches prod. Usage `/burndown`.
 ---
-<!-- cycle:rendered template=skills/burndown.md.tmpl hash=78bcf07bafb2 — managed by the-cycle; edit the template, not this file -->
+<!-- cycle:rendered template=skills/burndown.md.tmpl hash=2a7af6f01608 — managed by the-cycle; edit the template, not this file -->
 
 # /burndown — grind the safe backlog autonomously
 
@@ -32,13 +32,13 @@ unattended pass.
 
 Qualifies only if **all** hold — read the issue body; don't just pattern-match the labels:
 
-- **Status `Ready`** — pickable, not already in flight.
+- **Labeled `status:ready`** — pickable, not already in flight.
 - **Doesn't pose an open decision.** An issue framed "decide one of: A / B" is a human `/cycle`
   candidate regardless of how small the eventual diff is — a decision is a judgment call by
   construction.
 - **Doesn't touch a §5 always-brake surface** (auth / tokens / secrets, schema / data migration, anything destructive or irreversible). Labels are a first-pass signal,
   **not the filter**: a clean dependency CVE bump under a `security` label can be perfectly safe,
-  and an unlabelled issue can still be risky. **Read the body and the touched area before
+  and an unlabeled issue can still be risky. **Read the body and the touched area before
   deciding.**
 - **Well-specified and bounded** — clear acceptance, single area, no "TBD" scope.
 - **Gate-verifiable** (§4) — not something whose correctness needs a live or manual glance.

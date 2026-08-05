@@ -11,50 +11,45 @@
   "profile": "lean",
   "backend": "github",
   "tracker": {
-    // Routing lives in the shared org board's fields, not in labels. Status names
-    // below must match the board's option names EXACTLY — helpers/gh-project.mjs
-    // compares with `o.name === value`, so a casing or separator slip fails to
-    // route with no error. Board: github.com/orgs/brndnsh-labs/projects/1
-    "description": "the **GitHub repo's issues** (`brndnsh-labs/the-cycle`), routed on org project #1",
-    "project": 1,
-    "owner": "brndnsh-labs",
-    "fields": {},
+    // Routing lives in `status:*` labels on the issue. Each name below is a real
+    // label that must exist in the repo — `gh` fails loudly on one that doesn't,
+    // which is the point: the Projects v2 board this replaced misrouted silently.
+    // Every write clears the whole set before adding one, so the states stay
+    // mutually exclusive. No label = the untriaged pile (DOCTRINE §1 renders that
+    // row itself; don't add a "(none)" entry here or it becomes a real label).
+    "description": "the **GitHub repo's issues** (`brndnsh-labs/the-cycle`), routed by `status:*` labels",
     "statuses": [
       {
-        "name": "Ready",
+        "name": "status:ready",
         "meaning": "scoped + pickable",
         "action": "`/next` ranks & picks; `/implement`/`/cycle` build"
       },
       {
-        "name": "In progress",
+        "name": "status:in-progress",
         "meaning": "being built",
         "action": "don't re-pick"
       },
       {
-        "name": "In review",
+        "name": "status:in-review",
         "meaning": "built, under review / PR open",
         "action": "don't re-pick"
       },
       {
-        "name": "Needs decision",
+        "name": "status:needs-decision",
         "meaning": "blocked on a human call",
         "action": "surface it; **don't build**"
       },
       {
-        "name": "Blocked",
+        "name": "status:blocked",
         "meaning": "blocked on a dependency",
         "action": "skip; name the blocker"
-      },
-      {
-        "name": "(none)",
-        "meaning": "the idea pile, not a scheduled story — not on the board at all",
-        "action": "triage/scope it first; don't pick"
       }
     ],
     "status": {
-      "pickable": "Ready",
-      "active": "In progress",
-      "done": "In review"
+      "pickable": "status:ready",
+      "active": "status:in-progress",
+      "done": "status:in-review",
+      "decision": "status:needs-decision"
     },
     "ranking": "**milestone first** (a real numbered epic beats no milestone), then **issue number** (lower first)",
     "milestones": []

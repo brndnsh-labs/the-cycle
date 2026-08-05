@@ -14,7 +14,7 @@
 // .cycle/state.json, and "upstream drift" is computed the useful way: by re-rendering
 // and reporting which files would actually change.
 
-import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { createInterface } from 'node:readline/promises';
 import { execFileSync } from 'node:child_process';
 import { homedir } from 'node:os';
@@ -344,8 +344,10 @@ export function renderTemplate(src, ctx, opts = {}) {
 // provenance
 // ---------------------------------------------------------------------------
 
-// Managed files are markdown *and* executable shims, so the stamp has to be a comment
-// in whatever language it lands in. Same fields either way; only the wrapper changes.
+// Every managed file is markdown today, but the stamp is a comment in whatever language
+// it lands in — same fields either way, only the wrapper changes. The non-markdown
+// entries are what let a template render something other than prose without the
+// provenance and drift machinery needing to learn a new trick.
 const COMMENT = {
     '.md': ['<!-- ', ' -->'],
     '.mjs': ['// ', ''],
@@ -394,8 +396,8 @@ export function readProvenance(text) {
 export function stampProvenance(body, template, rel = template) {
     const hash = hashContent(stripProvenance(body));
     const line = provenanceLine(template, hash, rel);
-    // Whatever must stay on line 1 stays on line 1: frontmatter (or Claude Code won't
-    // parse the skill) and a shebang (or the kernel won't run the shim).
+    // Whatever must stay on line 1 stays on line 1: frontmatter (or the harness won't
+    // parse the skill) and a shebang (or the kernel won't run the file).
     const head = /^---\n[\s\S]*?\n---\n/.exec(body) ?? /^#![^\n]*\n/.exec(body);
     if (head) {
         const at = head[0].length;
@@ -503,7 +505,15 @@ function buildContext(cfg, backend) {
     return {
         ...cfg,
         gates,
-        tracker: { ...(cfg.tracker ?? {}) },
+        tracker: {
+            ...(cfg.tracker ?? {}),
+            // The whole status vocabulary as one comma-joined list, for the backend's
+            // set_status verb: it clears every status label before adding the target,
+            // which is what keeps the set mutually exclusive without reading first.
+            // Derived rather than configured so the list can never disagree with the
+            // table §1 renders from the same source.
+            status_labels: (cfg.tracker?.statuses ?? []).map((s) => s.name).join(','),
+        },
         deps: {
             outdated: '', audit: '', audit_fix: '', update: '', install: '', manifests: [],
             ...(cfg.deps ?? {}),
@@ -512,11 +522,6 @@ function buildContext(cfg, backend) {
         },
         backend: { name: cfg.backend, ...(backend.semantics ?? {}), notes: backend.notes ?? {} },
         profile: { name: cfg.profile, ...(cfg.profileFlags ?? {}) },
-        // Where this render happened, for the shim's last-resort lookup. An npm/npx
-        // install has no .git here — baking THIS path (npx's ephemeral, version-keyed
-        // cache) into every shim would plant a default that dangles on cache eviction,
-        // so fall back to the conventional clone location instead.
-        cycle: { home: cycleHomeIsClone() ? CYCLE_HOME : join(homedir(), 'code', 'the-cycle') },
     };
 }
 
@@ -573,7 +578,6 @@ function planRender(root, cfg) {
             path: join(root, outRel),
             content: stampProvenance(tidy, tmplRel, outRel),
             template: tmplRel,
-            mode: outRel.startsWith('scripts/') ? 0o755 : undefined,
         });
     };
 
@@ -589,28 +593,10 @@ function planRender(root, cfg) {
         }
     }
 
-    // The backend's helper shims. Without these, `cycle install` renders skills that
-    // call scripts/gh-project.mjs into a repo that has no such file — the skills read
-    // fine and every command in them fails.
-    for (const shim of backend.shims ?? []) {
-        const helper = join(CYCLE_HOME, 'helpers', shim.helper);
-        if (!existsSync(helper)) {
-            fail(
-                `backend "${cfg.backend}" declares a shim for helpers/${shim.helper}, which does not exist`,
-                `expected at ${helper}`,
-            );
-        }
-        // Resolve each binding, then drop the empty ones so the shim carries only real
-        // values — an empty binding must fall through to the helper's own detection
-        // rather than override it with "".
-        const env = Object.entries(shim.env ?? {})
-            .map(([key, tmpl]) => [key, renderTemplate(tmpl, ctx, { where: `${cfg.backend} shim ${shim.path}`, verbs })])
-            .filter(([, value]) => value !== '')
-            .map(([key, value]) => ({ key, json: JSON.stringify(value) }));
-        render('shim.mjs.tmpl', shim.path, {
-            shim: { name: basename(shim.path), helper: shim.helper, env },
-        });
-    }
+    // A render is markdown and nothing else. Backends used to also declare `shims` —
+    // executables rendered into the repo to reach a canonical script in the-cycle's
+    // helpers/ — but that existed only for the Projects v2 board, and retiring the
+    // board retired the whole mechanism along with helpers/ and shim.mjs.tmpl.
     return plan;
 }
 
@@ -789,15 +775,23 @@ export function detect(root) {
 // commands
 // ---------------------------------------------------------------------------
 
-// Starting points only — a repo edits these in config.jsonc. GitHub's default
-// Project board ships Todo/In Progress/Done. Keyed by backend (rather than a flat
-// array) so a future backend with its own natural vocabulary drops in alongside
-// this one instead of overwriting it.
+// Starting points only — a repo edits these in config.jsonc. These are label names;
+// the `status:` prefix namespaces them away from `bug`/`enhancement`/`backlog` and
+// makes the set clearable as a group. Keyed by backend (rather than a flat array) so
+// a future backend with its own natural vocabulary drops in alongside this one
+// instead of overwriting it.
+//
+// There is deliberately no `status:done`: a closed issue is done (§1), so the last
+// transition the pipeline writes is in-review, and the merge's `Closes #n` finishes
+// the story. A Done state would be a second source of truth that can disagree with
+// the close — which is exactly what went stale on the board this replaced.
 const DEFAULT_STATUSES = {
     github: [
-        { name: 'Todo', meaning: 'scoped + pickable', action: '`/next` ranks & picks; `/implement`/`/cycle` build' },
-        { name: 'In Progress', meaning: 'being built, or PR open', action: "don't re-pick" },
-        { name: 'Done', meaning: 'issue closed / shipped', action: 'done' },
+        { name: 'status:ready', meaning: 'scoped + pickable', action: '`/next` ranks & picks; `/implement`/`/cycle` build' },
+        { name: 'status:in-progress', meaning: 'being built', action: "don't re-pick" },
+        { name: 'status:in-review', meaning: 'built, under review / PR open', action: "don't re-pick" },
+        { name: 'status:blocked', meaning: 'blocked on a dependency', action: 'skip; name the blocker' },
+        { name: 'status:needs-decision', meaning: 'blocked on a human call', action: "surface it; **don't build**" },
     ],
 };
 
@@ -850,12 +844,10 @@ export function draftConfig(root, { backend: wanted, profile, set } = {}) {
         harnesses: ['claude'],
         tracker: {
             description: `**GitHub issues** (\`${d.slug ?? ''}\`)`,
-            project: null,
-            owner: (d.slug ?? '/').split('/')[0],
             statuses: DEFAULT_STATUSES[backend] ?? DEFAULT_STATUSES.github,
-            // The three the skills actually transition between, named separately so a
-            // repo can rename its vocabulary without the skills caring.
-            status: { pickable: 'Todo', active: 'In Progress', done: 'Done' },
+            // The four the skills actually write, named separately so a repo can
+            // rename its vocabulary without the skills caring.
+            status: { pickable: 'status:ready', active: 'status:in-progress', done: 'status:in-review', decision: 'status:needs-decision' },
             ranking: '**milestone first** (a real numbered epic beats no milestone), then **issue number** (lower first)',
             milestones: [],
         },
@@ -931,18 +923,31 @@ async function cmdInstall(args) {
     for (const f of plan) {
         mkdirSync(dirname(f.path), { recursive: true });
         writeFileSync(f.path, f.content);
-        if (f.mode) chmodSync(f.path, f.mode);
     }
     writeState(root, plan);
 
     console.log(`\n${green('✓')} rendered ${bold(String(plan.length))} files from the-cycle@${upstreamSha()}`);
     for (const f of plan) console.log(`  ${dim(f.rel)}`);
     console.log(`\n${dim('next:')} review .cycle/config.jsonc, then commit. \`cycle check\` reports drift.`);
+
+    // The status vocabulary is labels, and `gh` errors on a label the repo doesn't
+    // have — loudly, which is the behaviour we want, but only if these exist. Printed
+    // rather than created: `install` renders files and touches no network, and the
+    // one place that rule bends should be a command the operator ran on purpose.
+    const statuses = cfg.tracker?.statuses ?? [];
+    if (statuses.length) {
+        console.log(`\n${dim('labels:')} the status vocabulary must exist in the repo — create any that don't:`);
+        for (const s of statuses) {
+            console.log(`  ${dim(`gh label create "${s.name}" --description ${JSON.stringify(s.meaning ?? '')} --force`)}`);
+        }
+    }
+
     if (!cycleHomeIsClone()) {
         console.log(
-            `${dim('note:')} this ran from an npm/npx install, not a durable clone — rendered shims fall ` +
-                `back to ${bold(join(homedir(), 'code', 'the-cycle'))}. Clone the-cycle there and run ` +
-                'install.sh (or export CYCLE_HOME) for cycle update/check and the /cycle-setup · /cycle-adopt skills.',
+            `${dim('note:')} this ran from an npm/npx install, not a durable clone. The rendered skills ` +
+                'stand alone and will keep working, but `cycle update`/`check` and the /cycle-setup · ' +
+                `/cycle-adopt skills need the-cycle on disk — clone it to ${bold(join(homedir(), 'code', 'the-cycle'))} ` +
+                'and run install.sh (or export CYCLE_HOME).',
         );
     }
 }
@@ -1009,7 +1014,7 @@ function cmdPlan(root, values) {
             {
                 path: 'tracker.statuses',
                 asks: 'What is the status vocabulary, and what does each value mean?',
-                why: 'The table skills read to decide what is pickable. Match the labels or board columns the tracker really has.',
+                why: 'The table skills read to decide what is pickable. Each `name` is a real label on the issue, and the set is cleared as a group on every transition, so keep the shared `status:` prefix. The labels must exist in the repo — `cycle install` prints the `gh label create` lines.',
                 default: cfg.tracker.statuses,
             },
             ...Object.entries(backend.requires ?? {}).map(([path, why]) => ({
@@ -1154,7 +1159,6 @@ function cmdUpdate(args) {
     for (const f of writes) {
         mkdirSync(dirname(f.path), { recursive: true });
         writeFileSync(f.path, f.content);
-        if (f.mode) chmodSync(f.path, f.mode);
     }
     writeState(root, plan);
     console.log(`${green('✓')} updated ${bold(String(writes.length))} file(s) to the-cycle@${upstreamSha()}`);
@@ -1226,9 +1230,9 @@ const USAGE = `${bold('cycle')} — render the-cycle's work pipeline into a repo
       and show what would change. Read-only unless --write.
 
   ${bold('cycle lint')} [-q]
-      Check the-cycle's own consistency: §N citations, verb bindings, shim
-      coverage, overlay docs, profiles, cross-skill references. -q hides
-      warnings. For working on the-cycle itself, not on a consuming repo.
+      Check the-cycle's own consistency: §N citations, verb bindings, overlay
+      docs, profiles, cross-skill references. -q hides warnings. For working
+      on the-cycle itself, not on a consuming repo.
 
   ${bold('cycle eject')} <skill>
       Stop managing one skill; strip its provenance header.

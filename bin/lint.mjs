@@ -10,9 +10,8 @@
 //   citations      §N is a plain string; nothing links it to DOCTRINE's headings.
 //   verbs          a typo'd {{@verb}} renders as an unresolved tag instead of failing
 //                  the build loudly.
-//   shims          `shims` was declared and consumed nowhere — every rendered skill
-//                  called a helper script into a repo that had no such file. Verbs
-//                  and shim declarations must agree.
+//   verbs          a verb no backend binds, or one naming a scripts/ executable that
+//                  nothing installs (the shim mechanism retired with the board).
 //   overlays       AUTHORING.md's table is hand-maintained next to the code it
 //                  documents, which is exactly how docs go stale.
 //   profiles       a template in no profile is dead; a profile entry with no
@@ -45,6 +44,40 @@ const INLINED = [
     // the prose silently assumed one person's gender in six files. they/them is correct
     // for anyone, and for "the team".
     [/\b(?:he|him|his|she|her|hers)\b/i, 'a gendered pronoun — use they/them, or {{repo.human}}'],
+];
+
+/**
+ * British spellings, and the US form this repo standardizes on. A template's prose is
+ * rendered into every consuming repo, so one dialect slip propagates everywhere and is
+ * only ever caught downstream — if at all. cspell is not the tool for this: in one
+ * commit it failed on `behaviour` and passed `labelled` four times, because its
+ * dictionary treats the second as a valid variant. An explicit list is both reliable
+ * and zero-dependency, which matters in a repo whose CI has no install step.
+ *
+ * Deliberately a fixed word list rather than an `-ise`/`-our` pattern: `precise`,
+ * `otherwise`, `promise`, `four` and friends are not misspellings, and a check that
+ * cries wolf gets switched off.
+ */
+const DIALECT = [
+    [/\bbehaviour\w*/i, 'behavior'],
+    [/\b\w*labell(?:ed|ing)\b/i, 'one l — labeled / labeling'],
+    [/\b(?:cancell|modell|travell|signall)(?:ed|ing)\b/i, 'one l — e.g. canceled / modeling'],
+    [/\blicence\b/i, 'license'],
+    [/\bdefence\b/i, 'defense'],
+    [/\bjudgement\w*/i, 'judgment'],
+    [/\bartefact\w*/i, 'artifact'],
+    [/\b(?:colour|favour|honour|endeavour|rigour|vigour)\w*/i, 'drop the u — color / favor / honor'],
+    [/\bcentre\b/i, 'center'],
+    [/\bgrey\b/i, 'gray'],
+    [/\bprogramme\b/i, 'program'],
+    [/\bcatalogue\b/i, 'catalog'],
+    [/\bfulfil\b/i, 'fulfill'],
+    [/\bpractise\w*/i, 'practice'],
+    [/\banalys(?:e|ed|ing)\b/i, 'analyze / analyzed / analyzing'],
+    // -ise / -isation. Each stem is listed rather than matched by suffix, and a suffix is
+    // required, so the bare nouns (`emphasis`, `analysis`) don't trip it.
+    [/\b(?:organis|recognis|normalis|serialis|initialis|prioritis|summaris|customis|optimis|utilis|emphasis|minimis|maximis|specialis|visualis|synchronis|authoris|standardis|apologis)(?:e|ed|es|ing|ation|ations)\b/i,
+        '-ize / -ization'],
 ];
 
 export function lint({ CYCLE_HOME }) {
@@ -103,9 +136,8 @@ export function lint({ CYCLE_HOME }) {
     // A verb call {{@verb}} that no backend binds is a render failure waiting to
     // happen — this is the one part of the verb story still worth catching now that
     // github is the only backend. (This used to also track {{#if backend.…}} guards,
-    // so a verb legitimate on one backend but missing on another — e.g. {{@board_list}}
-    // guarded for the since-retired label-only Forgejo backend, which had no board —
-    // wouldn't false-positive; and it warned on a verb only one backend bound that no
+    // so a verb legitimate on one backend but missing on another wouldn't
+    // false-positive; and it warned on a verb only one backend bound that no
     // template called. Both were about *divergence between backends*, which cannot
     // exist with a single one — re-add them if a second backend ever returns.)
     const called = new Map(); // verb → [{rel, line}]
@@ -152,28 +184,16 @@ export function lint({ CYCLE_HOME }) {
         }
     }
 
-    // --- shims -------------------------------------------------------------
+    // --- no installed executables --------------------------------------------
+    // The shim mechanism (backends declaring `shims`, each rendering a real file into
+    // the repo that spawned a canonical script in the-cycle's helpers/) is gone — it
+    // existed solely to carry the Projects v2 board helper. Nothing installs an
+    // executable into a consuming repo any more, so a verb naming one would render a
+    // command that cannot run. Templates are covered separately by the inlining rule.
     for (const [name, b] of backends) {
-        const declared = new Set((b.shims ?? []).map((s) => s.path));
-        const referenced = new Set();
-        for (const cmd of Object.values(b.verbs ?? {})) {
-            for (const m of String(cmd).matchAll(/\b(scripts\/[\w.-]+)/g)) referenced.add(m[1]);
-        }
-        for (const path of referenced) {
-            if (!declared.has(path)) {
-                add(ERROR, 'shims', `verbs call ${path} but no shim installs it`, `backends/${name}.jsonc`);
-            }
-        }
-        for (const path of declared) {
-            if (!referenced.has(path)) {
-                add(WARN, 'shims', `installs ${path}, which no verb calls`, `backends/${name}.jsonc`);
-            }
-        }
-        for (const shim of b.shims ?? []) {
-            if (!shim.helper) {
-                add(ERROR, 'shims', `${shim.path} declares no helper`, `backends/${name}.jsonc`);
-            } else if (!existsSync(join(CYCLE_HOME, 'helpers', shim.helper))) {
-                add(ERROR, 'shims', `${shim.path} → helpers/${shim.helper}, which does not exist`, `backends/${name}.jsonc`);
+        for (const [verb, cmd] of Object.entries(b.verbs ?? {})) {
+            if (/\bscripts\/[\w.-]+/.test(String(cmd))) {
+                add(ERROR, 'verbs', `${verb} calls a scripts/ executable, but nothing installs one`, `backends/${name}.jsonc`);
             }
         }
     }
@@ -337,6 +357,30 @@ export function lint({ CYCLE_HOME }) {
         });
     }
 
+    // --- dialect ------------------------------------------------------------
+    // Wider corpus than the checks above: the templates because their prose ships to
+    // every consuming repo, and the top-level docs because they are what a reader meets
+    // first. Both are prose this repo owns and can hold to one dialect.
+    const prose = new Map(templates);
+    for (const rel of ['README.md', 'CLAUDE.md']) {
+        const p = join(CYCLE_HOME, rel);
+        if (existsSync(p)) prose.set(rel, readFileSync(p, 'utf8'));
+    }
+    const docsDir = join(CYCLE_HOME, 'docs');
+    if (existsSync(docsDir)) {
+        for (const f of readdirSync(docsDir).filter((x) => x.endsWith('.md'))) {
+            prose.set(join('docs', f), readFileSync(join(docsDir, f), 'utf8'));
+        }
+    }
+    for (const [rel, text] of prose) {
+        text.split('\n').forEach((line, i) => {
+            for (const [re, use] of DIALECT) {
+                const m = re.exec(line);
+                if (m) add(ERROR, 'dialect', `British spelling "${m[0]}" → ${use}`, `${rel}:${i + 1}`);
+            }
+        });
+    }
+
     return findings;
 }
 
@@ -370,7 +414,7 @@ export function cmdLint(args, { CYCLE_HOME, bold, dim, red, yellow, green }) {
     }
 
     console.log();
-    if (!errors.length && !warns.length) console.log(green('✓ consistent — citations, verbs, shims, overlays and profiles all line up'));
+    if (!errors.length && !warns.length) console.log(green('✓ consistent — citations, verbs, overlays and profiles all line up'));
     else if (!errors.length) console.log(green(`✓ no errors`) + dim(` · ${warns.length} warning(s)`));
     else console.log(red(`✗ ${errors.length} error(s)`) + dim(` · ${warns.length} warning(s)`));
 

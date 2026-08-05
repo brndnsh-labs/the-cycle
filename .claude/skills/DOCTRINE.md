@@ -1,4 +1,4 @@
-<!-- cycle:rendered template=DOCTRINE.md.tmpl hash=f1e26579efc6 — managed by the-cycle; edit the template, not this file -->
+<!-- cycle:rendered template=DOCTRINE.md.tmpl hash=92a91e20db54 — managed by the-cycle; edit the template, not this file -->
 # Pipeline doctrine (shared)
 
 Single source of truth for the rules the the-cycle work-loop skills share. A skill that says
@@ -12,23 +12,32 @@ restate it. The skills hold only their *unique* procedure.
 
 ## §1 Tracker & readiness
 
-The tracker is the **GitHub repo's issues** (`brndnsh-labs/the-cycle`), routed on org project #1. A **story = an issue**: its **body** holds
-Why / Touches / Acceptance; routing lives on the board (§3). **Milestones = epics.**
+The tracker is the **GitHub repo's issues** (`brndnsh-labs/the-cycle`), routed by `status:*` labels. A **story = an issue**: its **body** holds
+Why / Touches / Acceptance; routing lives in its **labels** (§3). **Milestones = epics.**
 
-| Status | Meaning | Pipeline action |
+**"The board" is the open issue list** — there is no separate artifact to keep in sync, and
+nothing to be on or off. Status is one `status:*` label on the issue itself.
+
+| Status label | Meaning | Pipeline action |
 | --- | --- | --- |
-| **Ready** | scoped + pickable | `/next` ranks & picks; `/implement`/`/cycle` build |
-| **In progress** | being built | don't re-pick |
-| **In review** | built, under review / PR open | don't re-pick |
-| **Needs decision** | blocked on a human call | surface it; **don't build** |
-| **Blocked** | blocked on a dependency | skip; name the blocker |
-| **(none)** | the idea pile, not a scheduled story — not on the board at all | triage/scope it first; don't pick |
+| `status:ready` | scoped + pickable | `/next` ranks & picks; `/implement`/`/cycle` build |
+| `status:in-progress` | being built | don't re-pick |
+| `status:in-review` | built, under review / PR open | don't re-pick |
+| `status:needs-decision` | blocked on a human call | surface it; **don't build** |
+| `status:blocked` | blocked on a dependency | skip; name the blocker |
+| *(none)* | the idea pile — filed but not scheduled | triage/scope it first; don't pick |
+
+Exactly one `status:*` label at a time: every write clears the whole set before adding one, so
+the states can't overlap. **No label is a real state**, not a gap — it's every issue still waiting
+on a §10.5 certainty call (a review-carved observation, §2; a finding the filer couldn't
+confidently route), and that untriaged pile is where triage starts.
 
 **Ranking pickable work** (`/next`): **milestone first** (a real numbered epic beats no milestone), then **issue number** (lower first).
 
-**A closed issue is "done."** `Closes #<n>` closes the issue on merge. If the board has no
-closed→Done automation, set Status explicitly after the merge lands. The pipeline doesn't argue with the
-close; it lets the close speak.
+**A closed issue is "done."** `Closes #<n>` closes the issue on merge, and that close *is* the
+completion record — there is no `status:done`, because a second source of truth can disagree with
+the close and will eventually go stale. The last label the pipeline writes is `status:in-review`;
+the merge finishes the story. The pipeline doesn't argue with the close; it lets the close speak.
 
 **A stale-*open* issue may already be shipped.** An umbrella/parent issue's slices often ship
 under sibling-numbered PRs that never reference the umbrella's own number — `git log --grep=#<n>`
@@ -120,7 +129,7 @@ immediately. Run the guard in the **background** (the poll takes minutes; a fore
 harness-blocked):
 
 ```bash
-(until gh pr checks "<pr>" >/dev/null 2>&1; do sleep 5; done; gh pr checks "<pr>" --watch --fail-fast && gh pr merge "<pr>" --squash --delete-branch) &
+(until gh pr checks "<pr>" >/dev/null 2>&1; do sleep 30; done; gh pr checks "<pr>" --watch --interval 30 --fail-fast && gh pr merge "<pr>" --squash --delete-branch) &
 ```
 
 Closing rides on the PR body's `Closes #<n>` keyword — GitHub fires it anywhere in the body
@@ -146,21 +155,26 @@ other workarounds.
 
 ## §7 Tracker mechanics
 
-Routing values are Project fields on the board item, not labels. `gh project item-list 1 --owner brndnsh-labs --format json` returns
-`content` (`.number`, `.title`, `.url`, `.body`) alongside `status` and any custom fields. It
-carries no open/closed state, so intersect with `gh issue list --state open --json number,title,labels,milestone,url` on `number` — a closed item can
-linger on the board until archived, and this also catches an open issue not yet added to the
-board.
+Routing values are labels on the issue. `gh issue list --state open --json number,title,labels,milestone,url` is the entire read path: it returns
+`number`, `title`, `labels`, `milestone` and `url` for every open issue, and because it queries
+issues directly it carries open/closed state intrinsically — there is nothing to intersect, and
+no way for a stale row to linger.
 
-- **Read the tracker:** `gh issue list --state open --json number,title,labels,milestone,url`
+- **Read the tracker:** `gh issue list --state open --json number,title,labels,milestone,url` (one label: `gh issue list --state open --label "<label>" --json number,title,labels,milestone,url`)
 - **Read one issue:** `gh issue view "<n>" --json number,title,state,url,labels,milestone,body`
-- **Write a routing value:** `node scripts/gh-project.mjs status "<n>" "<Status>"` (or `node scripts/gh-project.mjs set-field "<n>" "<Field>" "<Value>"`)
-- **Bulk writes:** **always** `node scripts/gh-project.mjs batch "<file.json>"` — an array of `{issue, field, value}`,
-  grouped into one read + one write per issue. Never loop single-op writes.
+- **Write a routing value:** `gh issue edit "<n>" --remove-label "status:ready,status:in-progress,status:in-review,status:needs-decision,status:blocked" --add-label "<status:label>"` — clears the other status
+  labels and sets this one, in a single call. Non-status labels: `gh issue edit "<n>" --add-label "<label>"` ·
+  `gh issue edit "<n>" --remove-label "<label>"`
+- **Bulk writes:** an ordinary loop, one call per issue. These are REST calls against the
+  5,000/hr core pool, not GraphQL points, so there is nothing to batch around.
 - **Issue/PR ops:** `gh issue create --title "<title>" --body "<body>" --label "<label>"` · `gh issue comment "<n>" --body "<text>"` ·
   `gh issue close "<n>"` · `gh pr create --head "<branch>" --base main --title "<title>" --body "<body>"`
 
-**Unreachable → STOP.** `gh` unauthenticated or offline: say so and stop. Never guess board state.
+A status label that doesn't exist in the repo makes `gh` **fail loudly** — that is the intended
+behavior. Create the label rather than working around the error, and never invent a status value
+that isn't in the §1 table.
+
+**Unreachable → STOP.** `gh` unauthenticated or offline: say so and stop. Never guess tracker state.
 
 ## §8 Commit & PR conventions
 
@@ -206,8 +220,11 @@ board.
 Shared by `/scout` (machine-found) and `/intake` (human-described). Both *find or interview, then
 file* — neither fixes, branches, or merges.
 
-1. **Dedup first.** Search open issues before filing. A near-duplicate gets a comment on the
-   existing issue, not a new one.
+1. **Dedup first — and a rejection has memory.** Search open issues before filing; a
+   near-duplicate gets a comment on the existing issue, not a new one. Then check recently
+   *closed* issues too: a twin that was closed without shipping is a decision already made, and
+   re-filing it because the code it cites still exists is how a recurring sweep turns the queue
+   into a nag. Mention the match in the report; don't re-file it.
 2. **The bar is *actionable*.** An issue nobody could pick up and start is noise. If it can't be
    stated as Why / Touches / Acceptance, it isn't ready to file — keep interviewing, or don't file.
 3. **Shape it so the smallest human input unlocks it.** Prefer a pre-drafted fix with a
@@ -223,7 +240,19 @@ file* — neither fixes, branches, or merges.
    The **Fix** line is mandatory for a machine-found finding (`/scout` read the code; the draft
    is the point) and best-effort for a human-described idea (`/intake` interviews toward it but
    files without it when the idea is scope, not a defect).
-5. **Classify, don't over-classify.** Set what you know; leave routing to the picking skill (§2).
+5. **Classify by kind, route by certainty.** Kind labels (`bug`, `area:*`, §2's stamps) record
+   what you know — set them freely. The `status:*` label is a **certainty call**, made at filing
+   time, with three outcomes:
+   - **Deterministic** — the fix would be the same no matter who wrote it, and §4's gates can
+     prove it → `status:ready`. That is real scheduling: an unattended grinder may
+     build it (§5), so the bar is "this exact diff should ship," not "something here should change."
+   - **Interpretive** — a judgment call anywhere in it, however small → `status:needs-decision`,
+     **with the fix pre-drafted** (rule 3) so the decision costs one glance, not a work session.
+   - **Unsure → no status label.** It lands in the untriaged pile (§1) for a human look — the
+     filing-time twin of §5's "when unsure, exclude and surface."
+
+   A finding that touches a §5 brake surface is **never** deterministic, however certain the fix
+   looks — certainty and safety are different axes, and pickable requires both.
 6. **Budget.** Filing zero is a success. A sweep that files 20 low-grade issues has made the queue
    worse, not better. Cap a focused pass at **3–5** findings; a multi-lens sweep caps *per lens* and
    stays in single digits overall. Rank by (impact × how-actionable) and file only the top ones —

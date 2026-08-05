@@ -49,7 +49,7 @@ both and presents desk first, then hands-on.
    the point of this skill is to hand back only the *decision*.
 
 6. **Ask.** {{#if harness.has_menus}}Via {{harness.ask}} — one question per item, **recommended
-   option first and labelled `(Recommended)`**, max 4 per call.{{/if}}{{#unless harness.has_menus}}
+   option first and labeled `(Recommended)`**, max 4 per call.{{/if}}{{#unless harness.has_menus}}
    This harness has no structured menu tool — ask one question per item directly in chat, stating
    the recommendation first, and wait for the reply before moving to the next item.{{/unless}}
    - **desk** verdicts: the actual options, recommendation first.
@@ -57,7 +57,9 @@ both and presents desk first, then hands-on.
      **"Not now" is a first-class answer, not a failure** — declining to go test something is a
      legitimate outcome, and making it feel like a punt is how a queue becomes a guilt pile.
 7. **Read-only until they answer.** Nothing is written during gathering or asking.
-8. **Apply all answers in one batched write** (§7): `{{@batch "<file.json>"}}` — never a loop.
+8. **Apply the answers** (§7) — `{{@set_status "<n>" "<status:label>"}}` per issue, in a plain
+   loop. Apply them together, after all the answers are in, so a half-answered session never
+   leaves the queue half-moved.
    - **Works** → unblock it: merge via §6's guard, or close it.
    - **Doesn't work** → capture the description **verbatim** as a `finding`. Their raw words are the
      evidence; don't paraphrase them into your own diagnosis.
