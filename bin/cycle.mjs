@@ -806,7 +806,32 @@ const DEFAULT_STATUSES = {
  * defensible defaults for everything it couldn't. Shared by the interview and by
  * `--plan`, so a guided setup and a manual one begin from exactly the same draft.
  */
-export function draftConfig(root, { backend: wanted, profile } = {}) {
+function applyConfigSets(cfg, sets = []) {
+    for (const assignment of sets) {
+        const equals = assignment.indexOf('=');
+        const path = equals < 1 ? '' : assignment.slice(0, equals);
+        if (!path || equals === assignment.length - 1) {
+            fail(`invalid --set value "${assignment}"`, 'use `--set path=value`');
+        }
+        const keys = path.split('.');
+        let parent = cfg;
+        for (const key of keys.slice(0, -1)) {
+            if (!parent || typeof parent !== 'object' || !Object.hasOwn(parent, key)) {
+                fail(`unknown config path "${path}"`, 'use a dotted path from the install draft');
+            }
+            parent = parent[key];
+        }
+        const leaf = keys.at(-1);
+        if (!parent || typeof parent !== 'object' || !Object.hasOwn(parent, leaf)) {
+            fail(`unknown config path "${path}"`, 'use a dotted path from the install draft');
+        }
+        const raw = assignment.slice(equals + 1);
+        try { parent[leaf] = JSON.parse(raw); } catch { parent[leaf] = raw; }
+    }
+    return cfg;
+}
+
+export function draftConfig(root, { backend: wanted, profile, set } = {}) {
     const d = detect(root);
     const backend = wanted ?? d.backend;
     const cfg = {
@@ -847,7 +872,7 @@ export function draftConfig(root, { backend: wanted, profile } = {}) {
         commit: { coauthor: 'Claude Opus 5 <noreply@anthropic.com>' },
         deploy: d.deploy ?? { test: '', prod: '' },
     };
-    return { cfg, detected: d };
+    return { cfg: applyConfigSets(cfg, set), detected: d };
 }
 
 async function cmdInstall(args) {
@@ -857,6 +882,7 @@ async function cmdInstall(args) {
         options: {
             profile: { type: 'string' },
             backend: { type: 'string' },
+            set: { type: 'string', multiple: true },
             yes: { type: 'boolean', short: 'y' },
             plan: { type: 'boolean' },
         },
@@ -869,7 +895,7 @@ async function cmdInstall(args) {
         fail('this repo already has .cycle/config.jsonc', 'use `cycle update` to re-render, or pass --yes to overwrite');
     }
 
-    const { cfg } = draftConfig(root, { backend: values.backend, profile: values.profile });
+    const { cfg } = draftConfig(root, { backend: values.backend, profile: values.profile, set: values.set });
 
     if (!values.yes) {
         const rl = createInterface({ input: process.stdin, output: process.stdout });
@@ -930,7 +956,7 @@ async function cmdInstall(args) {
  * It writes nothing, so running it is always safe.
  */
 function cmdPlan(root, values) {
-    const { cfg, detected } = draftConfig(root, { backend: values.backend, profile: values.profile });
+    const { cfg, detected } = draftConfig(root, { backend: values.backend, profile: values.profile, set: values.set });
     const backend = loadBackend(cfg.backend);
     const profiles = readdirSync(join(CYCLE_HOME, 'profiles'))
         .filter((f) => f.endsWith('.jsonc'))
@@ -1180,7 +1206,7 @@ function cmdRender(args) {
 
 const USAGE = `${bold('cycle')} — render the-cycle's work pipeline into a repo
 
-  ${bold('cycle install')} [--profile lean|standard|full] [--backend github] [-y]
+  ${bold('cycle install')} [--profile lean|standard|full] [--backend github] [--set path=value]... [-y]
       Interview, write .cycle/config.jsonc, render the skills.
 
   ${bold('cycle install --plan')}
