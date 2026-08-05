@@ -329,6 +329,55 @@ describe('multi-harness render', () => {
     });
 });
 
+// A single-environment repo has nowhere lower-stakes to deploy. The test-box flow is
+// deliberately ungated ("no gate, no explicit go") because a test box is cheap to get wrong;
+// rendering that framing where prod is the ONLY environment turns a preview into an unreviewed
+// release. TwistOS defended against this by hand-writing an unmanaged stub — which worked, but
+// reported drift forever and would lose to a `--force`. The guarantee belongs in the template.
+describe('deploy-test on a repo with no test environment', () => {
+    const readCfg = (p) => JSON.parse(
+        readFileSync(p, 'utf8').replace(/^\s*\/\/.*$/gm, '').replace(/,(\s*[}\]])/g, '$1'),
+    );
+    const renderWith = (deployTest) => {
+        const dir = scratchRepo('github');
+        dirs.push(dir);
+        cycle(dir, ['install', '--profile', 'standard', '-y']);
+        const cfgPath = join(dir, '.cycle', 'config.jsonc');
+        const cfg = readCfg(cfgPath);
+        cfg.deploy = deployTest ? { test: deployTest, prod: './deploy.sh prod' } : { prod: './deploy.sh' };
+        writeFileSync(cfgPath, JSON.stringify(cfg, null, 2));
+        cycle(dir, ['update', '--force']);
+        return readFileSync(join(dir, '.claude', 'skills', 'deploy-test', 'SKILL.md'), 'utf8');
+    };
+
+    test('renders a redirect stub, never the ungated test-box flow', () => {
+        const out = renderWith(null);
+        assert.match(out, /not applicable here/, 'expected the stub variant');
+        assert.match(out, /\/deploy-prod/, 'stub must hand off to the gated skill');
+        assert.doesNotMatch(out, /no gate, no explicit go/, 'ungated framing leaked into a prod-only repo');
+        assert.doesNotMatch(out, /put it on the test box/, 'test-box framing leaked into a prod-only repo');
+    });
+
+    test('still renders the real flow when a test target exists', () => {
+        const out = renderWith('./deploy.sh test');
+        assert.match(out, /put it on the test box/);
+        assert.match(out, /\.\/deploy\.sh test/, 'the configured command must appear');
+        assert.doesNotMatch(out, /not applicable here/);
+    });
+
+    test('the stub is managed — it renders clean instead of reporting drift', () => {
+        const dir = scratchRepo('github');
+        dirs.push(dir);
+        cycle(dir, ['install', '--profile', 'standard', '-y']);
+        const cfgPath = join(dir, '.cycle', 'config.jsonc');
+        const cfg = readCfg(cfgPath);
+        cfg.deploy = { prod: './deploy.sh' };
+        writeFileSync(cfgPath, JSON.stringify(cfg, null, 2));
+        cycle(dir, ['update', '--force']);
+        assert.match(cycle(dir, ['check']), /clean/);
+    });
+});
+
 describe('drift detection', () => {
     let dir;
     before(() => {

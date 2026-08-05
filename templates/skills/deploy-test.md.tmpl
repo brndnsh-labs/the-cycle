@@ -1,7 +1,30 @@
 ---
 name: deploy-test
-description: Deploy {{repo.name}} to the test environment — low ceremony, for previewing a branch or an uncommitted tree before it merges. Runs the deploy, verifies the right build actually landed, and derives a per-change check-in list from what shipped. Usage `/deploy-test`.
+description: {{#if deploy.test}}Deploy {{repo.name}} to the test environment — low ceremony, for previewing a branch or an uncommitted tree before it merges. Runs the deploy, verifies the right build actually landed, and derives a per-change check-in list from what shipped. Usage `/deploy-test`.{{/if}}{{#unless deploy.test}}{{repo.name}} has no separate test environment — a stub that redirects to /deploy-prod's gate rather than letting an ungated deploy reach production. Usage `/deploy-test`.{{/unless}}
 ---
+{{#unless deploy.test}}
+
+# /deploy-test — not applicable here
+
+**`deploy.test` is not set in `.cycle/config.jsonc`.** {{repo.name}} has no lower-stakes target to
+preview a branch or a dirty tree on, so there is nothing for this skill to deploy to.
+
+**Do not substitute the production deploy.** The test flow is deliberately ungated — *no gate, no
+explicit go* — because a test box is cheap to get wrong. Pointing that ceremony at the only
+environment there is would turn a low-ceremony preview into an unreviewed production release.
+That inversion is the exact mistake this stub exists to prevent.
+
+{{> overlay?:deploy}}
+
+## If you were asked to preview something
+
+1. **Say plainly there is no test environment here** — don't improvise one, and don't reach for
+   the production deploy command.
+2. **If it genuinely needs to ship,** hand off to `/deploy-prod`, which carries the explicit-go
+   gate a real deploy requires.
+3. **If it only needs looking at,** run it locally instead.
+{{/unless}}
+{{#if deploy.test}}
 
 # /deploy-test — put it on the test box
 
@@ -18,9 +41,8 @@ by-eye work gets checked *before* it merges.
 
 1. **Sanity.** `git status -sb` — know whether you're shipping a clean branch or a dirty tree.
    Both are legitimate here; say which.
-2. **Deploy.** {{#unless deploy.test}}**`deploy.test` is not set in `.cycle/config.jsonc`** — stop
-   and say so; there is no deploy command to run. {{/unless}}{{#if deploy.test}}`{{deploy.test}}` — stream the output rather than waiting silently, so a failure is
-   visible where it happens.{{/if}}
+2. **Deploy.** `{{deploy.test}}` — stream the output rather than waiting silently, so a failure is
+   visible where it happens.
 3. **Verify the right build actually landed.** Don't infer success from a zero exit code — confirm
    the deployed artifact is the one you just built. If the build stamps a revision into the served
    output, read it back and compare; otherwise check whatever the deploy script itself reports.
@@ -44,3 +66,4 @@ by-eye work gets checked *before* it merges.
 - **Dirty tree:** allowed here (that's the point of test), but state it, so nobody mistakes the
   deployed thing for a commit.
 - **Nothing observable shipped:** deploy, report, skip the verdict.
+{{/if}}
