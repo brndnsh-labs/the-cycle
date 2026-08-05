@@ -49,12 +49,6 @@ const cycleRaw = (dir, args) => {
     return { status: r.status, out: `${r.stdout ?? ''}${r.stderr ?? ''}` };
 };
 
-/** GitHub needs a board number before it can render; supply one the way a user would. */
-function setProject(dir) {
-    const p = join(dir, '.cycle', 'config.jsonc');
-    writeFileSync(p, readFileSync(p, 'utf8').replace('"project": null', '"project": 4'));
-}
-
 const dirs = [];
 after(() => dirs.forEach((d) => rmSync(d, { recursive: true, force: true })));
 
@@ -67,13 +61,7 @@ for (const backend of BACKENDS) {
             before(() => {
                 dir = scratchRepo(backend);
                 dirs.push(dir);
-                try {
-                    cycle(dir, ['install', '--profile', profile, '--backend', backend, '-y']);
-                } catch {
-                    // github stops on the missing board number by design; supply and retry.
-                    setProject(dir);
-                    cycle(dir, ['update']);
-                }
+                cycle(dir, ['install', '--profile', profile, '--backend', backend, '--set', 'tracker.project=4', '-y']);
                 skills = readdirSync(join(dir, '.claude', 'skills'), { withFileTypes: true })
                     .filter((e) => e.isDirectory())
                     .map((e) => e.name);
@@ -230,8 +218,8 @@ describe('install --plan', () => {
         const { draft, write } = planOf(dir);
 
         mkdirSync(join(dir, '.cycle'), { recursive: true });
+        draft.tracker.project = 4;
         writeFileSync(join(dir, '.cycle', 'config.jsonc'), JSON.stringify(draft, null, 2));
-        setProject(dir); // github needs a board number before it can render
         assert.equal(write.then, 'cycle update');
         cycle(dir, ['update']);
         assert.match(cycle(dir, ['check']), /clean/);
@@ -240,13 +228,18 @@ describe('install --plan', () => {
     test('reports an existing install rather than pretending to be a first run', () => {
         const dir = scratchRepo('github');
         dirs.push(dir);
-        try {
-            cycle(dir, ['install', '--profile', 'lean', '-y']);
-        } catch {
-            // github stops on the missing board number by design; config.jsonc is
-            // written before that check runs, which is all this test needs.
-        }
+        cycle(dir, ['install', '--profile', 'lean', '--set', 'tracker.project=4', '-y']);
         assert.equal(planOf(dir).existing_config, '.cycle/config.jsonc');
+    });
+
+    test('--set rejects malformed and unknown config paths', () => {
+        for (const assignment of ['tracker.project', 'tracker.nope=4', 'tracker.project=null']) {
+            const dir = scratchRepo('github');
+            dirs.push(dir);
+            const result = cycleRaw(dir, ['install', '--profile', 'lean', '--set', assignment, '-y']);
+            assert.equal(result.status, 1);
+            assert.match(result.out, /invalid --set|unknown config path|backend needs 1 value/);
+        }
     });
 });
 
@@ -257,12 +250,7 @@ describe('shim resolution', () => {
     test('CYCLE_HOME overrides the path baked in at render time', () => {
         const dir = scratchRepo('github');
         dirs.push(dir);
-        try {
-            cycle(dir, ['install', '--profile', 'lean', '-y']);
-        } catch {
-            setProject(dir);
-            cycle(dir, ['update']);
-        }
+        cycle(dir, ['install', '--profile', 'lean', '--set', 'tracker.project=4', '-y']);
 
         const elsewhere = mkdtempSync(join(tmpdir(), 'cycle-elsewhere-'));
         dirs.push(elsewhere);
@@ -287,12 +275,7 @@ describe('shim resolution', () => {
     test('an exported value beats the baked-in binding', () => {
         const dir = scratchRepo('github');
         dirs.push(dir);
-        try {
-            cycle(dir, ['install', '--profile', 'lean', '-y']);
-        } catch {
-            setProject(dir);
-            cycle(dir, ['update']);
-        }
+        cycle(dir, ['install', '--profile', 'lean', '--set', 'tracker.project=4', '-y']);
 
         const elsewhere = mkdtempSync(join(tmpdir(), 'cycle-elsewhere-'));
         dirs.push(elsewhere);
@@ -317,12 +300,7 @@ describe('multi-harness render', () => {
     before(() => {
         dir = scratchRepo('github');
         dirs.push(dir);
-        try {
-            cycle(dir, ['install', '--profile', 'standard', '-y']);
-        } catch {
-            setProject(dir);
-            cycle(dir, ['update']);
-        }
+        cycle(dir, ['install', '--profile', 'standard', '--set', 'tracker.project=4', '-y']);
         const p = join(dir, '.cycle', 'config.jsonc');
         writeFileSync(p, readFileSync(p, 'utf8').replace(
             '"harnesses": [\n    "claude"\n  ],',
@@ -400,12 +378,7 @@ describe('drift detection', () => {
     before(() => {
         dir = scratchRepo('github');
         dirs.push(dir);
-        try {
-            cycle(dir, ['install', '--profile', 'lean', '-y']);
-        } catch {
-            setProject(dir);
-            cycle(dir, ['update']);
-        }
+        cycle(dir, ['install', '--profile', 'lean', '--set', 'tracker.project=4', '-y']);
     });
 
     test('a hand edit is reported and update refuses to clobber it', () => {
@@ -453,12 +426,7 @@ describe('version stamp — no .git in CYCLE_HOME (an npm/npx install)', () => {
     test('a render from a gitless copy stamps state.json with the package version', () => {
         const dir = scratchRepo('github');
         dirs.push(dir);
-        try {
-            gitlessCli(dir, ['install', '--profile', 'lean', '-y']);
-        } catch {
-            setProject(dir);
-            gitlessCli(dir, ['update']);
-        }
+        gitlessCli(dir, ['install', '--profile', 'lean', '--set', 'tracker.project=4', '-y']);
         const state = JSON.parse(readFileSync(join(dir, '.cycle', 'state.json'), 'utf8'));
         assert.equal(state.upstream, expectedVersion);
     });
@@ -466,12 +434,7 @@ describe('version stamp — no .git in CYCLE_HOME (an npm/npx install)', () => {
     test('a shim rendered from a gitless copy never bakes in the ephemeral package dir', () => {
         const dir = scratchRepo('github');
         dirs.push(dir);
-        try {
-            gitlessCli(dir, ['install', '--profile', 'lean', '-y']);
-        } catch {
-            setProject(dir);
-            gitlessCli(dir, ['update']);
-        }
+        gitlessCli(dir, ['install', '--profile', 'lean', '--set', 'tracker.project=4', '-y']);
         const shim = readFileSync(join(dir, 'scripts', 'gh-project.mjs'), 'utf8');
         assert.ok(!shim.includes(gitlessHome), 'the baked path must not point into the npx-style cache dir');
         assert.match(shim, /['"].*[/\\]code[/\\]the-cycle['"]/, 'expected the conventional clone location baked in instead');
@@ -480,10 +443,9 @@ describe('version stamp — no .git in CYCLE_HOME (an npm/npx install)', () => {
     test('gitless `cycle install` points at the durable clone for cycle update/check and the setup skills', async () => {
         const dir = scratchRepo('github');
         dirs.push(dir);
-        // -y would skip straight past what github additionally requires with no way to
-        // supply it, so answer the interview for real here instead: accept every
-        // detected default except the board number, which github has none to detect —
-        // type one, the way a real user would.
+        // Exercise the interactive path separately: accept every detected default except
+        // the board number, which github has none to detect — type one, the way a real
+        // user would.
         const child = spawn(process.execPath, [join(gitlessHome, 'bin', 'cycle.mjs'), 'install', '--profile', 'lean'], {
             cwd: dir,
             env: { ...process.env, NO_COLOR: '1' },
