@@ -31,9 +31,10 @@ mechanics, including the "unreachable → stop" rule). Don't restate them; apply
 1. **Pull the open set** — one call, no join.
 2. **Partition by status label** (§1): pickable · in flight (note, don't re-pick) ·
    the `finding` pile (review debt — count and sample, don't pick) · **unrouted** (no `status:*` label).
-   Unrouted is not an empty bucket: §10 has `/intake` and `/scout` file without routing on purpose,
-   so everything they file lands here. Never silently drop it — count it, and surface the top
-   candidates under **Untriaged** so it can be promoted.
+   Unrouted is not an empty bucket: it's everything still waiting on a §10.5 certainty call —
+   review-carved observations (§2), and findings their filer couldn't confidently route. Never
+   silently drop it — count it, and surface the top candidates under **Untriaged** so it can be
+   promoted.
 3. **Rank the pickable issues** by the §1 rule: {{tracker.ranking}}.
 4. **Read the top pick's body** — Why / Touches / Acceptance.
 5. **Check it hasn't already shipped** (§1) — an umbrella issue's slices often land under

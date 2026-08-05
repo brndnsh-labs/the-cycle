@@ -845,9 +845,9 @@ export function draftConfig(root, { backend: wanted, profile, set } = {}) {
         tracker: {
             description: `**GitHub issues** (\`${d.slug ?? ''}\`)`,
             statuses: DEFAULT_STATUSES[backend] ?? DEFAULT_STATUSES.github,
-            // The three the skills actually transition between, named separately so a
-            // repo can rename its vocabulary without the skills caring.
-            status: { pickable: 'status:ready', active: 'status:in-progress', done: 'status:in-review' },
+            // The four the skills actually write, named separately so a repo can
+            // rename its vocabulary without the skills caring.
+            status: { pickable: 'status:ready', active: 'status:in-progress', done: 'status:in-review', decision: 'status:needs-decision' },
             ranking: '**milestone first** (a real numbered epic beats no milestone), then **issue number** (lower first)',
             milestones: [],
         },
