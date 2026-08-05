@@ -64,8 +64,8 @@ leading with a recommendation, and wait for the reply.{{/unless}}
 
 5. **File it** (§7): `{{@issue_create "<title>" "<body>" "<label>"}}` — the label is a §2 workflow
    label describing *what kind of work it is* (`bug` and the `area:*` set), never a routing value:
-   §10.5 leaves routing to the picking skill. No fitting label is fine; file it bare.{{#if backend.has_board}}, then
-   add it to the board and set Status: `{{@set_status "<n>" "{{tracker.status.pickable}}"}}`{{/if}}.
+   §10.5 leaves routing to the picking skill. No fitting label is fine; file it bare, then
+   add it to the board and set Status: `{{@set_status "<n>" "{{tracker.status.pickable}}"}}`.
    Batch the field writes into one call (§7).
 
 6. **Report** the issue number and URL, and suggest `/cycle #<n>` if it's ready to build now.

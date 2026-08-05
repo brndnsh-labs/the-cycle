@@ -52,9 +52,6 @@ GitHub's block:
 
 | Flag | Value | Why |
 | --- | --- | --- |
-| `has_board` | `true` | an issue must be added to the board to carry its Projects v2 field values |
-| `job_logs` | `api` | `gh run view --log` |
-| `job_logs_search` | `false` | `--log-failed` narrows one run; it never searches back for a failure |
 | `auto_merge` | `false` | branch protection isn't guaranteed to exist — see below |
 
 **On `auto_merge`:** a fire-and-forget auto-merge flag is only safe when the forge enforces
@@ -122,8 +119,14 @@ path alone would pass every test and fail on the other laptop.
    hard error at render time, so nothing is silently missing.
 3. Set every semantic flag honestly. Getting `auto_merge` wrong is the one that can actually
    lose work.
-4. Fill in `notes.routing_read`, `notes.unreachable`, and `notes.done_means` — these splice into
-   DOCTRINE §1/§7 where a backend's *prose* has to differ, not just its commands.
+4. **Check whether the new backend's tracker mechanics actually match GitHub's.** DOCTRINE's §1
+   ("closed issue is done") and §7 (tracker-mechanics opening, "unreachable → stop") currently read
+   as GitHub-specific prose, hardcoded directly into the template rather than spliced from a
+   per-backend note — that's correct only because GitHub is the sole backend today. If the new
+   backend's board semantics, close-on-merge behavior, or unreachable condition genuinely differ,
+   those sections need real `{{#if backend.…}}` branches again, the way `has_board` used to fork
+   §1's board-vs-labels paragraph before the label-only Forgejo backend was retired (#5/#6). Don't
+   silently reuse GitHub's prose for a backend it doesn't describe.
 5. Put any executable it needs in `helpers/` and declare a shim for it. Every `scripts/*` path a
    verb mentions must have one; `cycle lint` fails the build if it doesn't.
 6. `npm test` renders every profile against every backend in `backends/`, runs each shim, and

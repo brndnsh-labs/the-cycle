@@ -8,7 +8,8 @@
 // Each check exists because the corresponding mistake was made, or is one edit away:
 //
 //   citations      §N is a plain string; nothing links it to DOCTRINE's headings.
-//   verbs          a typo'd {{@verb}} only fails on the backend that lacks it.
+//   verbs          a typo'd {{@verb}} renders as an unresolved tag instead of failing
+//                  the build loudly.
 //   shims          `shims` was declared and consumed nowhere — every rendered skill
 //                  called a helper script into a repo that had no such file. Verbs
 //                  and shim declarations must agree.
@@ -99,23 +100,20 @@ export function lint({ CYCLE_HOME }) {
     }
 
     // --- verbs -------------------------------------------------------------
-    // A verb missing from one backend is legitimate when the call sits inside a
-    // {{#if backend.…}} branch — that is how a backend with no board (Forgejo, before
-    // it was retired) could skip board-only verbs like {{@board_list}}. Outside such a
-    // branch it is a render failure waiting for whichever repo happens to use the
-    // other tracker — a check that still holds even while only one backend exists.
-    const called = new Map(); // verb → [{rel, line, guarded}]
+    // A verb call {{@verb}} that no backend binds is a render failure waiting to
+    // happen — this is the one part of the verb story still worth catching now that
+    // github is the only backend. (This used to also track {{#if backend.…}} guards,
+    // so a verb legitimate on one backend but missing on another — e.g. {{@board_list}}
+    // guarded for the since-retired label-only Forgejo backend, which had no board —
+    // wouldn't false-positive; and it warned on a verb only one backend bound that no
+    // template called. Both were about *divergence between backends*, which cannot
+    // exist with a single one — re-add them if a second backend ever returns.)
+    const called = new Map(); // verb → [{rel, line}]
     for (const [rel, text] of templates) {
-        let guard = 0;
         text.split('\n').forEach((line, i) => {
-            for (const m of line.matchAll(/\{\{[#/](if|unless)\s*([^}\s]*)/g)) {
-                if (m[0].startsWith('{{/')) guard = Math.max(0, guard - 1);
-                else if (m[2].startsWith('backend.')) guard += 1;
-                else guard += 0; // a non-backend conditional does not excuse a missing verb
-            }
             for (const m of line.matchAll(/\{\{@([a-z_]+)/g)) {
                 if (!called.has(m[1])) called.set(m[1], []);
-                called.get(m[1]).push({ rel, line: i + 1, guarded: guard > 0 });
+                called.get(m[1]).push({ rel, line: i + 1 });
             }
         });
     }
@@ -123,30 +121,6 @@ export function lint({ CYCLE_HOME }) {
         const lacking = [...backends].filter(([, b]) => !(b.verbs ?? {})[verb]).map(([n]) => n);
         if (lacking.length === backends.size) {
             add(ERROR, 'verbs', `{{@${verb}}} is bound by no backend`, sites[0] && `${sites[0].rel}:${sites[0].line}`);
-            continue;
-        }
-        for (const site of sites) {
-            if (lacking.length && !site.guarded) {
-                add(
-                    ERROR,
-                    'verbs',
-                    `{{@${verb}}} is unbound on ${lacking.join(', ')} and this call is not inside a {{#if backend.…}}`,
-                    `${site.rel}:${site.line}`,
-                );
-            }
-        }
-    }
-    // An uncalled verb is not itself a problem — the vocabulary in docs/BACKENDS.md is
-    // deliberately complete, so adding a skill never means editing a backend. What IS
-    // worth seeing is an uncalled verb only *one* backend binds: either the other
-    // backend is missing it, or it was written for a skill that never materialized.
-    for (const [name, b] of backends) {
-        for (const verb of Object.keys(b.verbs ?? {})) {
-            if (called.has(verb)) continue;
-            const others = [...backends].filter(([n]) => n !== name);
-            if (others.length && others.every(([, o]) => !(o.verbs ?? {})[verb])) {
-                add(WARN, 'verbs', `only ${name} binds "${verb}", and no template calls it`, `backends/${name}.jsonc`);
-            }
         }
     }
 

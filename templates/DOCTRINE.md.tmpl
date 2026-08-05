@@ -14,11 +14,7 @@ restate it. The skills hold only their *unique* procedure.
 ## §1 Tracker & readiness
 
 The tracker is {{tracker.description}}. A **story = an issue**: its **body** holds
-Why / Touches / Acceptance; {{#if backend.has_board}}routing lives on the board (§3){{/if}}{{#unless backend.has_board}}its **labels** hold routing (§3){{/unless}}. **Milestones = epics.**
-
-{{#unless backend.has_board}}
-**Labels are the source of truth**; any board/project *view* is eyes-only — no skill writes it.
-{{/unless}}
+Why / Touches / Acceptance; routing lives on the board (§3). **Milestones = epics.**
 
 | Status | Meaning | Pipeline action |
 | --- | --- | --- |
@@ -27,7 +23,8 @@ Why / Touches / Acceptance; {{#if backend.has_board}}routing lives on the board 
 
 **Ranking pickable work** (`/next`): {{tracker.ranking}}.
 
-**A closed issue is "done."** {{backend.notes.done_means}} The pipeline doesn't argue with the
+**A closed issue is "done."** `Closes #<n>` closes the issue on merge. If the board has no
+closed→Done automation, set Status explicitly after the merge lands. The pipeline doesn't argue with the
 close; it lets the close speak.
 
 **A stale-*open* issue may already be shipped.** An umbrella/parent issue's slices often ship
@@ -137,14 +134,15 @@ harness-blocked):
 {{@merge_guard "<pr>" "<n>"}}
 ```
 
-{{backend.notes.merge_guard}}
+Closing rides on the PR body's `Closes #<n>` keyword — GitHub fires it anywhere in the body
+regardless of surrounding prose (§8), so a multi-phase PR must never place that token next to an
+issue number it shouldn't close.
 {{/unless}}
 
-**Reading a red gate.** {{#if backend.job_logs}}Logs come from `{{@ci_log "<run>"}}`.
-{{#if backend.job_logs_search}}The most recent *failing* run is `{{@ci_log_failed}}` — it scans
-back through the run list.{{/if}}{{#unless backend.job_logs_search}}`{{@ci_log_failed "<run>"}}`
+**Reading a red gate.** Logs come from `{{@ci_log "<run>"}}`.
+`{{@ci_log_failed "<run>"}}`
 narrows one run to its failed steps, but it does **not** search backwards: list the runs first
-(`{{@ci_runs}}`) and pass the id of the one that actually failed.{{/unless}}{{/if}} A red CI is diagnosable, so **"retry and see" is not
+(`{{@ci_runs}}`) and pass the id of the one that actually failed. A red CI is diagnosable, so **"retry and see" is not
 an acceptable first move** — read the log, then decide transient-vs-real. §5 still makes an
 unexplained red a hard stop.
 
@@ -162,7 +160,11 @@ other workarounds.
 
 ## §7 Tracker mechanics
 
-{{backend.notes.routing_read}}
+Routing values are Project fields on the board item, not labels. `{{@board_list}}` returns
+`content` (`.number`, `.title`, `.url`, `.body`) alongside `status` and any custom fields. It
+carries no open/closed state, so intersect with `{{@issue_list}}` on `number` — a closed item can
+linger on the board until archived, and this also catches an open issue not yet added to the
+board.
 
 - **Read the tracker:** `{{@issue_list}}`
 - **Read one issue:** `{{@issue_view "<n>"}}`
@@ -172,7 +174,7 @@ other workarounds.
 - **Issue/PR ops:** `{{@issue_create "<title>" "<body>" "<label>"}}` · `{{@issue_comment "<n>" "<text>"}}` ·
   `{{@issue_close "<n>"}}` · `{{@pr_create "<branch>" "<title>" "<body>"}}`
 
-**Unreachable → STOP.** {{backend.notes.unreachable}}
+**Unreachable → STOP.** `gh` unauthenticated or offline: say so and stop. Never guess board state.
 
 {{> overlay?:doctrine-tracker-mechanics}}
 

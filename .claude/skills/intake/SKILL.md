@@ -2,7 +2,7 @@
 name: intake
 description: The front door to the backlog — turn a plain-English idea into an actionable the-cycle issue. Interviews Brandon ONE question at a time until the issue is genuinely implementable, then drafts it, classifies it, and files it. Plan-first — always shows the shaped issue before writing. Shares /scout's filing mechanics (DOCTRINE §10). Usage `/intake <the idea>` (or bare, and it'll ask).
 ---
-<!-- cycle:rendered template=skills/intake.md.tmpl hash=abb524bfb6ac — managed by the-cycle; edit the template, not this file -->
+<!-- cycle:rendered template=skills/intake.md.tmpl hash=c4f1720bf172 — managed by the-cycle; edit the template, not this file -->
 
 # /intake — turn an idea into an actionable issue
 
@@ -63,7 +63,7 @@ options, recommendation first) — never to fire several at once.
 
 5. **File it** (§7): `gh issue create --title "<title>" --body "<body>" --label "<label>"` — the label is a §2 workflow
    label describing *what kind of work it is* (`bug` and the `area:*` set), never a routing value:
-   §10.5 leaves routing to the picking skill. No fitting label is fine; file it bare., then
+   §10.5 leaves routing to the picking skill. No fitting label is fine; file it bare, then
    add it to the board and set Status: `node scripts/gh-project.mjs status "<n>" "Ready"`.
    Batch the field writes into one call (§7).
 
