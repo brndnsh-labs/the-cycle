@@ -74,7 +74,7 @@ single call — removing a label the issue doesn't carry is a no-op that still e
 is applied after the removes, so the call is idempotent and needs no read first.
 
 The labels must **exist in the repo**. `gh` fails loudly on one that doesn't, which is the
-intended behaviour — `cycle install` prints the `gh label create` lines for the configured
+intended behavior — `cycle install` prints the `gh label create` lines for the configured
 vocabulary.
 
 ## Required config

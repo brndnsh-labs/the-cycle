@@ -1,4 +1,4 @@
-<!-- cycle:rendered template=DOCTRINE.md.tmpl hash=5f8efe5ed1bc — managed by the-cycle; edit the template, not this file -->
+<!-- cycle:rendered template=DOCTRINE.md.tmpl hash=70d0078d24e6 — managed by the-cycle; edit the template, not this file -->
 # Pipeline doctrine (shared)
 
 Single source of truth for the rules the the-cycle work-loop skills share. A skill that says
@@ -170,7 +170,7 @@ no way for a stale row to linger.
   `gh issue close "<n>"` · `gh pr create --head "<branch>" --base main --title "<title>" --body "<body>"`
 
 A status label that doesn't exist in the repo makes `gh` **fail loudly** — that is the intended
-behaviour. Create the label rather than working around the error, and never invent a status value
+behavior. Create the label rather than working around the error, and never invent a status value
 that isn't in the §1 table.
 
 **Unreachable → STOP.** `gh` unauthenticated or offline: say so and stop. Never guess tracker state.
