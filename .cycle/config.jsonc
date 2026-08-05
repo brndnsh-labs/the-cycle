@@ -84,8 +84,8 @@
   ],
   "branch": {
     // main is server-protected — no direct pushes, no minor-edits carve-out.
-    // On GitHub the required status check is the bare job name `gates`; Forgejo's
-    // "CI / gates (pull_request)" form creates a check that never reports, so no
+    // The required status check is the bare job name `gates`; a scoped form like
+    // "CI / gates (pull_request)" would create a check that never reports, so no
     // PR could ever merge and the merge guard would hang forever.
     "minor_edits_direct": false
   },

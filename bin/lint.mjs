@@ -10,8 +10,8 @@
 //   citations      §N is a plain string; nothing links it to DOCTRINE's headings.
 //   verbs          a typo'd {{@verb}} only fails on the backend that lacks it.
 //   shims          `shims` was declared and consumed nowhere — every rendered skill
-//                  called scripts/forgejo-project.mjs into a repo that had no such
-//                  file. Verbs and shim declarations must agree.
+//                  called a helper script into a repo that had no such file. Verbs
+//                  and shim declarations must agree.
 //   overlays       AUTHORING.md's table is hand-maintained next to the code it
 //                  documents, which is exactly how docs go stale.
 //   profiles       a template in no profile is dead; a profile entry with no
@@ -40,7 +40,6 @@ const INLINED = [
     [/\b(?:pnpm|yarn) run [a-z]/, 'a gate command — use {{gates.<name>}}'],
     [/\bgh (?:issue|pr|project|run) /, 'a tracker command — use a backend verb'],
     [/\bnode scripts\//, 'a helper invocation — use a backend verb'],
-    [/\bci-logs\b/, 'a helper invocation — use {{@ci_log}} / {{@ci_runs}}'],
     // The name is parameterized as {{repo.human}}; the pronouns around it were not, so
     // the prose silently assumed one person's gender in six files. they/them is correct
     // for anyone, and for "the team".
@@ -101,9 +100,10 @@ export function lint({ CYCLE_HOME }) {
 
     // --- verbs -------------------------------------------------------------
     // A verb missing from one backend is legitimate when the call sits inside a
-    // {{#if backend.…}} branch — that is how board reads work on Forgejo, which has
-    // no board. Outside such a branch it is a render failure waiting for whichever
-    // repo happens to use the other tracker.
+    // {{#if backend.…}} branch — that is how a backend with no board (Forgejo, before
+    // it was retired) could skip board-only verbs like {{@board_list}}. Outside such a
+    // branch it is a render failure waiting for whichever repo happens to use the
+    // other tracker — a check that still holds even while only one backend exists.
     const called = new Map(); // verb → [{rel, line, guarded}]
     for (const [rel, text] of templates) {
         let guard = 0;

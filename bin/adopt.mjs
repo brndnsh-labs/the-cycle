@@ -309,26 +309,26 @@ export function cmdAdopt(args, ctx) {
     // ---- report what was extracted, and what it could not reach -------------
     console.log(bold('Extracted into .cycle/config.jsonc:'));
     console.log(dim('  (a draft read off prose — read every line before trusting it)'));
-    report('backend', cfg.backend, d.remote ? `from origin (${d.remote})` : 'defaulted');
+    report('backend', cfg.backend, 'the only backend the-cycle binds today');
     report('gates', (cfg.gates.commands ?? []).length ? cfg.gates.commands.join(' · ') : '(none found)', 'DOCTRINE §4');
     report('brakes', brakes.length ? brakes.join(' · ') : '(none found)', 'DOCTRINE §5');
     report('statuses', statuses.map((s) => s.name).join(' · ') || '(none found)', 'DOCTRINE §1');
     report('coauthor', cfg.commit.coauthor, coauthor ? 'DOCTRINE §8' : 'defaulted');
     report('profile', profileName, `${existing.length} skills present`);
 
-    // A repo whose git remote and whose tracker doctrine disagree is mid-migration, and
-    // rendering it against either backend alone would quietly pick a winner. Say so.
+    // cfg.backend is always "github" now — the only backend the-cycle binds. That is
+    // silent information loss if this repo's hand-written DOCTRINE actually describes a
+    // different tracker: adopt would render GitHub verbs over a repo whose real issues
+    // live somewhere else, with nothing in the output hinting that happened.
     const doctrineBackend = /gh project|gh issue|gh pr |gh-project\.mjs/.test(doctrine)
         ? 'github'
         : /forgejo/i.test(doctrine)
           ? 'forgejo'
           : null;
     if (doctrineBackend && doctrineBackend !== cfg.backend) {
-        console.log(`\n${yellow('!')} backend mismatch — this repo is mid-migration:`);
-        console.log(`    git remote says ${bold(cfg.backend)} (${d.remote})`);
-        console.log(`    DOCTRINE still describes ${bold(doctrineBackend)} commands`);
-        console.log(dim('    → pick one before rendering: set "backend" in config.jsonc deliberately.'));
-        console.log(dim(`      adopt drafted "${cfg.backend}" from the remote, but it is not casting a vote.`));
+        console.log(`\n${yellow('!')} this DOCTRINE describes ${bold(doctrineBackend)} commands — the-cycle has no "${doctrineBackend}" backend:`);
+        console.log(dim(`    the-cycle binds only "${cfg.backend}" today; adopting will render ${cfg.backend} tracker verbs regardless.`));
+        console.log(dim("    if this repo's issues genuinely live somewhere else, stop here — there is nothing to adopt onto yet."));
     }
 
     if (coauthor && !/Opus 5|Claude Opus 5/.test(coauthor)) {
