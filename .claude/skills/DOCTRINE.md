@@ -1,4 +1,4 @@
-<!-- cycle:rendered template=DOCTRINE.md.tmpl hash=86b5739b0514 — managed by the-cycle; edit the template, not this file -->
+<!-- cycle:rendered template=DOCTRINE.md.tmpl hash=f1e26579efc6 — managed by the-cycle; edit the template, not this file -->
 # Pipeline doctrine (shared)
 
 Single source of truth for the rules the the-cycle work-loop skills share. A skill that says
@@ -26,7 +26,8 @@ Why / Touches / Acceptance; routing lives on the board (§3). **Milestones = epi
 
 **Ranking pickable work** (`/next`): **milestone first** (a real numbered epic beats no milestone), then **issue number** (lower first).
 
-**A closed issue is "done."** `Closes #<n>` closes the issue on merge. If the board has no closed→Done automation, set Status explicitly after the merge lands. The pipeline doesn't argue with the
+**A closed issue is "done."** `Closes #<n>` closes the issue on merge. If the board has no
+closed→Done automation, set Status explicitly after the merge lands. The pipeline doesn't argue with the
 close; it lets the close speak.
 
 **A stale-*open* issue may already be shipped.** An umbrella/parent issue's slices often ship
@@ -122,7 +123,9 @@ harness-blocked):
 (until gh pr checks "<pr>" >/dev/null 2>&1; do sleep 5; done; gh pr checks "<pr>" --watch --fail-fast && gh pr merge "<pr>" --squash --delete-branch) &
 ```
 
-Closing rides on the PR body's `Closes #<n>` keyword — GitHub fires it anywhere in the body regardless of surrounding prose (§8), so a multi-phase PR must never place that token next to an issue number it shouldn't close.
+Closing rides on the PR body's `Closes #<n>` keyword — GitHub fires it anywhere in the body
+regardless of surrounding prose (§8), so a multi-phase PR must never place that token next to an
+issue number it shouldn't close.
 
 **Reading a red gate.** Logs come from `gh run view "<run>" --log`.
 `gh run view "<run>" --log-failed`
@@ -143,7 +146,11 @@ other workarounds.
 
 ## §7 Tracker mechanics
 
-Routing values are Project fields on the board item, not labels. `gh project item-list` returns `content` (`.number`, `.title`, `.url`, `.body`) alongside `status` and any custom fields. item-list carries no open/closed state, so intersect with `gh issue list --state open` on `number` — a closed item can linger on the board until archived, and this also catches an open issue not yet added to the board.
+Routing values are Project fields on the board item, not labels. `gh project item-list 1 --owner brndnsh-labs --format json` returns
+`content` (`.number`, `.title`, `.url`, `.body`) alongside `status` and any custom fields. It
+carries no open/closed state, so intersect with `gh issue list --state open --json number,title,labels,milestone,url` on `number` — a closed item can
+linger on the board until archived, and this also catches an open issue not yet added to the
+board.
 
 - **Read the tracker:** `gh issue list --state open --json number,title,labels,milestone,url`
 - **Read one issue:** `gh issue view "<n>" --json number,title,state,url,labels,milestone,body`

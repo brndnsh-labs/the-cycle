@@ -42,8 +42,8 @@ mechanics, §8 Commit & PR conventions, §9 Branch policy. The procedure below i
       ```bash
       {{@merge_guard "<pr>" "<n>"}}
       ```
-      After it lands, sync local main and prune the branch{{#if backend.has_board}}, then set
-      Status explicitly: `{{@set_status "<n>" "{{tracker.status.done}}"}}`{{/if}}.
+      After it lands, sync local main and prune the branch, then set
+      Status explicitly: `{{@set_status "<n>" "{{tracker.status.done}}"}}`.
     - **Judgment-call story** → **leave the PR open**, report "ready for your merge: <url>" + *why*
       it's gated. Do NOT auto-merge.
 12. **Suggest next:** `/deploy-test`, `/next`, or `/cycle` continues.
