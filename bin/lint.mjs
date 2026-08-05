@@ -46,6 +46,40 @@ const INLINED = [
     [/\b(?:he|him|his|she|her|hers)\b/i, 'a gendered pronoun — use they/them, or {{repo.human}}'],
 ];
 
+/**
+ * British spellings, and the US form this repo standardizes on. A template's prose is
+ * rendered into every consuming repo, so one dialect slip propagates everywhere and is
+ * only ever caught downstream — if at all. cspell is not the tool for this: in one
+ * commit it failed on `behaviour` and passed `labelled` four times, because its
+ * dictionary treats the second as a valid variant. An explicit list is both reliable
+ * and zero-dependency, which matters in a repo whose CI has no install step.
+ *
+ * Deliberately a fixed word list rather than an `-ise`/`-our` pattern: `precise`,
+ * `otherwise`, `promise`, `four` and friends are not misspellings, and a check that
+ * cries wolf gets switched off.
+ */
+const DIALECT = [
+    [/\bbehaviour\w*/i, 'behavior'],
+    [/\b\w*labell(?:ed|ing)\b/i, 'one l — labeled / labeling'],
+    [/\b(?:cancell|modell|travell|signall)(?:ed|ing)\b/i, 'one l — e.g. canceled / modeling'],
+    [/\blicence\b/i, 'license'],
+    [/\bdefence\b/i, 'defense'],
+    [/\bjudgement\w*/i, 'judgment'],
+    [/\bartefact\w*/i, 'artifact'],
+    [/\b(?:colour|favour|honour|endeavour|rigour|vigour)\w*/i, 'drop the u — color / favor / honor'],
+    [/\bcentre\b/i, 'center'],
+    [/\bgrey\b/i, 'gray'],
+    [/\bprogramme\b/i, 'program'],
+    [/\bcatalogue\b/i, 'catalog'],
+    [/\bfulfil\b/i, 'fulfill'],
+    [/\bpractise\w*/i, 'practice'],
+    [/\banalys(?:e|ed|ing)\b/i, 'analyze / analyzed / analyzing'],
+    // -ise / -isation. Each stem is listed rather than matched by suffix, and a suffix is
+    // required, so the bare nouns (`emphasis`, `analysis`) don't trip it.
+    [/\b(?:organis|recognis|normalis|serialis|initialis|prioritis|summaris|customis|optimis|utilis|emphasis|minimis|maximis|specialis|visualis|synchronis|authoris|standardis|apologis)(?:e|ed|es|ing|ation|ations)\b/i,
+        '-ize / -ization'],
+];
+
 export function lint({ CYCLE_HOME }) {
     const findings = [];
     const add = (severity, check, message, where) => findings.push({ severity, check, message, where });
@@ -319,6 +353,30 @@ export function lint({ CYCLE_HOME }) {
         text.split('\n').forEach((line, i) => {
             for (const [re, why] of INLINED) {
                 if (re.test(line)) add(ERROR, 'inlining', `${why}: ${line.trim().slice(0, 70)}`, `${rel}:${i + 1}`);
+            }
+        });
+    }
+
+    // --- dialect ------------------------------------------------------------
+    // Wider corpus than the checks above: the templates because their prose ships to
+    // every consuming repo, and the top-level docs because they are what a reader meets
+    // first. Both are prose this repo owns and can hold to one dialect.
+    const prose = new Map(templates);
+    for (const rel of ['README.md', 'CLAUDE.md']) {
+        const p = join(CYCLE_HOME, rel);
+        if (existsSync(p)) prose.set(rel, readFileSync(p, 'utf8'));
+    }
+    const docsDir = join(CYCLE_HOME, 'docs');
+    if (existsSync(docsDir)) {
+        for (const f of readdirSync(docsDir).filter((x) => x.endsWith('.md'))) {
+            prose.set(join('docs', f), readFileSync(join(docsDir, f), 'utf8'));
+        }
+    }
+    for (const [rel, text] of prose) {
+        text.split('\n').forEach((line, i) => {
+            for (const [re, use] of DIALECT) {
+                const m = re.exec(line);
+                if (m) add(ERROR, 'dialect', `British spelling "${m[0]}" → ${use}`, `${rel}:${i + 1}`);
             }
         });
     }
