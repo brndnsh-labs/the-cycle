@@ -24,7 +24,7 @@ after(() => dirs.forEach((d) => rmSync(d, { recursive: true, force: true })));
 function sandbox() {
     const dir = mkdtempSync(join(tmpdir(), 'cycle-lint-'));
     dirs.push(dir);
-    for (const part of ['templates', 'backends', 'harnesses', 'profiles', 'helpers', 'docs']) {
+    for (const part of ['templates', 'backends', 'harnesses', 'profiles', 'docs']) {
         cpSync(join(CYCLE_HOME, part), join(dir, part), { recursive: true });
     }
     return dir;
@@ -74,20 +74,16 @@ describe('lint', () => {
 
     // The exact bug this file was written after: verbs referenced a helper script that
     // no shim installed, so every rendered skill called a file the repo didn't have.
-    test('catches a verb calling a script no shim installs', () => {
+    // The shim mechanism is gone with the Projects v2 board, which makes the invariant
+    // absolute rather than conditional — nothing installs an executable, so a verb may
+    // never name one.
+    test('catches a verb calling a scripts/ executable that nothing installs', () => {
         const dir = sandbox();
         edit(dir, 'backends/github.jsonc', (t) =>
             t.replace('"issue_close":', '"issue_teleport": "node scripts/nowhere.mjs $1",\n    "issue_close":'));
-        // Referenced by a verb, declared by no shim → error regardless of who calls it.
-        const hits = errors(dir).filter((f) => f.check === 'shims');
-        assert.equal(hits.length, 1, 'expected exactly one shim finding');
-        assert.match(hits[0].message, /scripts\/nowhere\.mjs/);
-    });
-
-    test('catches a shim pointing at a helper that does not exist', () => {
-        const dir = sandbox();
-        edit(dir, 'backends/github.jsonc', (t) => t.replace('"helper": "gh-project.mjs"', '"helper": "ghost.mjs"'));
-        assert.ok(errors(dir).some((f) => f.check === 'shims' && /ghost\.mjs/.test(f.message)));
+        const hits = errors(dir).filter((f) => /scripts\/nowhere\.mjs|scripts\/ executable/.test(f.message));
+        assert.equal(hits.length, 1, 'expected exactly one finding for the uninstallable script');
+        assert.match(hits[0].message, /issue_teleport/);
     });
 
     test('catches a profile listing a skill with no template', () => {

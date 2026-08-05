@@ -61,7 +61,7 @@ for (const backend of BACKENDS) {
             before(() => {
                 dir = scratchRepo(backend);
                 dirs.push(dir);
-                cycle(dir, ['install', '--profile', profile, '--backend', backend, '--set', 'tracker.project=4', '-y']);
+                cycle(dir, ['install', '--profile', profile, '--backend', backend, '-y']);
                 skills = readdirSync(join(dir, '.claude', 'skills'), { withFileTypes: true })
                     .filter((e) => e.isDirectory())
                     .map((e) => e.name);
@@ -102,34 +102,27 @@ for (const backend of BACKENDS) {
                 }
             });
 
-            // A rendered skill whose commands point at a script the repo doesn't have
-            // reads perfectly and fails on every invocation — the failure mode that
-            // shipped when `shims` was declared in the backend and consumed nowhere.
-            test('every shim the backend declares is rendered, executable, and reaches its helper', () => {
+            // The inverse of the guard that used to live here. An install renders prose
+            // and nothing else: no executable is installed into a consuming repo, so a
+            // rendered command can never point at a script the repo doesn't have. If a
+            // backend ever wants a helper again, this is the test that has to change
+            // first — deliberately, not as a side effect.
+            test('installs prose only — no executable is rendered into the repo', () => {
                 const backendFile = JSON.parse(
                     readFileSync(join(HERE, '..', 'backends', `${backend}.jsonc`), 'utf8')
                         .replace(/^\s*\/\/.*$/gm, '')
                         .replace(/,(\s*[}\]])/g, '$1'),
                 );
-                assert.ok(backendFile.shims?.length, `${backend}: declares no shims`);
+                assert.ok(!backendFile.shims, `${backend}: declares shims, but the shim mechanism is gone`);
 
-                for (const shim of backendFile.shims) {
-                    const p = join(dir, shim.path);
-                    assert.ok(existsSync(p), `${shim.path}: not rendered`);
-                    assert.match(readFileSync(p, 'utf8'), /^#!/, `${shim.path}: lost its shebang`);
-                    assert.match(readFileSync(p, 'utf8'), /^\/\/ cycle:rendered /m, `${shim.path}: no provenance`);
-                    assert.ok(statSync(p).mode & 0o111, `${shim.path}: not executable`);
-
-                    // Run it. The helpers all print usage and exit non-zero with no
-                    // args; what matters is that the shim *found* one — a resolution
-                    // failure has its own distinct message.
-                    const r = spawnSync(process.execPath, [p], { cwd: dir, encoding: 'utf8' });
+                for (const cmd of Object.values(backendFile.verbs ?? {})) {
                     assert.doesNotMatch(
-                        `${r.stdout}${r.stderr}`,
-                        /cannot find the-cycle/,
-                        `${shim.path}: could not resolve its helper`,
+                        String(cmd),
+                        /\bscripts\//,
+                        `${backend}: a verb calls a scripts/ executable that nothing installs`,
                     );
                 }
+                assert.ok(!existsSync(join(dir, 'scripts')), 'rendered a scripts/ directory');
             });
 
             test('check reports clean immediately after install', () => {
@@ -170,7 +163,9 @@ describe('install --plan', () => {
         const dir = scratchRepo('github');
         dirs.push(dir);
         const { questions } = planOf(dir);
-        assert.ok(questions.length >= 6);
+        // Four, not the old six: the board number and its owner are gone, and github
+        // now requires no bindings a human has to supply.
+        assert.ok(questions.length >= 4, `expected at least 4 questions, got ${questions.length}`);
         for (const q of questions) {
             assert.ok(q.path, 'question with no config path');
             assert.ok(q.asks, `${q.path}: no question text`);
@@ -186,12 +181,22 @@ describe('install --plan', () => {
         assert.ok(!questions.some((q) => q.path === 'backend'), '--plan must not ask a one-option backend question');
     });
 
-    test('surfaces what the chosen backend additionally requires', () => {
+    // github used to require a board number and owner here. Both are gone with the
+    // board, and the point of keeping the test is that nothing quietly reintroduces a
+    // required binding: `gh` resolves the repo from the checkout, so a fresh install
+    // has nothing left to get wrong.
+    test('the chosen backend requires no extra bindings to render', () => {
         const dir = scratchRepo('github');
         dirs.push(dir);
         const { questions } = planOf(dir);
-        assert.ok(questions.some((q) => q.path === 'tracker.project'), 'github must ask for its board');
-        assert.ok(questions.some((q) => q.path === 'tracker.owner'));
+        const backendFile = JSON.parse(
+            readFileSync(join(HERE, '..', 'backends', 'github.jsonc'), 'utf8')
+                .replace(/^\s*\/\/.*$/gm, '')
+                .replace(/,(\s*[}\]])/g, '$1'),
+        );
+        assert.ok(!backendFile.requires, 'github declares requires; the interview would ask for them again');
+        assert.ok(!questions.some((q) => q.path?.startsWith('tracker.project')), 'still asking for a board number');
+        assert.ok(questions.some((q) => q.path === 'tracker.statuses'), 'must still ask for the status vocabulary');
     });
 
     test('lists every overlay point with the guidance needed to draft it', () => {
@@ -218,7 +223,6 @@ describe('install --plan', () => {
         const { draft, write } = planOf(dir);
 
         mkdirSync(join(dir, '.cycle'), { recursive: true });
-        draft.tracker.project = 4;
         writeFileSync(join(dir, '.cycle', 'config.jsonc'), JSON.stringify(draft, null, 2));
         assert.equal(write.then, 'cycle update');
         cycle(dir, ['update']);
@@ -228,66 +232,18 @@ describe('install --plan', () => {
     test('reports an existing install rather than pretending to be a first run', () => {
         const dir = scratchRepo('github');
         dirs.push(dir);
-        cycle(dir, ['install', '--profile', 'lean', '--set', 'tracker.project=4', '-y']);
+        cycle(dir, ['install', '--profile', 'lean', '-y']);
         assert.equal(planOf(dir).existing_config, '.cycle/config.jsonc');
     });
 
     test('--set rejects malformed and unknown config paths', () => {
-        for (const assignment of ['tracker.project', 'tracker.nope=4', 'tracker.project=null']) {
+        for (const assignment of ['tracker.ranking', 'tracker.nope=4', 'tracker.ranking=']) {
             const dir = scratchRepo('github');
             dirs.push(dir);
             const result = cycleRaw(dir, ['install', '--profile', 'lean', '--set', assignment, '-y']);
             assert.equal(result.status, 1);
             assert.match(result.out, /invalid --set|unknown config path|backend needs 1 value/);
         }
-    });
-});
-
-// The whole point of the resolution chain is that a repo cloned onto a machine where
-// the-cycle lives somewhere else still works. Baked-path-only would pass every other
-// test here and fail on the second machine.
-describe('shim resolution', () => {
-    test('CYCLE_HOME overrides the path baked in at render time', () => {
-        const dir = scratchRepo('github');
-        dirs.push(dir);
-        cycle(dir, ['install', '--profile', 'lean', '--set', 'tracker.project=4', '-y']);
-
-        const elsewhere = mkdtempSync(join(tmpdir(), 'cycle-elsewhere-'));
-        dirs.push(elsewhere);
-        mkdirSync(join(elsewhere, 'helpers'));
-        writeFileSync(
-            join(elsewhere, 'helpers', 'gh-project.mjs'),
-            'console.log("SENTINEL", process.env.GH_REPO, process.env.GH_OWNER, process.env.GH_PROJECT);\n',
-        );
-
-        const r = spawnSync(process.execPath, [join(dir, 'scripts', 'gh-project.mjs')], {
-            cwd: dir,
-            encoding: 'utf8',
-            env: { ...process.env, CYCLE_HOME: elsewhere },
-        });
-        assert.match(r.stdout, /SENTINEL/, 'CYCLE_HOME was not preferred');
-        // …and the repo's bindings ride along, which is what frees the helper from
-        // hardcoding a repo slug, owner, or board number.
-        assert.match(r.stdout, /brandon\/demo/, 'shim did not pass its baked repo through');
-        assert.match(r.stdout, /\b4\b/, 'shim did not pass its baked board number through');
-    });
-
-    test('an exported value beats the baked-in binding', () => {
-        const dir = scratchRepo('github');
-        dirs.push(dir);
-        cycle(dir, ['install', '--profile', 'lean', '--set', 'tracker.project=4', '-y']);
-
-        const elsewhere = mkdtempSync(join(tmpdir(), 'cycle-elsewhere-'));
-        dirs.push(elsewhere);
-        mkdirSync(join(elsewhere, 'helpers'));
-        writeFileSync(join(elsewhere, 'helpers', 'gh-project.mjs'), 'console.log(process.env.GH_REPO);\n');
-
-        const r = spawnSync(process.execPath, [join(dir, 'scripts', 'gh-project.mjs')], {
-            cwd: dir,
-            encoding: 'utf8',
-            env: { ...process.env, CYCLE_HOME: elsewhere, GH_REPO: 'someone/else' },
-        });
-        assert.match(r.stdout, /someone\/else/);
     });
 });
 
@@ -300,7 +256,7 @@ describe('multi-harness render', () => {
     before(() => {
         dir = scratchRepo('github');
         dirs.push(dir);
-        cycle(dir, ['install', '--profile', 'standard', '--set', 'tracker.project=4', '-y']);
+        cycle(dir, ['install', '--profile', 'standard', '-y']);
         const p = join(dir, '.cycle', 'config.jsonc');
         writeFileSync(p, readFileSync(p, 'utf8').replace(
             '"harnesses": [\n    "claude"\n  ],',
@@ -378,7 +334,7 @@ describe('drift detection', () => {
     before(() => {
         dir = scratchRepo('github');
         dirs.push(dir);
-        cycle(dir, ['install', '--profile', 'lean', '--set', 'tracker.project=4', '-y']);
+        cycle(dir, ['install', '--profile', 'lean', '-y']);
     });
 
     test('a hand edit is reported and update refuses to clobber it', () => {
@@ -408,7 +364,7 @@ describe('version stamp — no .git in CYCLE_HOME (an npm/npx install)', () => {
     before(() => {
         gitlessHome = mkdtempSync(join(tmpdir(), 'cycle-gitless-'));
         dirs.push(gitlessHome);
-        for (const part of ['bin', 'templates', 'backends', 'harnesses', 'profiles', 'helpers', 'skills', 'docs', 'package.json']) {
+        for (const part of ['bin', 'templates', 'backends', 'harnesses', 'profiles', 'skills', 'docs', 'package.json']) {
             cpSync(join(HERE, '..', part), join(gitlessHome, part), { recursive: true });
         }
         expectedVersion = `v${JSON.parse(readFileSync(join(HERE, '..', 'package.json'), 'utf8')).version}`;
@@ -426,26 +382,17 @@ describe('version stamp — no .git in CYCLE_HOME (an npm/npx install)', () => {
     test('a render from a gitless copy stamps state.json with the package version', () => {
         const dir = scratchRepo('github');
         dirs.push(dir);
-        gitlessCli(dir, ['install', '--profile', 'lean', '--set', 'tracker.project=4', '-y']);
+        gitlessCli(dir, ['install', '--profile', 'lean', '-y']);
         const state = JSON.parse(readFileSync(join(dir, '.cycle', 'state.json'), 'utf8'));
         assert.equal(state.upstream, expectedVersion);
-    });
-
-    test('a shim rendered from a gitless copy never bakes in the ephemeral package dir', () => {
-        const dir = scratchRepo('github');
-        dirs.push(dir);
-        gitlessCli(dir, ['install', '--profile', 'lean', '--set', 'tracker.project=4', '-y']);
-        const shim = readFileSync(join(dir, 'scripts', 'gh-project.mjs'), 'utf8');
-        assert.ok(!shim.includes(gitlessHome), 'the baked path must not point into the npx-style cache dir');
-        assert.match(shim, /['"].*[/\\]code[/\\]the-cycle['"]/, 'expected the conventional clone location baked in instead');
     });
 
     test('gitless `cycle install` points at the durable clone for cycle update/check and the setup skills', async () => {
         const dir = scratchRepo('github');
         dirs.push(dir);
-        // Exercise the interactive path separately: accept every detected default except
-        // the board number, which github has none to detect — type one, the way a real
-        // user would.
+        // Exercise the interactive path separately. Every answer is now an accepted
+        // default: with the board gone, github has no binding the interview must ask a
+        // human to supply, so a first install is pure confirmation.
         const child = spawn(process.execPath, [join(gitlessHome, 'bin', 'cycle.mjs'), 'install', '--profile', 'lean'], {
             cwd: dir,
             env: { ...process.env, NO_COLOR: '1' },
@@ -487,8 +434,6 @@ describe('version stamp — no .git in CYCLE_HOME (an npm/npx install)', () => {
             [/Repo display name/, ''],
             [/interrupt\?/, ''],
             [/Profile \(lean/, ''],
-            [/tracker\.project/, '4'],
-            [/tracker\.owner/, ''],
             [/Typecheck gate/, ''],
             [/Test gate/, ''],
             [/Always-brake surfaces/, ''],

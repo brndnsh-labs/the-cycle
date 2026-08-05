@@ -1,4 +1,4 @@
-<!-- cycle:rendered template=DOCTRINE.md.tmpl hash=f1e26579efc6 — managed by the-cycle; edit the template, not this file -->
+<!-- cycle:rendered template=DOCTRINE.md.tmpl hash=5f8efe5ed1bc — managed by the-cycle; edit the template, not this file -->
 # Pipeline doctrine (shared)
 
 Single source of truth for the rules the the-cycle work-loop skills share. A skill that says
@@ -12,23 +12,31 @@ restate it. The skills hold only their *unique* procedure.
 
 ## §1 Tracker & readiness
 
-The tracker is the **GitHub repo's issues** (`brndnsh-labs/the-cycle`), routed on org project #1. A **story = an issue**: its **body** holds
-Why / Touches / Acceptance; routing lives on the board (§3). **Milestones = epics.**
+The tracker is the **GitHub repo's issues** (`brndnsh-labs/the-cycle`), routed by `status:*` labels. A **story = an issue**: its **body** holds
+Why / Touches / Acceptance; routing lives in its **labels** (§3). **Milestones = epics.**
 
-| Status | Meaning | Pipeline action |
+**"The board" is the open issue list** — there is no separate artifact to keep in sync, and
+nothing to be on or off. Status is one `status:*` label on the issue itself.
+
+| Status label | Meaning | Pipeline action |
 | --- | --- | --- |
-| **Ready** | scoped + pickable | `/next` ranks & picks; `/implement`/`/cycle` build |
-| **In progress** | being built | don't re-pick |
-| **In review** | built, under review / PR open | don't re-pick |
-| **Needs decision** | blocked on a human call | surface it; **don't build** |
-| **Blocked** | blocked on a dependency | skip; name the blocker |
-| **(none)** | the idea pile, not a scheduled story — not on the board at all | triage/scope it first; don't pick |
+| `status:ready` | scoped + pickable | `/next` ranks & picks; `/implement`/`/cycle` build |
+| `status:in-progress` | being built | don't re-pick |
+| `status:in-review` | built, under review / PR open | don't re-pick |
+| `status:needs-decision` | blocked on a human call | surface it; **don't build** |
+| `status:blocked` | blocked on a dependency | skip; name the blocker |
+| *(none)* | the idea pile — filed but not scheduled | triage/scope it first; don't pick |
+
+Exactly one `status:*` label at a time: every write clears the whole set before adding one, so
+the states can't overlap. **No label is a real state**, not a gap — `/intake` and `/scout` file
+without routing on purpose (§10), and that unrouted pile is where triage starts.
 
 **Ranking pickable work** (`/next`): **milestone first** (a real numbered epic beats no milestone), then **issue number** (lower first).
 
-**A closed issue is "done."** `Closes #<n>` closes the issue on merge. If the board has no
-closed→Done automation, set Status explicitly after the merge lands. The pipeline doesn't argue with the
-close; it lets the close speak.
+**A closed issue is "done."** `Closes #<n>` closes the issue on merge, and that close *is* the
+completion record — there is no `status:done`, because a second source of truth can disagree with
+the close and will eventually go stale. The last label the pipeline writes is `status:in-review`;
+the merge finishes the story. The pipeline doesn't argue with the close; it lets the close speak.
 
 **A stale-*open* issue may already be shipped.** An umbrella/parent issue's slices often ship
 under sibling-numbered PRs that never reference the umbrella's own number — `git log --grep=#<n>`
@@ -146,21 +154,26 @@ other workarounds.
 
 ## §7 Tracker mechanics
 
-Routing values are Project fields on the board item, not labels. `gh project item-list 1 --owner brndnsh-labs --format json` returns
-`content` (`.number`, `.title`, `.url`, `.body`) alongside `status` and any custom fields. It
-carries no open/closed state, so intersect with `gh issue list --state open --json number,title,labels,milestone,url` on `number` — a closed item can
-linger on the board until archived, and this also catches an open issue not yet added to the
-board.
+Routing values are labels on the issue. `gh issue list --state open --json number,title,labels,milestone,url` is the entire read path: it returns
+`number`, `title`, `labels`, `milestone` and `url` for every open issue, and because it queries
+issues directly it carries open/closed state intrinsically — there is nothing to intersect, and
+no way for a stale row to linger.
 
-- **Read the tracker:** `gh issue list --state open --json number,title,labels,milestone,url`
+- **Read the tracker:** `gh issue list --state open --json number,title,labels,milestone,url` (one label: `gh issue list --state open --label "<label>" --json number,title,labels,milestone,url`)
 - **Read one issue:** `gh issue view "<n>" --json number,title,state,url,labels,milestone,body`
-- **Write a routing value:** `node scripts/gh-project.mjs status "<n>" "<Status>"` (or `node scripts/gh-project.mjs set-field "<n>" "<Field>" "<Value>"`)
-- **Bulk writes:** **always** `node scripts/gh-project.mjs batch "<file.json>"` — an array of `{issue, field, value}`,
-  grouped into one read + one write per issue. Never loop single-op writes.
+- **Write a routing value:** `gh issue edit "<n>" --remove-label "status:ready,status:in-progress,status:in-review,status:needs-decision,status:blocked" --add-label "<status:label>"` — clears the other status
+  labels and sets this one, in a single call. Non-status labels: `gh issue edit "<n>" --add-label "<label>"` ·
+  `gh issue edit "<n>" --remove-label "<label>"`
+- **Bulk writes:** an ordinary loop, one call per issue. These are REST calls against the
+  5,000/hr core pool, not GraphQL points, so there is nothing to batch around.
 - **Issue/PR ops:** `gh issue create --title "<title>" --body "<body>" --label "<label>"` · `gh issue comment "<n>" --body "<text>"` ·
   `gh issue close "<n>"` · `gh pr create --head "<branch>" --base main --title "<title>" --body "<body>"`
 
-**Unreachable → STOP.** `gh` unauthenticated or offline: say so and stop. Never guess board state.
+A status label that doesn't exist in the repo makes `gh` **fail loudly** — that is the intended
+behaviour. Create the label rather than working around the error, and never invent a status value
+that isn't in the §1 table.
+
+**Unreachable → STOP.** `gh` unauthenticated or offline: say so and stop. Never guess tracker state.
 
 ## §8 Commit & PR conventions
 

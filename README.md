@@ -85,8 +85,8 @@ codebase to answer what it can, asking only the rest.
 When working on the-cycle itself:
 
 ```sh
-cycle lint                           # §N citations, verb bindings, shim coverage,
-npm test                             # overlay docs, profiles, cross-skill refs
+cycle lint                           # §N citations, verb bindings, overlay docs,
+npm test                             # profiles, cross-skill refs
 ```
 
 ## Profiles
@@ -102,10 +102,12 @@ Machinery is opt-in — a repo takes on a lane when it earns it.
 ## Backends
 
 The tracker sits behind one verb vocabulary (`issue view`, `pr create`, `merge-guard`, …), bound
-today by `backends/github.jsonc` — GitHub issues + a Projects v2 board. Swapping (or adding) a
-tracker is authoring one more `backends/*.jsonc` file, not touching a skill: `docs/BACKENDS.md`
-has the verb table, the semantic flags a backend must set honestly (`has_board`, `job_logs`,
-`auto_merge`, …), and the contract a new one has to satisfy.
+today by `backends/github.jsonc` — GitHub issues and labels, nothing else. Status is a `status:*`
+label on the issue, so "the board" is just the open issue list. Swapping (or adding) a tracker is
+authoring one more `backends/*.jsonc` file, not touching a skill: `docs/BACKENDS.md` has the verb
+table, the semantic flags a backend must set honestly (`auto_merge`, …), and the contract a new
+one has to satisfy — including that a render is prose only, with no executable installed into the
+consuming repo.
 
 ## Harnesses
 
@@ -136,10 +138,8 @@ skills/
 templates/
   DOCTRINE.md.tmpl     the §1–§10 spine
   skills/*.md.tmpl     one per skill
-  shim.mjs.tmpl        the helper shim rendered into scripts/
   overlays.jsonc       the overlay points, and what each is for
-helpers/               the tracker executables, single-sourced
-backends/*.jsonc       verb → command tables, shim declarations
+backends/*.jsonc       verb → command tables
 harnesses/*.jsonc      discovery path, tool names, capability flags per AI harness
 profiles/*.jsonc       which skills each profile installs
 test/                  node --test; renders every profile × backend × harness

@@ -1,9 +1,13 @@
-// GitHub backend — issues + a real Projects v2 board with typed fields.
+// GitHub backend — issues and labels. Nothing else.
 //
-// `gh` covers most of it; the Projects GraphQL surface is awkward enough from the CLI
-// that field writes go through a small committed helper (scripts/gh-project.mjs) with
-// a `status` / `set-field` / `batch` interface — the same shape a future backend's
-// helper would expose, which is what lets the skills stay backend-agnostic.
+// Routing state lives in `status:*` labels on the issue itself, so "the board" is just
+// the open issue list. This replaced a Projects v2 board in Aug 2026: the board was
+// carrying a single-select enum and nothing more (no custom fields, and ranking came
+// from milestone+number, never board order), while charging for it in a 175-line
+// GraphQL helper, a per-repo shim, a 30-item default page size, and — the bug that
+// ended it — item lookup by issue number alone, which silently crossed repos on an
+// org-wide board. Labels are repo-scoped by construction, so that class of error is
+// unrepresentable rather than merely fixed.
 {
   "name": "github",
 
@@ -16,29 +20,9 @@
     "auto_merge": false
   },
 
-  // Config this backend cannot render without. Checked before any template runs, so
-  // a missing value is one clear message rather than an "unresolved {{…}}" from deep
-  // inside a verb expansion.
-  "requires": {
-    "tracker.project": "the Projects v2 board number — `gh project list --owner <you>`",
-    "tracker.owner": "the account (user or org login) that owns the Projects v2 board — get it wrong and every write silently targets someone else's board"
-  },
-
-  // Rendered into the repo; `helper` names a file in the-cycle's helpers/ and `env`
-  // carries this repo's board bindings, so the helper hardcodes no target. (mend's
-  // hand-written copy baked OWNER/REPO/PROJECT_NUMBER in as literals — that is the
-  // config leak this whole design exists to close.)
-  "shims": [
-    {
-      "path": "scripts/gh-project.mjs",
-      "helper": "gh-project.mjs",
-      "env": {
-        "GH_OWNER": "{{tracker.owner}}",
-        "GH_PROJECT": "{{tracker.project}}",
-        "GH_REPO": "{{repo.slug}}"
-      }
-    }
-  ],
+  // No `requires` and no `shims`: every verb below is a plain `gh` call against the
+  // repo `gh` already resolves from the checkout, so there is nothing left for a repo
+  // to bind wrong and no executable to install.
 
   "verbs": {
     "issue_list": "gh issue list --state open --json number,title,labels,milestone,url",
@@ -62,16 +46,18 @@
     // happens if every check passed.
     "merge_guard": "(until gh pr checks $1 >/dev/null 2>&1; do sleep 5; done; gh pr checks $1 --watch --fail-fast && gh pr merge $1 --squash --delete-branch) &",
 
-    "set_field": "node scripts/gh-project.mjs set-field $1 $2 $3",
-    "set_status": "node scripts/gh-project.mjs status $1 $2",
-    "batch": "node scripts/gh-project.mjs batch $1",
-
-    // Board read — GitHub-only; a label-only tracker has no equivalent because the
-    // issue list IS the board. There is deliberately no `board_add` counterpart: the
-    // helper's status/set-field/batch all ensure board membership first, so an explicit
-    // add verb would be a second way to do the same thing, and skills would have to
-    // remember to call it.
-    "board_list": "gh project item-list {{tracker.project}} --owner {{tracker.owner}} --format json",
+    // One call, and idempotent: clearing every status label before adding the target
+    // keeps the set mutually exclusive without a read first. Both halves are safe —
+    // removing a label the issue doesn't carry is a no-op that still exits 0, and the
+    // add is applied after the removes, so naming the target in both lists is fine.
+    // The labels must EXIST in the repo (`gh` errors on an unknown label, loudly —
+    // which is the intended failure, unlike the board's silent misroute).
+    //
+    // There is no `board_list`: the issue list IS the board, so `issue_list` above is
+    // the whole read path, and it carries open/closed state intrinsically instead of
+    // needing an intersect. There is no `batch` either — these are REST calls off the
+    // 5,000/hr core pool, not GraphQL points, so an ordinary loop is now correct.
+    "set_status": "gh issue edit $1 --remove-label \"{{tracker.status_labels}}\" --add-label $2",
 
     "ci_runs": "gh run list",
     "ci_log": "gh run view $1 --log",

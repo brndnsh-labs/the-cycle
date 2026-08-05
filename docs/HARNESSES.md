@@ -26,8 +26,8 @@ same procedure, same overlays, only the output root and the harness-conditional 
 ...                                ...
 ```
 
-The backend's helper shims (`scripts/*.mjs`) are **not** duplicated — they're plain Node, harness-
-agnostic, and every rendered tree's skills call the same ones.
+Nothing else is rendered alongside them: a render is prose only, so there are no per-harness
+executables to keep in sync.
 
 ## The `harness.*` field vocabulary
 

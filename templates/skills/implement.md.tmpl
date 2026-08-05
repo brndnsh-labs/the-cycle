@@ -1,6 +1,6 @@
 ---
 name: implement
-description: Implement a single {{repo.name}} work story from its issue. Reads the spec from the issue body (Why / Touches / Acceptance), picks the executor ({{routing.executor_default}} by default; a parallel agent only for independent mechanical work across several files), sets Status → {{tracker.status.active}}, and presents a plan before building. Plan-first. Usage `/implement #<n>`.
+description: Implement a single {{repo.name}} work story from its issue. Reads the spec from the issue body (Why / Touches / Acceptance), picks the executor ({{routing.executor_default}} by default; a parallel agent only for independent mechanical work across several files), moves it to {{tracker.status.active}}, and presents a plan before building. Plan-first. Usage `/implement #<n>`.
 ---
 
 # /implement #<n> — ship a single story
@@ -19,14 +19,14 @@ claims), §4 Gates, §9 Branch policy. The procedure below is just the ordering.
    - Its current Status (§1).
    - The relevant docs + `CLAUDE.md`.
 3. **Check it's pickable** (§1). `{{tracker.status.pickable}}` → pick. `{{tracker.status.active}}` →
-   likely mid-flight; confirm before re-building. No Status → warn it's untriaged; proceed only if
+   likely mid-flight; confirm before re-building. No status label → warn it's untriaged; proceed only if
    genuinely scoped (the write below promotes it).
 4. **Pick the executor** (§3) — **`{{routing.executor_default}}` by default**: the main thread
    builds, keeping accumulated context (right for small diffs, and for the surfaces where a cold
    agent re-derives brittle detail and ships latent bugs). **Spawn a parallel agent only for
    independent mechanical work** (the same change across several files); keep shared-file edits
    (indexes, schema) and the §4 gates on the main thread.
-5. **Set Status → {{tracker.status.active}}:** `{{@set_status "<n>" "{{tracker.status.active}}"}}`
+5. **Mark it `{{tracker.status.active}}`:** `{{@set_status "<n>" "{{tracker.status.active}}"}}`
 6. **Branch check** (§9) — if on `main`, branch first (`git checkout -b <short-slug>`); reuse an
    epic branch if one exists. Never build on `main`.
 7. **Present the plan** (a status update, not a gate — §5):
@@ -68,7 +68,7 @@ claims), §4 Gates, §9 Branch policy. The procedure below is just the ordering.
 - **Agent returns Blocked:** present the blocker; don't auto-retry. Common causes: the spec no
   longer matches the code (refresh the issue body), or the acceptance criterion can't be measured.
 - **Gates red:** report; don't hand off to `/review` against a broken build.
-- **Build abandoned** (not handed to `/review`): roll Status back to `{{tracker.status.pickable}}`
+- **Build abandoned** (not handed to `/review`): roll the label back to `{{tracker.status.pickable}}`
   (`{{@set_status "<n>" "{{tracker.status.pickable}}"}}`) so nothing is stranded mid-flight.
 
 {{> overlay?:implement}}
