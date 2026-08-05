@@ -44,7 +44,7 @@
     // Two-step on purpose: --watch errors with "no checks reported" if it runs before
     // any run exists, so wait for registration first. The && is the guard — merge only
     // happens if every check passed.
-    "merge_guard": "(until gh pr checks $1 >/dev/null 2>&1; do sleep 5; done; gh pr checks $1 --watch --fail-fast && gh pr merge $1 --squash --delete-branch) &",
+    "merge_guard": "(until gh pr checks $1 >/dev/null 2>&1; do sleep 30; done; gh pr checks $1 --watch --interval 30 --fail-fast && gh pr merge $1 --squash --delete-branch) &",
 
     // One call, and idempotent: clearing every status label before adding the target
     // keeps the set mutually exclusive without a read first. Both halves are safe —
