@@ -59,8 +59,9 @@ cycle update --dry-run                      # what would change without writing
 Three axes of variation, each pulled out of the templates into its own binding layer:
 
 - **`profiles/*.jsonc`** — which skills a repo installs (`lean` / `standard` / `full`).
-- **`backends/*.jsonc`** — tracker verb → command bindings (Forgejo / GitHub). Skills call verbs
-  like `{{@issue_view "$1"}}`, never a literal `gh` or Forgejo command. Vocabulary: `docs/BACKENDS.md`.
+- **`backends/*.jsonc`** — tracker verb → command bindings (GitHub today; the shape supports
+  more). Skills call verbs like `{{@issue_view "$1"}}`, never a literal tracker command.
+  Vocabulary: `docs/BACKENDS.md`.
 - **`harnesses/*.jsonc`** — which AI coding tool runs the rendered skills (Claude Code / Codex),
   behind `{{harness.*}}` fields (discovery path, tool names, capability flags). A config's
   `harnesses: [...]` array renders one complete, independent skill tree per harness. Vocabulary:
@@ -99,5 +100,5 @@ into the template or config, don't force over it.
 `.github/workflows/ci.yml` — one `gates` job, `npm test`, on `ubuntu-latest`, no install step
 (zero dependencies). GitHub-hosted rather than ghrunner01 because this repo is public and the org's
 runner group refuses public repos. `main` is branch-protected on the bare context name `gates` (not
-Forgejo's `CI / gates (pull_request)` form); PRs merge via the backend's poll-then-merge guard once
+a scoped `CI / gates (pull_request)` form); PRs merge via the backend's poll-then-merge guard once
 CI is green, not a server-side auto-merge.

@@ -1,10 +1,14 @@
 # Backends
 
 The skills never name a tracker. They call **verbs**, and a backend file binds each verb to a
-command. Swapping trackers is one line in `.cycle/config.jsonc`.
+command — the design that turned this repo's own Forgejo→GitHub migration into a config edit and
+a re-render, not a rewrite of every skill. `github` is the only backend bound today; see "Adding a
+backend" below for what standing up a second one takes.
 
 This isn't speculative generality — it's a mechanical port that has already been done by hand
-twice, and the hand-written cheat-sheet that guided it is what this file generalizes.
+(GitHub's own `backends/github.jsonc` replaced a since-retired Forgejo binding once every
+consuming repo had migrated), and the hand-written cheat-sheet that guided that port is what this
+file generalizes.
 
 (There's a second, structurally identical abstraction for *which AI coding tool* runs the rendered
 skills — `harnesses/*.jsonc` and `{{harness.*}}` fields, documented in `docs/HARNESSES.md`. Same
@@ -36,32 +40,33 @@ idea, different axis: this file is about the tracker, that one is about the harn
 A verb's value is itself a template, so it can embed config:
 `"board_list": "gh project item-list {{tracker.project}} --owner {{tracker.owner}} --format json"`.
 
-## The places the backends genuinely differ
+## Semantic flags
 
-Everything else is a command swap. These are *semantic*, so skills branch on them via
-`{{#if backend.…}}` — and `cycle lint` fails if a declared flag is one no template reads, or a
-template branches on a flag a backend never declares:
+Everything else is a command swap. A few things are *semantic* enough that skills branch on them
+via `{{#if backend.…}}`, declared in each backend's `semantics` block. `cycle lint` fails if a
+declared flag is one no template reads, or a template branches on a flag a backend never declares
+— so the flags and the branches that read them can never drift apart, even with only one backend
+to check them against.
 
-| | Forgejo | GitHub |
+GitHub's block:
+
+| Flag | Value | Why |
 | --- | --- | --- |
-| `has_board` | `false` — the issue existing IS enough; routing lives in label namespaces (`status/ready`, `size/s`) | `true` — an issue must be on the board to carry its Projects v2 field values |
-| `job_logs` | `wrapper` — no job-log API; logs come from the `ci-logs` scraper | `api` — `gh run view --log` |
-| `job_logs_search` | `true` — the wrapper scans back for the most recent *failing* run | `false` — `--log-failed` narrows one run; it never searches back |
-| `auto_merge` | `false` — no server-side merge-on-green | `false` unless branch protection exists |
+| `has_board` | `true` | an issue must be added to the board to carry its Projects v2 field values |
+| `job_logs` | `api` | `gh run view --log` |
+| `job_logs_search` | `false` | `--log-failed` narrows one run; it never searches back for a failure |
+| `auto_merge` | `false` | branch protection isn't guaranteed to exist — see below |
 
 **On `auto_merge`:** a fire-and-forget auto-merge flag is only safe when the forge enforces
 required checks. Without branch protection, `gh pr merge --auto` merges *immediately* — there is
-nothing for it to wait on. Both backends therefore default to the background poll-then-merge guard.
+nothing for it to wait on. The backend therefore defaults to the background poll-then-merge guard.
 Set `auto_merge: true` only for a repo that actually has protection configured.
 
 ## Reading routing values
 
-- **Forgejo:** find the label with the namespace prefix and strip it —
-  `labels.find(l => l.startsWith('status/'))?.slice('status/'.length)`. The helper enforces one
-  label per namespace and preserves workflow labels (`bug`, `area:*`, `finding`, `scout`).
-- **GitHub:** `gh project item-list` returns `content` plus the fields. It carries **no open/closed
-  state**, so intersect with `gh issue list --state open` on `number` — a closed item can linger on
-  the board until archived, and the intersection also catches an open issue not yet added.
+`gh project item-list` returns `content` plus the fields. It carries **no open/closed state**, so
+intersect with `gh issue list --state open` on `number` — a closed item can linger on the board
+until archived, and the intersection also catches an open issue not yet added to it.
 
 ## Required config
 
@@ -69,8 +74,8 @@ A backend declares what it can't render without, in `requires`. That's validated
 template runs, so a missing value is one clear instruction rather than an "unresolved `{{…}}`"
 from four levels inside a verb expansion.
 
-GitHub requires `tracker.project` and `tracker.owner`. Forgejo requires nothing beyond the repo
-slug — there's no board to point at.
+GitHub requires `tracker.project` and `tracker.owner` — there's no way to know which board to
+write to otherwise.
 
 ## Shims and helpers
 
@@ -80,9 +85,9 @@ A backend declares the helper scripts its verbs call. The real logic lives **onc
 ```jsonc
 "shims": [
   {
-    "path": "scripts/forgejo.mjs",          // where it lands in the repo
-    "helper": "forgejo.mjs",                // which helpers/ file it runs
-    "env": { "FORGEJO_REPO": "{{repo.slug}}" }   // this repo's bindings, baked in
+    "path": "scripts/gh-project.mjs",           // where it lands in the repo
+    "helper": "gh-project.mjs",                 // which helpers/ file it runs
+    "env": { "GH_REPO": "{{repo.slug}}" }        // this repo's bindings, baked in
   }
 ]
 ```
@@ -93,16 +98,14 @@ file exists. A real file is always present, and CI never *runs* it — only the 
 
 **`env` is what keeps the helpers portable.** A helper never learns which repo it is being run
 from by reading the filesystem — the shim tells it, from `config.jsonc`. Values resolve as
-templates and empty ones are dropped, so a blank `tracker.api` falls through to the helper's own
+templates and empty ones are dropped, so a blank binding falls through to the helper's own
 detection instead of overriding it with `""`. An explicitly exported variable still wins over the
 baked-in value.
 
 That indirection is not decoration. The hand-written `gh-project.mjs` in one repo opened with
 `const OWNER = 'brndnsh'; const REPO = 'brndnsh/mend'; const PROJECT_NUMBER = '4'` — three literals
-that made the file unshareable. The Forgejo equivalent had a **default repo slug**, and
-`forgejo.mjs` carries the scar in a comment: a mis-set cwd once filed 7 issues into the wrong
-tracker. So the helpers now have no defaults at all — an unresolvable target is an error, never a
-guess.
+that made the file unshareable. So the shipped helper has no defaults at all — an unresolvable
+target is an error, never a guess.
 
 ### Finding the helpers
 
@@ -113,36 +116,40 @@ path alone would pass every test and fail on the other laptop.
 
 ## Adding a backend
 
-1. Copy `backends/forgejo.jsonc`.
+1. Copy `backends/github.jsonc` — it's the only implementation today, and the reference for the
+   shape a new one has to fill in.
 2. Bind every verb in the table above. A verb a skill calls but the backend doesn't define is a
    hard error at render time, so nothing is silently missing.
 3. Set every semantic flag honestly. Getting `auto_merge` wrong is the one that can actually
    lose work.
 4. Fill in `notes.routing_read`, `notes.unreachable`, and `notes.done_means` — these splice into
-   DOCTRINE §1/§7 where the backends' *prose* has to differ, not just their commands.
+   DOCTRINE §1/§7 where a backend's *prose* has to differ, not just its commands.
 5. Put any executable it needs in `helpers/` and declare a shim for it. Every `scripts/*` path a
    verb mentions must have one; `cycle lint` fails the build if it doesn't.
 6. `npm test` renders every profile against every backend in `backends/`, runs each shim, and
    checks it reached its helper.
 
-## Switching an existing repo's backend
+## Migrating off a backend (history)
 
-Adding a backend is authoring `backends/*.jsonc`. Moving a repo that *already has history* onto a
-different one is a different job, with traps a fresh `cycle install` never hits. Ten repos went
-Forgejo → GitHub in one pass; this is what that actually took.
+the-cycle supported a Forgejo backend until every consuming repo had moved to GitHub, at which
+point it was deleted outright rather than left with zero callers. This runbook is what that
+migration actually took, kept here — not because Forgejo is coming back, but because the traps it
+describes (stale routing values, shims a re-render never removes, a hand-written helper surviving
+under a repo's own name) recur for *any* tracker migration, not just this one. Read Forgejo/GitHub
+below as stand-ins for "the old backend" / "the new backend" if this ever needs doing again.
 
 1. **Edit `.cycle/config.jsonc`.** Set `backend`, and add whatever the new backend `requires` —
    GitHub needs `tracker.project` and `tracker.owner`. Update `repo.slug` if the slug moved (an
-   org rename counts). **Delete keys the old backend owned:** `tracker.api` is bound only by
-   `backends/forgejo.jsonc`, so on GitHub it is inert while still reading like live config.
+   org rename counts). **Delete keys the old backend owned:** `tracker.api` was bound only by the
+   Forgejo backend, so on GitHub it is inert while still reading like live config.
 2. **Re-map the routing vocabulary — it is not portable.** This is the step that silently
-   half-works. Forgejo routes on label namespaces, GitHub on board fields, and the *values* differ
-   by more than spelling: `status/in-progress` becomes the field value `In progress`. They're
-   compared as exact strings, so a leftover `in-progress` in `status.pickable` / `status.active`
-   reads as "nothing is active" rather than as an error. Recase every status list, then decide
-   **per label** whether it became a field or stayed a label — typically only status-shaped ones
-   become fields, while `size/*`, `area:*` and workflow labels (`bug`, `finding`, `scout`) stay
-   labels on both sides.
+   half-works. Forgejo routed on label namespaces, GitHub routes on board fields, and the *values*
+   differ by more than spelling: `status/in-progress` becomes the field value `In progress`.
+   They're compared as exact strings, so a leftover `in-progress` in `status.pickable` /
+   `status.active` reads as "nothing is active" rather than as an error. Recase every status list,
+   then decide **per label** whether it became a field or stayed a label — typically only
+   status-shaped ones become fields, while `size/*`, `area:*` and workflow labels (`bug`, `finding`,
+   `scout`) stay labels on both sides.
 3. **`cycle update`** to re-render the skills and drop in the new backend's shims.
 4. **Delete the old backend's shims by hand.** `cycle update` renders the new ones; it never
    removes the old ones. `cycle check` lists them as `· N file(s) no longer in this profile` —

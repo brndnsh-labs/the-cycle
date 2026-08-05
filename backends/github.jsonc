@@ -2,8 +2,8 @@
 //
 // `gh` covers most of it; the Projects GraphQL surface is awkward enough from the CLI
 // that field writes go through a small committed helper (scripts/gh-project.mjs) with
-// the same `status` / `set-field` / `batch` interface the Forgejo helper exposes. That
-// shared interface is what lets the skills stay backend-agnostic.
+// a `status` / `set-field` / `batch` interface — the same shape a future backend's
+// helper would expose, which is what lets the skills stay backend-agnostic.
 {
   "name": "github",
 
@@ -13,12 +13,11 @@
     // `gh run view --log` works; no wrapper needed.
     "job_logs": "api",
     // `gh run view --log-failed` shows the failed steps of ONE run — it does not search
-    // back for the most recent failing run the way the Forgejo wrapper does. Skills must
-    // list runs first and pass an id.
+    // back for the most recent failing run. Skills must list runs first and pass an id.
     "job_logs_search": false,
     // `gh pr merge --auto` is correct ONLY with branch protection — without it the
     // merge fires immediately with nothing to wait on. Repos without protection use
-    // the same poll-then-merge guard as Forgejo.
+    // the poll-then-merge guard below instead.
     "auto_merge": false
   },
 
@@ -27,7 +26,7 @@
   // inside a verb expansion.
   "requires": {
     "tracker.project": "the Projects v2 board number — `gh project list --owner <you>`",
-    "tracker.owner": "the board's owner (user or org login)"
+    "tracker.owner": "the account (user or org login) that owns the Projects v2 board — get it wrong and every write silently targets someone else's board"
   },
 
   // Rendered into the repo; `helper` names a file in the-cycle's helpers/ and `env`
@@ -72,7 +71,7 @@
     "set_status": "node scripts/gh-project.mjs status $1 $2",
     "batch": "node scripts/gh-project.mjs batch $1",
 
-    // Board read — GitHub-only; the Forgejo backend has no equivalent because the
+    // Board read — GitHub-only; a label-only tracker has no equivalent because the
     // issue list IS the board. There is deliberately no `board_add` counterpart: the
     // helper's status/set-field/batch all ensure board membership first, so an explicit
     // add verb would be a second way to do the same thing, and skills would have to

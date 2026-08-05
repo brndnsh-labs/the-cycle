@@ -38,6 +38,22 @@ const edit = (dir, rel, fn) => {
 const errors = (dir) => lint({ CYCLE_HOME: dir }).filter((f) => f.severity === 'error');
 const checksHit = (dir) => new Set(errors(dir).map((f) => f.check));
 
+/**
+ * A second backend that mirrors github but omits board_list — exactly how the
+ * since-retired Forgejo backend (label routing only, no board) omitted it.
+ *
+ * With the-cycle down to one real backend, the verbs check's "lacking" list is always
+ * empty and its guard-tracking (bin/lint.mjs:107-115) can never be exercised either
+ * way — a genuine gap only a fabricated second backend can close.
+ */
+function addSyntheticBackend(dir) {
+    const other = readFileSync(join(dir, 'backends', 'github.jsonc'), 'utf8')
+        .replace(/[ \t]*"board_list":[^\n]*\n/, '\n')
+        .replace('"has_board": true,', '"has_board": false,')
+        .replace('"name": "github",', '"name": "other",');
+    writeFileSync(join(dir, 'backends', 'other.jsonc'), other);
+}
+
 describe('lint', () => {
     test('the tree is consistent', () => {
         const findings = lint({ CYCLE_HOME });
@@ -76,7 +92,7 @@ describe('lint', () => {
     // no shim installed, so every rendered skill called a file the repo didn't have.
     test('catches a verb calling a script no shim installs', () => {
         const dir = sandbox();
-        edit(dir, 'backends/forgejo.jsonc', (t) =>
+        edit(dir, 'backends/github.jsonc', (t) =>
             t.replace('"issue_close":', '"issue_teleport": "node scripts/nowhere.mjs $1",\n    "issue_close":'));
         // Referenced by a verb, declared by no shim → error regardless of who calls it.
         const hits = errors(dir).filter((f) => f.check === 'shims');
@@ -136,7 +152,7 @@ describe('lint', () => {
     // expecting the prose to follow, and nothing moves.
     test('catches a semantic flag no template branches on', () => {
         const dir = sandbox();
-        edit(dir, 'backends/forgejo.jsonc', (t) => t.replace('"has_board": false,', '"has_board": false,\n    "invented_flag": true,'));
+        edit(dir, 'backends/github.jsonc', (t) => t.replace('"has_board": true,', '"has_board": true,\n    "invented_flag": true,'));
         assert.ok(errors(dir).some((f) => f.check === 'semantics' && /invented_flag/.test(f.message)));
     });
 
@@ -149,14 +165,22 @@ describe('lint', () => {
     });
 
     // A verb only one backend binds is fine inside a {{#if backend.…}} branch — that
-    // is how board reads work on Forgejo, which has no board. Outside one it is a
-    // render failure waiting for whichever repo uses the other tracker.
+    // is how board reads stayed guarded on the since-retired Forgejo backend, which
+    // had no board. Outside one it is a render failure waiting for whichever repo
+    // uses the other tracker.
     test('allows a one-backend verb inside a backend conditional', () => {
-        assert.ok(!errors(CYCLE_HOME).some((f) => /board_list/.test(f.message)));
+        const dir = sandbox();
+        addSyntheticBackend(dir);
+        // next.md.tmpl already calls {{@board_list}} inside {{#if backend.has_board}} —
+        // exactly the guarded shape this check exists to allow. Left unguarded (or with
+        // guard-tracking itself broken), this would false-positive on real, shipped
+        // template content.
+        assert.ok(!errors(dir).some((f) => /board_list/.test(f.message)));
     });
 
     test('catches a one-backend verb called unconditionally', () => {
         const dir = sandbox();
+        addSyntheticBackend(dir);
         edit(dir, 'templates/skills/burndown.md.tmpl', (t) => `${t}\n\nRead the board: {{@board_list}}\n`);
         assert.ok(errors(dir).some((f) => f.check === 'verbs' && /board_list/.test(f.message)));
     });

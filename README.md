@@ -22,7 +22,7 @@ Every repo-specific value lives in one generated binding file, and skill templat
 portable:
 
 - **Backends** (`backends/*.jsonc`) bind tracker verbs — skills call `{{@issue_view "$1"}}`, never a
-  literal `gh` or Forgejo command. `docs/BACKENDS.md`.
+  literal tracker command. `docs/BACKENDS.md`.
 - **Harnesses** (`harnesses/*.jsonc`) bind which AI tool runs the skills, behind `{{harness.*}}`
   fields. `docs/HARNESSES.md`.
 - **Overlays** (`.cycle/overlays/*.md`) hold the irreducibly repo-specific blocks a template can't
@@ -101,15 +101,11 @@ Machinery is opt-in — a repo takes on a lane when it earns it.
 
 ## Backends
 
-The tracker sits behind one verb vocabulary (`issue view`, `pr create`, `merge-guard`, …) with two
-bindings. The backends differ in only four places:
-
-| | Forgejo | GitHub |
-| --- | --- | --- |
-| fields | label namespaces (`status/*`, `size/*`) | Project fields |
-| board | none — the issue existing is enough | `project item-add` required |
-| job logs | no API → `ci-logs` wrapper | `gh run view --log` |
-| merge | `forgejo-merge <pr>` guard | poll-then-merge; `--auto` needs branch protection |
+The tracker sits behind one verb vocabulary (`issue view`, `pr create`, `merge-guard`, …), bound
+today by `backends/github.jsonc` — GitHub issues + a Projects v2 board. Swapping (or adding) a
+tracker is authoring one more `backends/*.jsonc` file, not touching a skill: `docs/BACKENDS.md`
+has the verb table, the semantic flags a backend must set honestly (`has_board`, `job_logs`,
+`auto_merge`, …), and the contract a new one has to satisfy.
 
 ## Harnesses
 
@@ -156,8 +152,8 @@ docs/
 
 ## Requirements
 
-Node ≥ 20, git, and bash for `install.sh`. No dependencies, no build step. Forgejo repos need a
-token at `~/.config/forgejo/token`; GitHub repos need `gh` authed with the `project` scope.
+Node ≥ 20, git, and bash for `install.sh`. No dependencies, no build step. `gh` authed with the
+`project` scope.
 
 ## Adopting an existing repo
 

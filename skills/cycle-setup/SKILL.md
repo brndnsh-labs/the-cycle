@@ -44,18 +44,17 @@ to prevent.
   they name risks the repo doesn't run and miss the ones it does.
 - **Tracker vocabulary** — read the real labels or board columns, not the defaults. If you can't
   reach the tracker, say so and use the defaults, flagged as unverified.
-- **Backend** — the plan drafts it from the git remote. That is not proof. A repo can be pushed to
-  one forge while its issues still live on another; one repo in this family was in exactly that
-  state for weeks. Look for evidence of where issues are actually filed. **If the remote and the
-  evidence disagree, stop and ask — do not pick.**
+- **Backend** — not a question the plan asks: `github` is the only backend the-cycle binds today
+  (see `docs/BACKENDS.md`), so there is nothing to confirm. If this repo's issues genuinely live
+  somewhere else, there is no backend for that yet — **stop and say so** rather than rendering
+  GitHub verbs over the wrong tracker.
 - **Profile** — `lean` unless the repo already does the thing a bigger profile assumes. Don't
   install `/nightly` because it sounds useful; install it when there's an overnight lane.
 
 ## 2. Ask only what reading can't settle
 
-Use `AskUserQuestion` for genuine forks: a backend mismatch, a profile call that hinges on
-intent rather than evidence, a brake surface you can argue either way. Recommend one option and
-say why.
+Use `AskUserQuestion` for genuine forks: a profile call that hinges on intent rather than
+evidence, a brake surface you can argue either way. Recommend one option and say why.
 
 Do not ask what the codebase already answers. A question you could have resolved by reading is a
 tax on the person you're supposed to be helping.
@@ -117,5 +116,6 @@ the rendered file.
 - **A wrong brake is expensive in both directions** — a missing one lets an agent make an
   irreversible change alone; a spurious one stops work that should have proceeded. Argue for each
   from something in the codebase.
-- **Stop rather than guess the backend.** Writing to the wrong tracker is silent and hard to
-  undo.
+- **Stop rather than render over an unsupported tracker.** `github` is the only backend the-cycle
+  binds; a repo whose issues genuinely live elsewhere has nothing to adopt onto yet, and writing to
+  the wrong tracker is silent and hard to undo.

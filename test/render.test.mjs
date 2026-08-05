@@ -7,7 +7,7 @@
 
 import { test, describe, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { execFileSync, spawnSync } from 'node:child_process';
+import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { cpSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
@@ -18,11 +18,10 @@ const CLI = join(HERE, '..', 'bin', 'cycle.mjs');
 const PROFILES = readdirSync(join(HERE, '..', 'profiles'))
     .filter((f) => f.endsWith('.jsonc') && !f.startsWith('_'))
     .map((f) => f.replace('.jsonc', ''));
-const BACKENDS = ['forgejo', 'github'];
+const BACKENDS = ['github'];
 
 const REMOTES = {
-    github: 'https://github.com/brndnsh/demo.git',
-    forgejo: 'https://git.brndn.zip/brandon/demo.git',
+    github: 'https://github.com/brandon/demo.git',
 };
 
 function scratchRepo(backend) {
@@ -166,11 +165,11 @@ describe('install --plan', () => {
     const planOf = (dir) => JSON.parse(cycle(dir, ['install', '--plan']));
 
     test('describes the repo without writing to it', () => {
-        const dir = scratchRepo('forgejo');
+        const dir = scratchRepo('github');
         dirs.push(dir);
         const plan = planOf(dir);
 
-        assert.equal(plan.detected.backend, 'forgejo');
+        assert.equal(plan.detected.backend, 'github');
         assert.equal(plan.detected.slug, 'brandon/demo');
         // The gate is how you *invoke* the script, not what the script runs.
         assert.deepEqual(plan.detected.gates, { typecheck: 'npm run typecheck', test: 'npm test' });
@@ -180,7 +179,7 @@ describe('install --plan', () => {
     });
 
     test('every question carries a reason, not just a default', () => {
-        const dir = scratchRepo('forgejo');
+        const dir = scratchRepo('github');
         dirs.push(dir);
         const { questions } = planOf(dir);
         assert.ok(questions.length >= 6);
@@ -192,7 +191,11 @@ describe('install --plan', () => {
             assert.ok(q.why && q.why.length > 40, `${q.path}: no substantive rationale`);
         }
         assert.ok(questions.some((q) => q.path === 'brakes'));
-        assert.ok(questions.some((q) => q.path === 'backend'));
+        // github is the only backend the-cycle binds today, so there is nothing to ask —
+        // matching the interactive interview, which drops this question for the same
+        // reason (see cmdInstall in bin/cycle.mjs). A one-option question would raise an
+        // AskUserQuestion with no real choice behind it.
+        assert.ok(!questions.some((q) => q.path === 'backend'), '--plan must not ask a one-option backend question');
     });
 
     test('surfaces what the chosen backend additionally requires', () => {
@@ -204,7 +207,7 @@ describe('install --plan', () => {
     });
 
     test('lists every overlay point with the guidance needed to draft it', () => {
-        const dir = scratchRepo('forgejo');
+        const dir = scratchRepo('github');
         dirs.push(dir);
         const { overlays } = planOf(dir);
 
@@ -222,21 +225,27 @@ describe('install --plan', () => {
     });
 
     test('the draft it emits is a config that actually renders', () => {
-        const dir = scratchRepo('forgejo');
+        const dir = scratchRepo('github');
         dirs.push(dir);
         const { draft, write } = planOf(dir);
 
         mkdirSync(join(dir, '.cycle'), { recursive: true });
         writeFileSync(join(dir, '.cycle', 'config.jsonc'), JSON.stringify(draft, null, 2));
+        setProject(dir); // github needs a board number before it can render
         assert.equal(write.then, 'cycle update');
         cycle(dir, ['update']);
         assert.match(cycle(dir, ['check']), /clean/);
     });
 
     test('reports an existing install rather than pretending to be a first run', () => {
-        const dir = scratchRepo('forgejo');
+        const dir = scratchRepo('github');
         dirs.push(dir);
-        cycle(dir, ['install', '--profile', 'lean', '-y']);
+        try {
+            cycle(dir, ['install', '--profile', 'lean', '-y']);
+        } catch {
+            // github stops on the missing board number by design; config.jsonc is
+            // written before that check runs, which is all this test needs.
+        }
         assert.equal(planOf(dir).existing_config, '.cycle/config.jsonc');
     });
 });
@@ -246,40 +255,54 @@ describe('install --plan', () => {
 // test here and fail on the second machine.
 describe('shim resolution', () => {
     test('CYCLE_HOME overrides the path baked in at render time', () => {
-        const dir = scratchRepo('forgejo');
+        const dir = scratchRepo('github');
         dirs.push(dir);
-        cycle(dir, ['install', '--profile', 'lean', '-y']);
+        try {
+            cycle(dir, ['install', '--profile', 'lean', '-y']);
+        } catch {
+            setProject(dir);
+            cycle(dir, ['update']);
+        }
 
         const elsewhere = mkdtempSync(join(tmpdir(), 'cycle-elsewhere-'));
         dirs.push(elsewhere);
         mkdirSync(join(elsewhere, 'helpers'));
-        writeFileSync(join(elsewhere, 'helpers', 'forgejo.mjs'), 'console.log("SENTINEL", process.env.FORGEJO_REPO);\n');
+        writeFileSync(
+            join(elsewhere, 'helpers', 'gh-project.mjs'),
+            'console.log("SENTINEL", process.env.GH_REPO, process.env.GH_OWNER, process.env.GH_PROJECT);\n',
+        );
 
-        const r = spawnSync(process.execPath, [join(dir, 'scripts', 'forgejo.mjs')], {
+        const r = spawnSync(process.execPath, [join(dir, 'scripts', 'gh-project.mjs')], {
             cwd: dir,
             encoding: 'utf8',
             env: { ...process.env, CYCLE_HOME: elsewhere },
         });
         assert.match(r.stdout, /SENTINEL/, 'CYCLE_HOME was not preferred');
         // …and the repo's bindings ride along, which is what frees the helper from
-        // hardcoding a repo slug.
-        assert.match(r.stdout, /brandon\/demo/, 'shim did not pass its baked env through');
+        // hardcoding a repo slug, owner, or board number.
+        assert.match(r.stdout, /brandon\/demo/, 'shim did not pass its baked repo through');
+        assert.match(r.stdout, /\b4\b/, 'shim did not pass its baked board number through');
     });
 
     test('an exported value beats the baked-in binding', () => {
-        const dir = scratchRepo('forgejo');
+        const dir = scratchRepo('github');
         dirs.push(dir);
-        cycle(dir, ['install', '--profile', 'lean', '-y']);
+        try {
+            cycle(dir, ['install', '--profile', 'lean', '-y']);
+        } catch {
+            setProject(dir);
+            cycle(dir, ['update']);
+        }
 
         const elsewhere = mkdtempSync(join(tmpdir(), 'cycle-elsewhere-'));
         dirs.push(elsewhere);
         mkdirSync(join(elsewhere, 'helpers'));
-        writeFileSync(join(elsewhere, 'helpers', 'forgejo.mjs'), 'console.log(process.env.FORGEJO_REPO);\n');
+        writeFileSync(join(elsewhere, 'helpers', 'gh-project.mjs'), 'console.log(process.env.GH_REPO);\n');
 
-        const r = spawnSync(process.execPath, [join(dir, 'scripts', 'forgejo.mjs')], {
+        const r = spawnSync(process.execPath, [join(dir, 'scripts', 'gh-project.mjs')], {
             cwd: dir,
             encoding: 'utf8',
-            env: { ...process.env, CYCLE_HOME: elsewhere, FORGEJO_REPO: 'someone/else' },
+            env: { ...process.env, CYCLE_HOME: elsewhere, GH_REPO: 'someone/else' },
         });
         assert.match(r.stdout, /someone\/else/);
     });
@@ -292,9 +315,14 @@ describe('shim resolution', () => {
 describe('multi-harness render', () => {
     let dir;
     before(() => {
-        dir = scratchRepo('forgejo');
+        dir = scratchRepo('github');
         dirs.push(dir);
-        cycle(dir, ['install', '--profile', 'standard', '-y']);
+        try {
+            cycle(dir, ['install', '--profile', 'standard', '-y']);
+        } catch {
+            setProject(dir);
+            cycle(dir, ['update']);
+        }
         const p = join(dir, '.cycle', 'config.jsonc');
         writeFileSync(p, readFileSync(p, 'utf8').replace(
             '"harnesses": [\n    "claude"\n  ],',
@@ -370,9 +398,14 @@ describe('multi-harness render', () => {
 describe('drift detection', () => {
     let dir;
     before(() => {
-        dir = scratchRepo('forgejo');
+        dir = scratchRepo('github');
         dirs.push(dir);
-        cycle(dir, ['install', '--profile', 'lean', '-y']);
+        try {
+            cycle(dir, ['install', '--profile', 'lean', '-y']);
+        } catch {
+            setProject(dir);
+            cycle(dir, ['update']);
+        }
     });
 
     test('a hand edit is reported and update refuses to clobber it', () => {
@@ -418,26 +451,93 @@ describe('version stamp — no .git in CYCLE_HOME (an npm/npx install)', () => {
     });
 
     test('a render from a gitless copy stamps state.json with the package version', () => {
-        const dir = scratchRepo('forgejo');
+        const dir = scratchRepo('github');
         dirs.push(dir);
-        gitlessCli(dir, ['install', '--profile', 'lean', '-y']);
+        try {
+            gitlessCli(dir, ['install', '--profile', 'lean', '-y']);
+        } catch {
+            setProject(dir);
+            gitlessCli(dir, ['update']);
+        }
         const state = JSON.parse(readFileSync(join(dir, '.cycle', 'state.json'), 'utf8'));
         assert.equal(state.upstream, expectedVersion);
     });
 
     test('a shim rendered from a gitless copy never bakes in the ephemeral package dir', () => {
-        const dir = scratchRepo('forgejo');
+        const dir = scratchRepo('github');
         dirs.push(dir);
-        gitlessCli(dir, ['install', '--profile', 'lean', '-y']);
-        const shim = readFileSync(join(dir, 'scripts', 'forgejo.mjs'), 'utf8');
+        try {
+            gitlessCli(dir, ['install', '--profile', 'lean', '-y']);
+        } catch {
+            setProject(dir);
+            gitlessCli(dir, ['update']);
+        }
+        const shim = readFileSync(join(dir, 'scripts', 'gh-project.mjs'), 'utf8');
         assert.ok(!shim.includes(gitlessHome), 'the baked path must not point into the npx-style cache dir');
         assert.match(shim, /['"].*[/\\]code[/\\]the-cycle['"]/, 'expected the conventional clone location baked in instead');
     });
 
-    test('gitless `cycle install` points at the durable clone for cycle update/check and the setup skills', () => {
-        const dir = scratchRepo('forgejo');
+    test('gitless `cycle install` points at the durable clone for cycle update/check and the setup skills', async () => {
+        const dir = scratchRepo('github');
         dirs.push(dir);
-        const out = gitlessCli(dir, ['install', '--profile', 'lean', '-y']);
+        // -y would skip straight past what github additionally requires with no way to
+        // supply it, so answer the interview for real here instead: accept every
+        // detected default except the board number, which github has none to detect —
+        // type one, the way a real user would.
+        const child = spawn(process.execPath, [join(gitlessHome, 'bin', 'cycle.mjs'), 'install', '--profile', 'lean'], {
+            cwd: dir,
+            env: { ...process.env, NO_COLOR: '1' },
+        });
+        let out = '';
+        const waiters = [];
+        const pump = (d) => {
+            out += d;
+            // Re-check every pending waiter against the buffer we have so far.
+            for (const w of waiters.slice()) {
+                if (w.re.test(out)) {
+                    waiters.splice(waiters.indexOf(w), 1);
+                    w.resolve();
+                }
+            }
+        };
+        child.stdout.on('data', pump);
+        child.stderr.on('data', pump);
+        const awaitPrompt = (re) =>
+            re.test(out) ? Promise.resolve() : new Promise((resolve, reject) => waiters.push({ re, resolve, reject }));
+
+        // If the child exits — crash, or finishing before every scripted prompt was
+        // seen — nothing will ever satisfy a still-pending waiter, and the `await`
+        // below hangs forever. node --test has no default per-test timeout, so on CI
+        // that is a wedged job, not a red test. Fail loudly instead.
+        child.on('close', (code) => {
+            for (const w of waiters.splice(0)) {
+                w.reject(new Error(`child exited (code ${code}) before matching ${w.re}\n${out}`));
+            }
+        });
+
+        // One answer per prompt, and each one is written only after ITS prompt has
+        // actually appeared. readline registers the next `question()` listener only
+        // once the previous one resolves, so answers that arrive early are silently
+        // dropped and the interview stalls. Waiting on the prompt — rather than on a
+        // timer — is what makes that safe on a slow, contended CI runner: a fixed
+        // sleep loses the race under load and the run hangs with a half-filled config.
+        const script = [
+            [/Repo display name/, ''],
+            [/interrupt\?/, ''],
+            [/Profile \(lean/, ''],
+            [/tracker\.project/, '4'],
+            [/tracker\.owner/, ''],
+            [/Typecheck gate/, ''],
+            [/Test gate/, ''],
+            [/Always-brake surfaces/, ''],
+        ];
+        for (const [prompt, answer] of script) {
+            await awaitPrompt(prompt);
+            child.stdin.write(`${answer}\n`);
+        }
+        child.stdin.end();
+        const code = await new Promise((resolve) => child.on('close', resolve));
+        assert.equal(code, 0, out);
         assert.match(out, /npm\/npx install/);
         assert.match(out, /cycle-setup/);
     });

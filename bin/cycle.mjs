@@ -503,17 +503,7 @@ function buildContext(cfg, backend) {
     return {
         ...cfg,
         gates,
-        tracker: {
-            // Defaulted here, not just at install, so a config written before these
-            // existed (or drafted by `adopt`) still resolves. An unresolved path is a
-            // hard error by design — that rule only works if optional means optional.
-            api: '',
-            fields: {},
-            ...(cfg.tracker ?? {}),
-            // The label-namespace map, pre-serialized: the forgejo helper reads it from
-            // one env var, and the template language has no way to emit JSON.
-            fields_json: JSON.stringify(cfg.tracker?.fields ?? {}),
-        },
+        tracker: { ...(cfg.tracker ?? {}) },
         deps: {
             outdated: '', audit: '', audit_fix: '', update: '', install: '', manifests: [],
             ...(cfg.deps ?? {}),
@@ -600,7 +590,7 @@ function planRender(root, cfg) {
     }
 
     // The backend's helper shims. Without these, `cycle install` renders skills that
-    // call scripts/forgejo.mjs into a repo that has no such file — the skills read
+    // call scripts/gh-project.mjs into a repo that has no such file — the skills read
     // fine and every command in them fails.
     for (const shim of backend.shims ?? []) {
         const helper = join(CYCLE_HOME, 'helpers', shim.helper);
@@ -611,7 +601,7 @@ function planRender(root, cfg) {
             );
         }
         // Resolve each binding, then drop the empty ones so the shim carries only real
-        // values — an empty FORGEJO_API must fall through to the helper's own detection
+        // values — an empty binding must fall through to the helper's own detection
         // rather than override it with "".
         const env = Object.entries(shim.env ?? {})
             .map(([key, tmpl]) => [key, renderTemplate(tmpl, ctx, { where: `${cfg.backend} shim ${shim.path}`, verbs })])
@@ -756,16 +746,6 @@ const ECOSYSTEMS = [
     }],
 ];
 
-/** `https://host/api/v1` from a git remote, in either URL or scp-style form. */
-export function apiFromRemote(remote) {
-    if (!remote) return '';
-    try {
-        return `${new URL(remote.replace(/^[^@]+@([^:]+):/, 'https://$1/')).origin}/api/v1`;
-    } catch {
-        return '';
-    }
-}
-
 /** Best-effort defaults so the interview is confirmations, not data entry. */
 export function detect(root) {
     const out = { gates: {} };
@@ -789,11 +769,13 @@ export function detect(root) {
     const remote = git(['remote', 'get-url', 'origin'], root);
     if (remote) {
         out.remote = remote;
-        out.backend = /github\.com/.test(remote) ? 'github' : 'forgejo';
         const m = /[:/]([^/:]+)\/([^/]+?)(?:\.git)?$/.exec(remote);
         if (m) out.slug = `${m[1]}/${m[2]}`;
     }
-    out.backend ??= 'forgejo';
+    // The only backend the-cycle binds today. A future addition (docs/BACKENDS.md's
+    // "adding a backend" contract) restores host-sniffing here; until then there is
+    // nothing to sniff for.
+    out.backend = 'github';
 
     if (existsSync(join(root, 'scripts', 'deploy.sh'))) {
         out.deploy = { test: './scripts/deploy.sh test', prod: './scripts/deploy.sh prod' };
@@ -808,21 +790,14 @@ export function detect(root) {
 // ---------------------------------------------------------------------------
 
 // Starting points only — a repo edits these in config.jsonc. GitHub's default
-// Project board ships Todo/In Progress/Done; a Forgejo repo has no board, so the
-// status vocabulary is whatever `status/*` labels the repo decides to use.
+// Project board ships Todo/In Progress/Done. Keyed by backend (rather than a flat
+// array) so a future backend with its own natural vocabulary drops in alongside
+// this one instead of overwriting it.
 const DEFAULT_STATUSES = {
     github: [
         { name: 'Todo', meaning: 'scoped + pickable', action: '`/next` ranks & picks; `/implement`/`/cycle` build' },
         { name: 'In Progress', meaning: 'being built, or PR open', action: "don't re-pick" },
         { name: 'Done', meaning: 'issue closed / shipped', action: 'done' },
-    ],
-    forgejo: [
-        { name: 'ready', meaning: 'scoped + pickable', action: '`/next` ranks & picks; `/implement`/`/cycle` build' },
-        { name: 'in-progress', meaning: 'being built', action: "don't re-pick" },
-        { name: 'in-review', meaning: 'built, under review / PR open', action: "don't re-pick" },
-        { name: 'needs-decision', meaning: 'blocked on a human call', action: 'surface it; **don\'t build**' },
-        { name: 'blocked', meaning: 'blocked on a dependency', action: 'skip; name the blocker' },
-        { name: '(none)', meaning: 'the idea pile, not a scheduled story', action: 'triage/scope it first; don\'t pick' },
     ],
 };
 
@@ -849,23 +824,13 @@ export function draftConfig(root, { backend: wanted, profile } = {}) {
         // See harnesses/*.jsonc and docs/HARNESSES.md.
         harnesses: ['claude'],
         tracker: {
-            description: backend === 'github'
-                ? `**GitHub issues** (\`${d.slug ?? ''}\`)`
-                : `the **Forgejo repo's issues** (\`${d.slug ?? ''}\`)`,
+            description: `**GitHub issues** (\`${d.slug ?? ''}\`)`,
             project: null,
             owner: (d.slug ?? '/').split('/')[0],
-            // Forgejo API base, handed to the helpers by the rendered shims. Blank is
-            // safe: the helper falls back to deriving it from `origin`.
-            api: backend === 'forgejo' ? apiFromRemote(d.remote) : '',
-            // Extra label namespaces beyond the portable Status/Size/Model/Agent —
-            // e.g. { "Track": "track", "Review lens": "lens" }.
-            fields: {},
-            statuses: DEFAULT_STATUSES[backend] ?? DEFAULT_STATUSES.forgejo,
+            statuses: DEFAULT_STATUSES[backend] ?? DEFAULT_STATUSES.github,
             // The three the skills actually transition between, named separately so a
             // repo can rename its vocabulary without the skills caring.
-            status: backend === 'github'
-                ? { pickable: 'Todo', active: 'In Progress', done: 'Done' }
-                : { pickable: 'ready', active: 'in-progress', done: 'in-review' },
+            status: { pickable: 'Todo', active: 'In Progress', done: 'Done' },
             ranking: '**milestone first** (a real numbered epic beats no milestone), then **issue number** (lower first)',
             milestones: [],
         },
@@ -913,7 +878,9 @@ async function cmdInstall(args) {
         cfg.repo.name = await ask('Repo display name', cfg.repo.name);
         cfg.repo.human = await ask('Who does this pipeline interrupt?', cfg.repo.human);
         cfg.profile = await ask('Profile (lean/standard/full)', cfg.profile);
-        cfg.backend = await ask('Tracker backend (forgejo/github)', cfg.backend);
+        // No interactive question for backend itself: github is the only one the-cycle
+        // binds today, so asking would be a confirm-the-only-answer prompt. `--backend`
+        // still overrides it (draftConfig above), for whenever a second one exists.
         for (const [path, why] of Object.entries(loadBackend(cfg.backend).requires ?? {})) {
             const keys = path.split('.');
             const leaf = keys.pop();
@@ -994,13 +961,6 @@ function cmdPlan(root, values) {
                 why: 'Machinery is opt-in — a repo should take a lane when it has earned it, not by default. Start lean unless the repo already does the thing.',
                 options: profiles,
                 default: cfg.profile,
-            },
-            {
-                path: 'backend',
-                asks: 'Which tracker does this repo actually use?',
-                why: 'Drafted from the git remote, which can be wrong mid-migration: a repo can be pushed to one forge while its issues still live on another. Confirm against where issues are really filed, not where the code is pushed.',
-                options: readdirSync(join(CYCLE_HOME, 'backends')).filter((f) => f.endsWith('.jsonc')).map((f) => basename(f, '.jsonc')),
-                default: cfg.backend,
             },
             {
                 path: 'repo.human',
@@ -1220,7 +1180,7 @@ function cmdRender(args) {
 
 const USAGE = `${bold('cycle')} — render the-cycle's work pipeline into a repo
 
-  ${bold('cycle install')} [--profile lean|standard|full] [--backend forgejo|github] [-y]
+  ${bold('cycle install')} [--profile lean|standard|full] [--backend github] [-y]
       Interview, write .cycle/config.jsonc, render the skills.
 
   ${bold('cycle install --plan')}
