@@ -498,3 +498,72 @@ describe('version stamp — no .git in CYCLE_HOME (an npm/npx install)', () => {
         assert.match(out, /cycle-setup/);
     });
 });
+
+// ---------------------------------------------------------------------------
+// backend_overrides — a per-repo correction to a backend-wide default.
+//
+// `auto_merge` is the motivating case and the dangerous one: it is a
+// branch-protection fact, not a forge fact, so two repos on the same backend can
+// need opposite values. Both directions are asserted — that the override actually
+// changes the rendered merge path, AND that the default still renders the guard —
+// because a conditional that silently renders nothing is exactly the bug this
+// replaced (§6 previously had an {{#unless}} with no counterpart).
+// ---------------------------------------------------------------------------
+describe('backend_overrides.auto_merge', () => {
+    let guardDir;
+    let autoDir;
+
+    before(() => {
+        guardDir = scratchRepo('github');
+        dirs.push(guardDir);
+        cycle(guardDir, ['install', '--profile', 'full', '--backend', 'github', '-y']);
+
+        autoDir = scratchRepo('github');
+        dirs.push(autoDir);
+        cycle(autoDir, ['install', '--profile', 'full', '--backend', 'github', '-y']);
+        const cfgPath = join(autoDir, '.cycle', 'config.jsonc');
+        const cfg = readFileSync(cfgPath, 'utf8');
+        assert.match(cfg, /"backend":\s*"github"/, 'fixture expects a plain string backend');
+        writeFileSync(
+            cfgPath,
+            cfg.replace(/"backend":\s*"github",/, '"backend": "github",\n  "backend_overrides": { "auto_merge": true },'),
+        );
+        cycle(autoDir, ['update']);
+    });
+
+    const doctrine = (d) => readFileSync(join(d, '.claude', 'skills', 'DOCTRINE.md'), 'utf8');
+    const done = (d) => readFileSync(join(d, '.claude', 'skills', 'done', 'SKILL.md'), 'utf8');
+
+    test('default renders the poll-then-merge guard, not --auto', () => {
+        const src = doctrine(guardDir);
+        assert.match(src, /gh pr checks .* --watch/, 'expected the poll guard');
+        assert.doesNotMatch(src, /gh pr merge .*--auto/, 'must not offer --auto without protection');
+    });
+
+    test('the override swaps the merge path to server-side --auto', () => {
+        const src = doctrine(autoDir);
+        assert.match(src, /gh pr merge .*--auto/, 'expected the server-side merge');
+        assert.doesNotMatch(src, /until gh pr checks/, 'the poll guard must be gone');
+    });
+
+    test('/done follows the same switch, so the flag is not doctrine-only', () => {
+        assert.match(done(guardDir), /until gh pr checks/);
+        assert.doesNotMatch(done(guardDir), /gh pr merge .*--auto/);
+        assert.match(done(autoDir), /gh pr merge .*--auto/);
+        assert.doesNotMatch(done(autoDir), /until gh pr checks/);
+    });
+
+    // The regression this change exists to prevent: `Closes #<n>` used to live INSIDE
+    // the {{#unless auto_merge}} block, so a protected repo silently lost the one rule
+    // that makes issue-closing work at all.
+    test('Closes #<n> survives in BOTH modes', () => {
+        assert.match(doctrine(guardDir), /Closes #<n>/);
+        assert.match(doctrine(autoDir), /Closes #<n>/);
+    });
+
+    test('an overridden repo still renders clean and re-renders byte-identically', () => {
+        const { status, out } = cycleRaw(autoDir, ['check']);
+        assert.equal(status, 0, out);
+        assert.match(out, /clean/);
+    });
+});

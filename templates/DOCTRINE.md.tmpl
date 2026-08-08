@@ -134,19 +134,42 @@ AND green CI); **a judgment-call story's PR is left open for {{repo.human}}'s ma
 report "ready for your merge: <url>" + *why* it's gated.
 
 {{#unless backend.auto_merge}}
-There is **no server-side auto-merge-on-green** here, so the **poll-then-merge guard IS the
-enforcement**. Never use a fire-and-forget auto-merge flag — with nothing to wait on it merges
-immediately. Run the guard in the **background** (the poll takes minutes; a foreground `sleep` is
-harness-blocked):
+**This repo has no server-side enforcement**, so the **poll-then-merge guard IS the enforcement**.
+Never use a fire-and-forget auto-merge flag here — `--auto` merges when the repo's merge
+*requirements* are met, and with no branch protection there are none, so it fires immediately with
+nothing to wait on. Run the guard in the **background** (the poll takes minutes; a foreground
+`sleep` is harness-blocked):
 
 ```bash
 {{@merge_guard "<pr>" "<n>"}}
 ```
 
+The guard is a client-side *simulation* of branch protection, with a simulation's weaknesses: it
+dies with the session, costs polling quota, and the harness can refuse to run it. If this repo ever
+gains protection, set `backend_overrides.auto_merge` and delete the guard.
+{{/unless}}
+{{#if backend.auto_merge}}
+**Server-side auto-merge is enabled here**, and the forge enforces the required checks — so queue
+the merge and let it do the waiting:
+
+```bash
+{{@merge_auto "<pr>"}}
+```
+
+It cannot merge early: `--auto` waits until the repo's merge requirements are satisfied, and with
+required status checks configured those requirements *are* the checks. Prefer this to a
+client-side poll — enforcement survives a killed session, a crashed harness, or a denied background
+command, and it costs no polling quota.
+
+If it errors `Auto merge is not allowed for this repository`, the forge setting was turned off:
+the declaration in `.cycle/config.jsonc` is now a lie. Re-enable it, or drop
+`backend_overrides.auto_merge` and fall back to the poll guard. `cycle check --verify-forge`
+catches that drift before it bites.
+{{/if}}
+
 Closing rides on the PR body's `Closes #<n>` keyword — GitHub fires it anywhere in the body
 regardless of surrounding prose (§8), so a multi-phase PR must never place that token next to an
 issue number it shouldn't close.
-{{/unless}}
 
 **Reading a red gate.** Logs come from `{{@ci_log "<run>"}}`.
 `{{@ci_log_failed "<run>"}}`

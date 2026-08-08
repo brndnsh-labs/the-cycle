@@ -520,7 +520,19 @@ function buildContext(cfg, backend) {
             // Pre-formatted for prose: the join filter can't wrap each item in backticks.
             manifests_md: (cfg.deps?.manifests ?? []).map((m) => `\`${m}\``).join(', '),
         },
-        backend: { name: cfg.backend, ...(backend.semantics ?? {}), notes: backend.notes ?? {} },
+        // `backend_overrides` lets one repo correct a backend-wide default that is
+        // really a per-repo fact. `auto_merge` is the motivating case: it is a
+        // branch-protection property, not a forge property, and the two disagree
+        // across repos on the same backend (a public repo on a Free org can be
+        // protected; a private one cannot be protected at all). Backend defaults stay
+        // safe-by-default, and a repo opts in only when the forge genuinely enforces
+        // it — `cycle check --verify-forge` is what stops that claim from drifting.
+        backend: {
+            name: cfg.backend,
+            ...(backend.semantics ?? {}),
+            ...(cfg.backend_overrides ?? {}),
+            notes: backend.notes ?? {},
+        },
         profile: { name: cfg.profile, ...(cfg.profileFlags ?? {}) },
     };
 }
@@ -1050,9 +1062,90 @@ ${JSON.stringify(cfg, null, 2)}
 `;
 }
 
+/**
+ * Verify forge-facts declared in config against the live forge.
+ *
+ * Opt-in, and deliberately NOT part of a plain `cycle check`: rendering and drift
+ * detection stay offline and deterministic, so they work on a plane and produce the
+ * same answer for everyone. This is the one place the tool looks outward.
+ *
+ * Returns a list of human-readable mismatches. A probe that cannot run (no `gh`, not
+ * authenticated, no network) is reported as a skip, never as a mismatch — an
+ * unanswerable question must not read as a failed answer.
+ */
+function verifyForge(cfg) {
+    const problems = [];
+    const slug = cfg.repo?.slug;
+    if (cfg.backend !== 'github') return { problems, skipped: `backend ${cfg.backend} has no forge probe` };
+    if (!slug) return { problems, skipped: 'repo.slug not set in .cycle/config.jsonc' };
+
+    let repoJson;
+    try {
+        repoJson = JSON.parse(
+            execFileSync('gh', ['api', `repos/${slug}`, '--jq', '{allow_auto_merge,delete_branch_on_merge}'], {
+                encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'],
+            }),
+        );
+    } catch {
+        return { problems, skipped: `could not query ${slug} (gh missing, unauthenticated, or offline)` };
+    }
+
+    const declared = Boolean(cfg.backend_overrides?.auto_merge ?? false);
+    const live = Boolean(repoJson.allow_auto_merge);
+
+    if (declared && !live) {
+        problems.push(
+            `auto_merge declared true but ${slug} has allow_auto_merge=false — ` +
+            'the rendered doctrine tells agents to use `gh pr merge --auto`, which will error. ' +
+            'Re-enable it on the repo, or drop backend_overrides.auto_merge.',
+        );
+    } else if (!declared && live) {
+        problems.push(
+            `${slug} allows auto-merge but config does not declare it — agents are running a ` +
+            'polling merge guard for a job the forge would do server-side. Set ' +
+            'backend_overrides.auto_merge to true (only if branch protection is configured).',
+        );
+    }
+
+    // auto_merge is only SAFE with required status checks: with none, `--auto` merges
+    // on the spot. Declaring it without protection is the dangerous direction, so probe
+    // it specifically rather than trusting the repo flag alone.
+    if (declared) {
+        try {
+            const contexts = JSON.parse(
+                execFileSync('gh', ['api', `repos/${slug}/branches/main/protection`, '--jq', '.required_status_checks.contexts'], {
+                    encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'],
+                }),
+            );
+            if (!Array.isArray(contexts) || contexts.length === 0) {
+                problems.push(
+                    `auto_merge declared true but ${slug}'s main has no required status checks — ` +
+                    '`--auto` would merge immediately with nothing to wait on. Configure required ' +
+                    'checks, or drop backend_overrides.auto_merge.',
+                );
+            }
+        } catch {
+            problems.push(
+                `auto_merge declared true but branch protection on ${slug} could not be read ` +
+                '(often means it is not configured, or the plan does not allow it). Unverified — ' +
+                'confirm before relying on it.',
+            );
+        }
+    }
+
+    return { problems, skipped: null };
+}
+
 function cmdCheck(args) {
     const root = findRepoRoot();
-    const { values } = parseArgs({ args, options: { quiet: { type: 'boolean', short: 'q' } }, allowPositionals: true });
+    const { values } = parseArgs({
+        args,
+        options: {
+            quiet: { type: 'boolean', short: 'q' },
+            'verify-forge': { type: 'boolean' },
+        },
+        allowPositionals: true,
+    });
     const cfg = loadConfig(root);
     const plan = planRender(root, cfg);
     const state = readState(root);
@@ -1105,7 +1198,24 @@ function cmdCheck(args) {
         console.log(green('✓ clean — every managed file matches its template'));
     }
 
-    process.exitCode = missing.length || local.length || upstream.length ? 1 : 0;
+    // Forge verification is opt-in: a plain `cycle check` stays offline so it is
+    // deterministic and works unauthenticated. File drift and forge drift are separate
+    // failures and are reported separately, but either one fails the command.
+    let forgeProblems = [];
+    if (values['verify-forge']) {
+        const { problems, skipped } = verifyForge(cfg);
+        forgeProblems = problems;
+        if (skipped) {
+            console.log(dim(`· forge check skipped — ${skipped}`));
+        } else if (problems.length) {
+            console.log(red(`✗ ${problems.length} forge fact(s) disagree with .cycle/config.jsonc`));
+            for (const p of problems) console.log(`    ${p}`);
+        } else {
+            console.log(green('✓ forge matches the declared config'));
+        }
+    }
+
+    process.exitCode = missing.length || local.length || upstream.length || forgeProblems.length ? 1 : 0;
 }
 
 function cmdUpdate(args) {
@@ -1218,9 +1328,12 @@ const USAGE = `${bold('cycle')} — render the-cycle's work pipeline into a repo
       and why each matters, every overlay point — as JSON, and write nothing.
       This is what /cycle-setup reads; useful on its own to see the shape.
 
-  ${bold('cycle check')} [-q]
+  ${bold('cycle check')} [-q] [--verify-forge]
       Report drift on two axes: locally edited files, and files a re-render
       would change. Exits non-zero on any drift.
+      --verify-forge additionally checks facts this repo *declares* about its
+      forge (backend_overrides.auto_merge) against the live repo. Opt-in
+      because it needs network + auth; without it, check stays offline.
 
   ${bold('cycle update')} [--dry-run] [--force]
       Re-render. Shows a diff; refuses to clobber hand-edited files without --force.
