@@ -1,12 +1,12 @@
 {
-  "upstream": "493e3ad-dirty",
+  "upstream": "1c92f78-dirty",
   "files": {
-    ".claude/skills/DOCTRINE.md": "4f69a7c8fbd9",
+    ".claude/skills/DOCTRINE.md": "6913f5e9b053",
     ".claude/skills/cycle/SKILL.md": "7df092de0d13",
     ".claude/skills/implement/SKILL.md": "d01840ec8b68",
     ".claude/skills/review/SKILL.md": "7480fa810fb6",
     ".claude/skills/patch/SKILL.md": "ce0e7c9f32f5",
-    ".claude/skills/done/SKILL.md": "aaac1924ab00",
+    ".claude/skills/done/SKILL.md": "4ec3b11ed433",
     ".claude/skills/next/SKILL.md": "0afc40565e46",
     ".claude/skills/intake/SKILL.md": "7fb751ead121",
     ".claude/skills/scout/SKILL.md": "bbfa6de5fa2e",

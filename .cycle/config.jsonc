@@ -10,6 +10,15 @@
   },
   "profile": "lean",
   "backend": "github",
+  // the-cycle is PUBLIC, so a Free org can branch-protect it, and `main` requires the
+  // `gates` context — so `gh pr merge --auto` genuinely waits instead of firing on the
+  // spot. Enabled on the repo 2026-08-07 alongside `delete_branch_on_merge` (which is
+  // why the `merge_auto` verb omits `--delete-branch`).
+  //
+  // This is also the dogfood: the backend default stays false, and this repo proves the
+  // override path it ships. Consuming repos WITHOUT protection must not copy this.
+  // `cycle check --verify-forge` fails if this and the live repo ever disagree.
+  "backend_overrides": { "auto_merge": true },
   "tracker": {
     // Routing lives in `status:*` labels on the issue. Each name below is a real
     // label that must exist in the repo — `gh` fails loudly on one that doesn't,
