@@ -2,7 +2,7 @@
 name: done
 description: Ship a the-cycle story — commit the reviewed work, push, open a PR that Closes #<n>, and (for a safe story) merge it via the background poll-then-merge guard; a judgment-call story's PR is left for Brandon's manual merge. Done = the issue closes on merge. Plan-first. Usage `/done #<n>`. Use after /review (+ /patch) pass clean.
 ---
-<!-- cycle:rendered template=skills/done.md.tmpl hash=d61c4ea7b120 — managed by the-cycle; edit the template, not this file -->
+<!-- cycle:rendered template=skills/done.md.tmpl hash=aaac1924ab00 — managed by the-cycle; edit the template, not this file -->
 
 # /done #<n> — ship a story
 
@@ -39,7 +39,7 @@ mechanics, §8 Commit & PR conventions, §9 Branch policy. The procedure below i
 10. **Post a one-line issue comment** linking the PR: `gh issue comment "<n>" --body "<text>"`
 11. **Land it — the auto-merge decision (§5 + §6):**
     - **Safe story** — none of §5's always-brake classes (auth / tokens / secrets, schema / data migration, anything destructive or irreversible) **and** green CI →
-      run the **poll-then-merge guard in the background**:
+      run the **poll-then-merge guard in the background** (§6):
       ```bash
       (until gh pr checks "<pr>" >/dev/null 2>&1; do sleep 30; done; gh pr checks "<pr>" --watch --interval 30 --fail-fast && gh pr merge "<pr>" --squash --delete-branch) &
       ```

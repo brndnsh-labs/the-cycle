@@ -37,13 +37,27 @@ mechanics, §8 Commit & PR conventions, §9 Branch policy. The procedure below i
    Conventional-Commit subject as title.
 10. **Post a one-line issue comment** linking the PR: `{{@issue_comment "<n>" "<text>"}}`
 11. **Land it — the auto-merge decision (§5 + §6):**
+{{#unless backend.auto_merge}}
     - **Safe story** — none of §5's always-brake classes ({{brakes|join:, }}) **and** green CI →
-      run the **poll-then-merge guard in the background**:
+      run the **poll-then-merge guard in the background** (§6):
       ```bash
       {{@merge_guard "<pr>" "<n>"}}
       ```
       After it lands, sync local main and prune the branch, then set
       Status explicitly: `{{@set_status "<n>" "{{tracker.status.done}}"}}`.
+{{/unless}}
+{{#if backend.auto_merge}}
+    - **Safe story** — none of §5's always-brake classes ({{brakes|join:, }}) → **queue the
+      server-side merge** (§6). No polling, no background job: the forge holds it until the
+      required checks pass.
+      ```bash
+      {{@merge_auto "<pr>"}}
+      ```
+      This returns immediately with the merge *queued*, so the PR is normally still open when
+      you look — that is success, not a pending failure. Set Status explicitly right away:
+      `{{@set_status "<n>" "{{tracker.status.done}}"}}`. Sync local main and prune on the next
+      run that needs it, rather than waiting around for the merge to land.
+{{/if}}
     - **Judgment-call story** → **leave the PR open**, report "ready for your merge: <url>" + *why*
       it's gated. Do NOT auto-merge.
 12. **Suggest next:** `/deploy-test`, `/next`, or `/cycle` continues.

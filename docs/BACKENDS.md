@@ -59,9 +59,40 @@ GitHub's block:
 | `auto_merge` | `false` | branch protection isn't guaranteed to exist — see below |
 
 **On `auto_merge`:** a fire-and-forget auto-merge flag is only safe when the forge enforces
-required checks. Without branch protection, `gh pr merge --auto` merges *immediately* — there is
-nothing for it to wait on. The backend therefore defaults to the background poll-then-merge guard.
-Set `auto_merge: true` only for a repo that actually has protection configured.
+required checks. `gh pr merge --auto` does not mean "merge when checks are green" — it means
+"merge when the repo's merge *requirements* are satisfied." With required status checks configured
+that is the same thing; without branch protection there are no requirements, so it merges
+*immediately*, possibly before CI starts. The backend therefore defaults to the background
+poll-then-merge guard.
+
+### Overriding a backend default per repo
+
+`auto_merge` is really a **per-repo branch-protection fact wearing a backend flag's clothing**. Two
+repos on the same backend, in the same org, can need opposite values — on GitHub a *public* repo on
+a Free org can be branch-protected while a *private* one cannot be protected at all (classic rules
+and rulesets both 403). So the backend value is only a safe default; a repo corrects it in its own
+`.cycle/config.jsonc`:
+
+```jsonc
+{
+  "backend": "github",
+  "backend_overrides": {
+    // Only set this if the forge REALLY enforces required checks on main.
+    "auto_merge": true
+  }
+}
+```
+
+Keys in `backend_overrides` are merged over the backend's `semantics` block, so this works for any
+semantic flag, not just `auto_merge`. It cannot override *verbs* — those are backend mechanics, not
+repo policy.
+
+**Verify the claim rather than trusting it.** A declared forge fact drifts the moment someone
+changes a repo setting, and a stale declaration is worse than none: the rendered doctrine confidently
+instructs agents to use a merge path that errors. `cycle check --verify-forge` compares the
+declaration against the live repo — including whether required status checks actually exist, since
+`auto_merge: true` without them is the genuinely dangerous combination. It is opt-in because it
+needs network and auth; a plain `cycle check` stays offline and deterministic.
 
 ## Reading routing values
 

@@ -14,9 +14,18 @@
   "semantics": {
     // `gh pr merge --auto` is correct ONLY with branch protection — without it the
     // merge fires immediately with nothing to wait on. Repos without protection use
-    // the poll-then-merge guard below instead. This is a per-repo branch-protection
-    // fact rather than a backend fact, but relocating it onto that axis is a separate
-    // follow-up — for now it's the one semantic flag still declared here.
+    // the poll-then-merge guard below instead.
+    //
+    // This is a per-repo branch-protection fact, not a backend fact, so the value here
+    // is only the safe DEFAULT: a repo that genuinely has protection overrides it with
+    // `backend_overrides: { "auto_merge": true }` in its own `.cycle/config.jsonc`
+    // (see docs/BACKENDS.md). It stays false here because protection is not guaranteed
+    // to exist — and on GitHub it is not even always purchasable: a public repo on a
+    // Free org can be protected, while a private one on the same org cannot be, by
+    // either classic rules or rulesets. Same forge, same owner, opposite correct answer.
+    //
+    // Never flip this default to true to save a repo the override. That would hand
+    // every unprotected repo a merge with nothing gating it.
     "auto_merge": false
   },
 
@@ -45,6 +54,13 @@
     // any run exists, so wait for registration first. The && is the guard — merge only
     // happens if every check passed.
     "merge_guard": "(until gh pr checks $1 >/dev/null 2>&1; do sleep 30; done; gh pr checks $1 --watch --interval 30 --fail-fast && gh pr merge $1 --squash --delete-branch) &",
+
+    // The protected-repo counterpart to merge_guard: one foreground call, no polling.
+    // Only rendered when `auto_merge` is true, because without required status checks
+    // this merges on the spot. `--delete-branch` is omitted deliberately — a repo that
+    // has protection configured usually has `delete_branch_on_merge` set too, and the
+    // flag is redundant there; pass it explicitly if that isn't the case.
+    "merge_auto": "gh pr merge $1 --auto --squash",
 
     // One call, and idempotent: clearing every status label before adding the target
     // keeps the set mutually exclusive without a read first. Both halves are safe —
