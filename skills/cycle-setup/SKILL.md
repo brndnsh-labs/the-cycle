@@ -25,8 +25,11 @@ re-setup, so read the current config before proposing changes and treat every ex
 decision someone made until you find evidence otherwise.
 
 If the repo has hand-written skills in `.claude/skills/` with no `.cycle/` directory, it predates
-the-cycle. **Stop and run `/cycle-adopt` instead** — that path reconciles existing content rather
-than overwriting it.
+the-cycle. **Stop and surface it** — the automated conversion path (`cycle adopt`) was retired
+after the last legacy repo converged, so reconciliation is now a deliberate manual job: extract
+the repo facts into config and overlays, then diff each hand-written skill against its rendered
+replacement before letting `cycle update` overwrite anything. Never render over hand-written
+content without that comparison.
 
 ## 1. Read the repo before answering anything
 

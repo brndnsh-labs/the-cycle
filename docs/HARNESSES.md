@@ -92,6 +92,6 @@ implementation time — these move, and a stale path here is worse than no harne
 6. `npm test` renders every profile against every backend **and** a second harness in the
    multi-harness suite (`test/render.test.mjs`), and checks frontmatter, provenance, idempotency,
    and that harness-conditional prose actually differs between trees.
-7. The acceptance bar is behavioral, same as adopting a repo (`docs/PATTERNS.md`'s spirit, `/cycle-
-   adopt`'s Rule 4): render into a real repo and run a session **in that harness** through a full
-   `/cycle` on a live issue, merge guard included, before calling the harness supported.
+7. The acceptance bar is behavioral (`docs/PATTERNS.md`'s spirit): render into a real repo and run
+   a session **in that harness** through a full `/cycle` on a live issue, merge guard included,
+   before calling the harness supported.

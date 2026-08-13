@@ -43,7 +43,7 @@ npx @brndnsh/the-cycle install       # runs the interview, renders into the curr
 ```
 
 npx is for a one-off first render — the fetched copy lives in npx's ephemeral cache, so `cycle
-update` / `cycle check` and the personal `/cycle-setup` · `/cycle-adopt` skills need the durable
+update` / `cycle check` and the personal `/cycle-setup` skill need the durable
 clone below. `cycle install`'s own output says as much when it ran this way.
 
 For everyday use:
@@ -59,8 +59,8 @@ automatically, for machines that would rather not reach GitHub.
 
 Don't push to the Forgejo mirror directly — the next sync from GitHub overwrites it.
 
-`install.sh` also links `/cycle-setup` and `/cycle-adopt` into `~/.claude/skills` as personal
-skills — they have to work in a repo that doesn't have the-cycle yet.
+`install.sh` also links `/cycle-setup` into `~/.claude/skills` as a personal
+skill — it has to work in a repo that doesn't have the-cycle yet.
 
 Then, in a repo:
 
@@ -74,7 +74,6 @@ or drive it by hand:
 cycle install --profile lean         # interview → .cycle/config.jsonc → render
 cycle check                          # drift report; non-zero exit on drift
 cycle update                         # re-render, show the diff
-cycle adopt                          # reverse-engineer an existing hand-written setup
 ```
 
 `cycle install` can detect a repo's name, remote, and gate commands, but not what breaks it
@@ -130,11 +129,9 @@ Full vocabulary, the honesty rule around capability flags, and how to add a thir
 .github/workflows/ci.yml    `npm test` on PR + push to main
 bin/
   cycle.mjs            the CLI — Node ESM, zero dependencies
-  adopt.mjs            reverse-engineer an existing hand-written setup
 install.sh             symlink bin/cycle onto PATH
 skills/
   cycle-setup/         guided install — personal skill, linked by install.sh
-  cycle-adopt/         guided reconciliation of an existing setup
 templates/
   DOCTRINE.md.tmpl     the §1–§10 spine
   skills/*.md.tmpl     one per skill
@@ -157,7 +154,10 @@ Node ≥ 20, git, and bash for `install.sh`. No dependencies, no build step. `gh
 
 ## Adopting an existing repo
 
-`cycle adopt` reads a hand-written pipeline and drafts the config from it — gates, brake surfaces,
-status table, commit trailer — then reports what it *couldn't* decide. It's read-only by default and
-never touches a skill file; where a repo's doctrine and the shared template disagree, `adopt`
-surfaces the delta rather than quietly picking a winner.
+There used to be a `cycle adopt` command (and a `/cycle-adopt` skill) that reverse-engineered a
+hand-written pipeline into config + overlays. It did its job: every legacy repo has converged onto
+the shared templates, so the command was retired rather than maintained against a queue of zero.
+If a hand-rolled pipeline ever needs converting again, resurrect it from git history
+(`git log --diff-filter=D -- bin/adopt.mjs`) — or do it by hand: extract the repo facts into
+`.cycle/config.jsonc`, move the irreducibly repo-specific prose into overlays, and diff each
+skill against its rendered replacement before letting `cycle update` overwrite it.
