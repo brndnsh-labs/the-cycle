@@ -26,6 +26,8 @@
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { basename, join } from 'node:path';
 
+import { readJsonc } from './cycle.mjs';
+
 const ERROR = 'error';
 const WARN = 'warn';
 
@@ -382,16 +384,6 @@ export function lint({ CYCLE_HOME }) {
     }
 
     return findings;
-}
-
-/** Local copy so lint can run standalone; same stripper the CLI uses. */
-function readJsonc(path) {
-    const text = readFileSync(path, 'utf8');
-    return JSON.parse(
-        text
-            .replace(/"(?:[^"\\]|\\.)*"|\/\/[^\n]*|\/\*[\s\S]*?\*\//g, (m) => (m.startsWith('"') ? m : ''))
-            .replace(/,(\s*[}\]])/g, '$1'),
-    );
 }
 
 export function cmdLint(args, { CYCLE_HOME, bold, dim, red, yellow, green }) {

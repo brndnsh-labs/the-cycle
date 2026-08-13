@@ -1,9 +1,10 @@
 #!/usr/bin/env node
 // cycle — render the-cycle's work pipeline into a repo, and keep it honest.
 //
-// Zero dependencies, Node ESM. The whole CLI lives in this file on purpose: it is
-// installed via a symlink from ~/.local/bin (see install.sh), so a single file with
-// no resolution games is the shape that survives.
+// Zero dependencies, Node ESM. The CLI is this file plus two lazily-imported
+// siblings (adopt.mjs, lint.mjs), resolved relative to this file — it is installed
+// via a symlink from ~/.local/bin (see install.sh), and relative sibling imports
+// survive that with no module-resolution games.
 //
 // Commands: install · update · check · adopt · eject · render (debug)
 //
@@ -689,8 +690,7 @@ const upstreamSha = () => {
 function writeState(root, plan) {
     const files = {};
     for (const f of plan) files[f.rel] = readProvenance(f.content)?.hash ?? '';
-    const state = { upstream: upstreamSha(), profile: undefined, files };
-    delete state.profile;
+    const state = { upstream: upstreamSha(), files };
     writeFileSync(statePath(root), `${JSON.stringify(state, null, 2)}\n`);
 }
 

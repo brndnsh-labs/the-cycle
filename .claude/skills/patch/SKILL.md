@@ -2,7 +2,7 @@
 name: patch
 description: Address /review findings on the uncommitted the-cycle diff. Reads the most-recent review output from context, triages (fix-now is the DEFAULT for any finding about this diff — P0/P1/bounded-P2; escalate to Brandon if it needs a decision or is too big), presents a fix plan, then patches inline — no agent spawn, the orchestrator already holds the diff + findings. Re-runs the gates after. Use after /review, before /done. Plan-first.
 ---
-<!-- cycle:rendered template=skills/patch.md.tmpl hash=ce0e7c9f32f5 — managed by the-cycle; edit the template, not this file -->
+<!-- cycle:rendered template=skills/patch.md.tmpl hash=69279047fb66 — managed by the-cycle; edit the template, not this file -->
 
 # /patch — address reviewer findings
 
@@ -38,6 +38,7 @@ stays in progress.
 5. **Re-run gates** (§4):
    ```
    npm test
+   node bin/cycle.mjs check
    ```
    Re-spawn a specific reviewer if the patch landed in their lane. If a Fix-now patch fails a gate,
    stop and surface — don't pile on.

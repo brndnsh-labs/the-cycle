@@ -2,7 +2,7 @@
 name: dep-update
 description: Routine dependency hygiene for the-cycle — survey what's outdated, plan the bump, update, run the gates, and land one lockfile commit. Distinguishes a stale test expectation from a real regression. Never uses `audit fix --force`; never auto-pushes. Plan-first. Usage `/dep-update` (or `/dep-update <package>`).
 ---
-<!-- cycle:rendered template=skills/dep-update.md.tmpl hash=b491f8fb56b8 — managed by the-cycle; edit the template, not this file -->
+<!-- cycle:rendered template=skills/dep-update.md.tmpl hash=58c6bd2d36a2 — managed by the-cycle; edit the template, not this file -->
 
 # /dep-update — dependency hygiene
 
@@ -30,6 +30,7 @@ Goal: keep dependencies current without turning a routine bump into an outage.
 7. **Run the gates** (§4):
    ```
    npm test
+   node bin/cycle.mjs check
    ```
    **A red gate here is one of two things, and they need opposite responses:**
    - **A stale expectation** — the dependency legitimately changed its output, and the test

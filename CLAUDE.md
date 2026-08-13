@@ -10,8 +10,9 @@ and risk surfaces. It replaces three hand-copied, silently-diverged pipelines wi
 source; `cycle update` propagates improvements outward, `cycle check` makes drift visible. Full
 rationale and diagram: `README.md`.
 
-Zero dependencies, Node ESM, `>=20`. The entire CLI is `bin/cycle.mjs` (one file, on purpose — it's
-installed via symlink, so no module resolution games).
+Zero dependencies, Node ESM, `>=20`. The CLI is `bin/cycle.mjs` plus two lazily-imported siblings
+(`bin/adopt.mjs`, `bin/lint.mjs`) — it's installed via symlink, and relative sibling imports
+resolve through that with no module resolution games.
 
 ## This repo dogfoods itself
 
@@ -34,7 +35,9 @@ Every file under `.claude/skills/` carries a provenance comment and must never b
 ## Commands
 
 ```sh
-npm test                                    # the only gate — node --test test/*.test.mjs
+npm test                                    # node --test test/*.test.mjs
+cycle check                                 # the other gate — this repo's own rendered
+                                             #   copy must match the templates (dogfood)
 node --test test/render.test.mjs            # a single test file
 node --test --test-name-pattern="drift"     # a single test by name, across files
 cycle lint                                  # internal consistency: §N citations, verb bindings,
@@ -97,8 +100,8 @@ into the template or config, don't force over it.
 
 ## CI
 
-`.github/workflows/ci.yml` — one `gates` job, `npm test`, on `ubuntu-latest`, no install step
-(zero dependencies). GitHub-hosted rather than ghrunner01 because this repo is public and the org's
+`.github/workflows/ci.yml` — one `gates` job (`npm test` + `node bin/cycle.mjs check`), on
+`ubuntu-latest`, no install step (zero dependencies). GitHub-hosted rather than ghrunner01 because this repo is public and the org's
 runner group refuses public repos. `main` is branch-protected on the bare context name `gates` (not
 a scoped `CI / gates (pull_request)` form); PRs merge via the backend's poll-then-merge guard once
 CI is green, not a server-side auto-merge.
