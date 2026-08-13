@@ -2,7 +2,7 @@
 name: implement
 description: Implement a single the-cycle work story from its issue. Reads the spec from the issue body (Why / Touches / Acceptance), picks the executor (orchestrator-inline by default; a parallel agent only for independent mechanical work across several files), moves it to status:in-progress, and presents a plan before building. Plan-first. Usage `/implement #<n>`.
 ---
-<!-- cycle:rendered template=skills/implement.md.tmpl hash=d01840ec8b68 — managed by the-cycle; edit the template, not this file -->
+<!-- cycle:rendered template=skills/implement.md.tmpl hash=ec9c0164c37d — managed by the-cycle; edit the template, not this file -->
 
 # /implement #<n> — ship a single story
 
@@ -51,6 +51,7 @@ claims), §4 Gates, §9 Branch policy. The procedure below is just the ordering.
 9. **Independently re-verify** when an agent was spawned (§3) — re-run the gates **yourself**:
    ```
    npm test
+   node bin/cycle.mjs check
    ```
    The agent's "green" is a claim, not proof; a spawned "all green" has failed in a clean shell.
    A subagent reporting "completed" is likewise evidence of *intent*, not that its writes landed —

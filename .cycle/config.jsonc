@@ -68,7 +68,11 @@
     "executor_default": "orchestrator-inline"
   },
   "gates": {
-    "test": "npm test"
+    "test": "npm test",
+    // The dogfood's self-consistency gate: a template edit that skips `cycle update`
+    // leaves this repo's own rendered copy behind, and nothing else notices. Offline
+    // and deterministic by design, so CI runs it too (.github/workflows/ci.yml).
+    "check": "node bin/cycle.mjs check"
   },
   "deps": {
     "outdated": "npm outdated",

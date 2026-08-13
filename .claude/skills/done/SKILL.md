@@ -2,7 +2,7 @@
 name: done
 description: Ship a the-cycle story — commit the reviewed work, push, open a PR that Closes #<n>, and (for a safe story) merge it via the background poll-then-merge guard; a judgment-call story's PR is left for Brandon's manual merge. Done = the issue closes on merge. Plan-first. Usage `/done #<n>`. Use after /review (+ /patch) pass clean.
 ---
-<!-- cycle:rendered template=skills/done.md.tmpl hash=4ec3b11ed433 — managed by the-cycle; edit the template, not this file -->
+<!-- cycle:rendered template=skills/done.md.tmpl hash=d83ffbfc6a79 — managed by the-cycle; edit the template, not this file -->
 
 # /done #<n> — ship a story
 
@@ -23,6 +23,7 @@ mechanics, §8 Commit & PR conventions, §9 Branch policy. The procedure below i
 2. **Confirm gates green** (§4) — never `/done` over a red build:
    ```
    npm test
+   node bin/cycle.mjs check
    ```
 3. **Confirm findings were actioned, not parked** (§5) — `/patch` fixed every real finding, or
    each was an explicit escalation to a `finding` issue. Never a silent defer.
