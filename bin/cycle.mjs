@@ -1,12 +1,12 @@
 #!/usr/bin/env node
 // cycle — render the-cycle's work pipeline into a repo, and keep it honest.
 //
-// Zero dependencies, Node ESM. The CLI is this file plus two lazily-imported
-// siblings (adopt.mjs, lint.mjs), resolved relative to this file — it is installed
-// via a symlink from ~/.local/bin (see install.sh), and relative sibling imports
+// Zero dependencies, Node ESM. The CLI is this file plus one lazily-imported
+// sibling (lint.mjs), resolved relative to this file — it is installed via a
+// symlink from ~/.local/bin (see install.sh), and relative sibling imports
 // survive that with no module-resolution games.
 //
-// Commands: install · update · check · adopt · eject · render (debug)
+// Commands: install · update · check · eject · render (debug)
 //
 // A note on provenance. Each rendered file carries a comment recording the template
 // it came from and a hash of its own content. The upstream commit is deliberately
@@ -432,7 +432,7 @@ const overlayDir = (root) => join(root, '.cycle', 'overlays');
 function loadConfig(root) {
     const p = configPath(root);
     if (!existsSync(p)) {
-        fail('this repo has no .cycle/config.jsonc', 'run `cycle install` (or `cycle adopt`) first');
+        fail('this repo has no .cycle/config.jsonc', 'run `cycle install` first');
     }
     return readJsonc(p);
 }
@@ -957,8 +957,8 @@ async function cmdInstall(args) {
     if (!cycleHomeIsClone()) {
         console.log(
             `${dim('note:')} this ran from an npm/npx install, not a durable clone. The rendered skills ` +
-                'stand alone and will keep working, but `cycle update`/`check` and the /cycle-setup · ' +
-                `/cycle-adopt skills need the-cycle on disk — clone it to ${bold(join(homedir(), 'code', 'the-cycle'))} ` +
+                'stand alone and will keep working, but `cycle update`/`check` and the /cycle-setup ' +
+                `skill need the-cycle on disk — clone it to ${bold(join(homedir(), 'code', 'the-cycle'))} ` +
                 'and run install.sh (or export CYCLE_HOME).',
         );
     }
@@ -1338,10 +1338,6 @@ const USAGE = `${bold('cycle')} — render the-cycle's work pipeline into a repo
   ${bold('cycle update')} [--dry-run] [--force]
       Re-render. Shows a diff; refuses to clobber hand-edited files without --force.
 
-  ${bold('cycle adopt')} [--write]
-      Reverse-engineer an existing hand-written setup into config + overlays,
-      and show what would change. Read-only unless --write.
-
   ${bold('cycle lint')} [-q]
       Check the-cycle's own consistency: §N citations, verb bindings, overlay
       docs, profiles, cross-skill references. -q hides warnings. For working
@@ -1365,10 +1361,6 @@ async function main() {
         case 'update': return cmdUpdate(rest);
         case 'eject': return cmdEject(rest);
         case 'render': return cmdRender(rest);
-        case 'adopt': {
-            const { cmdAdopt } = await import('./adopt.mjs');
-            return cmdAdopt(rest, { CYCLE_HOME, findRepoRoot, detect, planRender, loadProfile, renderConfig, readJsonc });
-        }
         case 'lint': {
             const { cmdLint } = await import('./lint.mjs');
             return cmdLint(rest, { CYCLE_HOME, bold, dim, red, yellow, green });

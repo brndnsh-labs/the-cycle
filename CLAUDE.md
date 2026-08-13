@@ -10,9 +10,9 @@ and risk surfaces. It replaces three hand-copied, silently-diverged pipelines wi
 source; `cycle update` propagates improvements outward, `cycle check` makes drift visible. Full
 rationale and diagram: `README.md`.
 
-Zero dependencies, Node ESM, `>=20`. The CLI is `bin/cycle.mjs` plus two lazily-imported siblings
-(`bin/adopt.mjs`, `bin/lint.mjs`) — it's installed via symlink, and relative sibling imports
-resolve through that with no module resolution games.
+Zero dependencies, Node ESM, `>=20`. The CLI is `bin/cycle.mjs` plus one lazily-imported sibling
+(`bin/lint.mjs`) — it's installed via symlink, and relative sibling imports resolve through that
+with no module resolution games.
 
 ## This repo dogfoods itself
 
