@@ -19,6 +19,7 @@ import {
     stampProvenance,
     stripJsonComments,
     stripProvenance,
+    verifyForge,
 } from '../bin/cycle.mjs';
 
 const ctx = {
@@ -211,5 +212,47 @@ describe('diff', () => {
         assert.equal(d.added, 1);
         assert.equal(d.removed, 1);
         assert.equal(lineDiff('a\nb', 'a\nb').added, 0);
+    });
+});
+
+describe('forge verification', () => {
+    const base = {
+        backend: 'github',
+        repo: { slug: 'brndnsh-labs/the-cycle' },
+        backend_overrides: { auto_merge: true },
+    };
+
+    test('skips unsupported or unqueryable forge state without inventing a mismatch', () => {
+        assert.match(verifyForge({ backend: 'other' }).skipped, /no forge probe/);
+        assert.match(verifyForge({ backend: 'github', repo: {} }).skipped, /repo.slug/);
+        const result = verifyForge(base, { exec: () => { throw new Error('offline'); } });
+        assert.deepEqual(result.problems, []);
+        assert.match(result.skipped, /could not query/);
+    });
+
+    test('reports declared auto-merge that is disabled live', () => {
+        const result = verifyForge(base, { exec: () => '{"allow_auto_merge":false}' });
+        assert.match(result.problems.join('\n'), /declared true.*allow_auto_merge=false/);
+    });
+
+    test('reports live auto-merge missing from config', () => {
+        const cfg = { ...base, backend_overrides: { auto_merge: false } };
+        const result = verifyForge(cfg, { exec: () => '{"allow_auto_merge":true}' });
+        assert.match(result.problems.join('\n'), /allows auto-merge.*does not declare/);
+    });
+
+    test('requires status checks when auto-merge is declared', () => {
+        const exec = (_command, args) => args[1].includes('/protection')
+            ? '[]'
+            : '{"allow_auto_merge":true}';
+        const result = verifyForge(base, { exec });
+        assert.match(result.problems.join('\n'), /no required status checks/);
+    });
+
+    test('accepts matching auto-merge and protected branch state', () => {
+        const exec = (_command, args) => args[1].includes('/protection')
+            ? '["gates"]'
+            : '{"allow_auto_merge":true}';
+        assert.deepEqual(verifyForge(base, { exec }), { problems: [], skipped: null });
     });
 });

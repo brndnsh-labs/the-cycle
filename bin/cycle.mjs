@@ -20,7 +20,8 @@ import { createInterface } from 'node:readline/promises';
 import { execFileSync } from 'node:child_process';
 import { homedir } from 'node:os';
 import { basename, dirname, extname, join, relative, resolve } from 'node:path';
-import { parseArgs, styleText } from 'node:util';
+import { parseArgs } from 'node:util';
+import * as nodeUtil from 'node:util';
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 
@@ -31,7 +32,9 @@ const CYCLE_HOME = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 // ---------------------------------------------------------------------------
 
 const supportsColor = process.stdout.isTTY && process.env.NO_COLOR === undefined;
-const paint = (style, s) => (supportsColor ? styleText(style, s) : s);
+// util.styleText arrived after the initial Node 20 release. Keep the declared
+// >=20 floor honest instead of crashing during module evaluation on early 20.x.
+const paint = (style, s) => (supportsColor && nodeUtil.styleText ? nodeUtil.styleText(style, s) : s);
 const bold = (s) => paint('bold', s);
 const dim = (s) => paint('dim', s);
 const red = (s) => paint('red', s);
@@ -503,6 +506,16 @@ function buildContext(cfg, backend) {
             .filter(([, v]) => typeof v === 'string' && v.trim())
             .map(([, v]) => v);
     }
+    const dependencyManifests = cfg.deps?.manifests ?? [];
+    const knownLockfiles = new Set([
+        'pnpm-lock.yaml', 'yarn.lock', 'package-lock.json', 'Cargo.lock',
+        'go.sum', 'uv.lock', 'poetry.lock', 'Gemfile.lock',
+    ]);
+    // Configs written before deps.lockfile existed still carry the same fact in
+    // deps.manifests. Preserve their meaning on the next `cycle update`.
+    const inferredLockfile = dependencyManifests.find((path) => knownLockfiles.has(basename(path))) ?? '';
+    const hasDependencyManager = cfg.deps?.has_manager
+        ?? Boolean(cfg.deps?.outdated || dependencyManifests.length);
     return {
         ...cfg,
         gates,
@@ -516,10 +529,12 @@ function buildContext(cfg, backend) {
             status_labels: (cfg.tracker?.statuses ?? []).map((s) => s.name).join(','),
         },
         deps: {
+            has_manager: hasDependencyManager,
             outdated: '', audit: '', audit_fix: '', update: '', install: '', manifests: [],
             ...(cfg.deps ?? {}),
+            lockfile: cfg.deps?.lockfile ?? inferredLockfile,
             // Pre-formatted for prose: the join filter can't wrap each item in backticks.
-            manifests_md: (cfg.deps?.manifests ?? []).map((m) => `\`${m}\``).join(', '),
+            manifests_md: dependencyManifests.map((m) => `\`${m}\``).join(', '),
         },
         // `backend_overrides` lets one repo correct a backend-wide default that is
         // really a per-repo fact. `auto_merge` is the motivating case: it is a
@@ -553,23 +568,32 @@ const templatePath = (rel) => join(CYCLE_HOME, 'templates', rel);
  * a missing project number surfaces as "unresolved {{tracker.project}} in backend
  * verb @board_list" — technically true, useless as instruction.
  */
-function validateConfig(cfg, backend) {
+function validateConfig(root, cfg, backend) {
     const missing = Object.entries(backend.requires ?? {}).filter(([path]) => {
         const v = path.split('.').reduce((o, k) => (o == null ? o : o[k]), cfg);
         return v === undefined || v === null || v === '';
     });
-    if (!missing.length) return;
-    const lines = missing.map(([path, why]) => `  ${bold(path)} — ${why}`).join('\n');
-    fail(
-        `the ${cfg.backend} backend needs ${missing.length} value(s) set in .cycle/config.jsonc:\n${lines}`,
-        'set them, then re-run `cycle update`',
-    );
+    if (missing.length) {
+        const lines = missing.map(([path, why]) => `  ${bold(path)} — ${why}`).join('\n');
+        fail(
+            `the ${cfg.backend} backend needs ${missing.length} value(s) set in .cycle/config.jsonc:\n${lines}`,
+            'set them, then re-run `cycle update`',
+        );
+    }
+
+    const absentManifests = (cfg.deps?.manifests ?? []).filter((path) => !existsSync(join(root, path)));
+    if (absentManifests.length) {
+        fail(
+            `configured dependency manifest${absentManifests.length === 1 ? '' : 's'} missing: ${absentManifests.join(', ')}`,
+            'fix deps.manifests in .cycle/config.jsonc, or add the intended file, then re-run `cycle update`',
+        );
+    }
 }
 
 function planRender(root, cfg) {
     const backend = loadBackend(cfg.backend);
     const profile = loadProfile(cfg.profile);
-    validateConfig(cfg, backend);
+    validateConfig(root, cfg, backend);
     const ctx = buildContext(cfg, backend);
     const verbs = backend.verbs ?? {};
     const overlays = overlayDir(root);
@@ -712,37 +736,50 @@ const readState = (root) => (existsSync(statePath(root)) ? JSON.parse(readFileSy
 const ECOSYSTEMS = [
     ['pnpm-lock.yaml', {
         outdated: 'pnpm outdated', audit: 'pnpm audit', audit_fix: 'pnpm audit --fix',
-        update: 'pnpm update', install: 'pnpm install', manifests: ['package.json', 'pnpm-lock.yaml'],
+        update: 'pnpm update', install: 'pnpm install', lockfile: 'pnpm-lock.yaml', manifests: ['package.json', 'pnpm-lock.yaml'],
     }],
     ['yarn.lock', {
         outdated: 'yarn outdated', audit: 'yarn npm audit', audit_fix: '',
-        update: 'yarn up', install: 'yarn install', manifests: ['package.json', 'yarn.lock'],
+        update: 'yarn up', install: 'yarn install', lockfile: 'yarn.lock', manifests: ['package.json', 'yarn.lock'],
     }],
     ['package-lock.json', {
         outdated: 'npm outdated', audit: 'npm audit', audit_fix: 'npm audit fix',
-        update: 'npm update', install: 'npm install', manifests: ['package.json', 'package-lock.json'],
+        update: 'npm update', install: 'npm install', lockfile: 'package-lock.json', manifests: ['package.json', 'package-lock.json'],
     }],
     ['Cargo.toml', {
         outdated: 'cargo outdated', audit: 'cargo audit', audit_fix: '',
-        update: 'cargo update', install: 'cargo build', manifests: ['Cargo.toml', 'Cargo.lock'],
+        update: 'cargo update', install: 'cargo build', lockfile: 'Cargo.lock', manifests: ['Cargo.toml', 'Cargo.lock'],
     }],
     ['go.mod', {
         outdated: 'go list -u -m all', audit: 'govulncheck ./...', audit_fix: '',
-        update: 'go get -u ./...', install: 'go mod tidy', manifests: ['go.mod', 'go.sum'],
+        update: 'go get -u ./...', install: 'go mod tidy', lockfile: 'go.sum', manifests: ['go.mod', 'go.sum'],
     }],
     ['uv.lock', {
         outdated: 'uv pip list --outdated', audit: '', audit_fix: '',
-        update: 'uv lock --upgrade', install: 'uv sync', manifests: ['pyproject.toml', 'uv.lock'],
+        update: 'uv lock --upgrade', install: 'uv sync', lockfile: 'uv.lock', manifests: ['pyproject.toml', 'uv.lock'],
     }],
     ['poetry.lock', {
         outdated: 'poetry show --outdated', audit: '', audit_fix: '',
-        update: 'poetry update', install: 'poetry install', manifests: ['pyproject.toml', 'poetry.lock'],
+        update: 'poetry update', install: 'poetry install', lockfile: 'poetry.lock', manifests: ['pyproject.toml', 'poetry.lock'],
     }],
     ['Gemfile.lock', {
         outdated: 'bundle outdated', audit: 'bundle audit', audit_fix: '',
-        update: 'bundle update', install: 'bundle install', manifests: ['Gemfile', 'Gemfile.lock'],
+        update: 'bundle update', install: 'bundle install', lockfile: 'Gemfile.lock', manifests: ['Gemfile', 'Gemfile.lock'],
     }],
 ];
+
+const NPM_WITHOUT_LOCKFILE = {
+    has_manager: true,
+    outdated: 'npm outdated', audit: '', audit_fix: '',
+    update: 'npm update --package-lock=false', install: 'npm install --package-lock=false',
+    lockfile: '', manifests: ['package.json'],
+};
+
+const NO_DEPENDENCY_WORKFLOW = {
+    has_manager: false,
+    outdated: '', audit: '', audit_fix: '', update: '', install: '',
+    lockfile: '', manifests: [],
+};
 
 /** Best-effort defaults so the interview is confirmations, not data entry. */
 export function detect(root) {
@@ -779,7 +816,16 @@ export function detect(root) {
         out.deploy = { test: './scripts/deploy.sh test', prod: './scripts/deploy.sh prod' };
     }
 
-    out.deps = ECOSYSTEMS.find(([marker]) => existsSync(join(root, marker)))?.[1];
+    const ecosystem = ECOSYSTEMS.find(([marker]) => existsSync(join(root, marker)))?.[1];
+    if (ecosystem) {
+        out.deps = {
+            ...ecosystem,
+            manifests: ecosystem.manifests.filter((path) => existsSync(join(root, path))),
+            lockfile: existsSync(join(root, ecosystem.lockfile)) ? ecosystem.lockfile : '',
+        };
+    } else if (existsSync(pkgPath)) {
+        out.deps = NPM_WITHOUT_LOCKFILE;
+    }
     return out;
 }
 
@@ -864,16 +910,16 @@ export function draftConfig(root, { backend: wanted, profile, set } = {}) {
             milestones: [],
         },
         routing: {
-            model: '**opus for everything** (spawned agents included).',
+            model: "Use the active harness's default model unless the task explicitly requires another.",
             executor_default: 'orchestrator-inline',
         },
         gates: Object.keys(d.gates).length ? d.gates : { typecheck: 'npm run typecheck', test: 'npm test' },
-        // /dep-update's package-manager commands. Detected from the lockfile; blank
-        // where the ecosystem has no equivalent (plenty have no audit-fix).
-        deps: d.deps ?? ECOSYSTEMS.find(([m]) => m === 'package-lock.json')[1],
+        // /dep-update's package-manager commands. Detected from an ecosystem marker;
+        // blank where the ecosystem has no equivalent (plenty have no audit-fix).
+        deps: d.deps ?? NO_DEPENDENCY_WORKFLOW,
         brakes: ['auth / tokens / secrets', 'schema / data migration', 'anything destructive or irreversible'],
         branch: { minor_edits_direct: true },
-        commit: { coauthor: 'Claude Opus 5 <noreply@anthropic.com>' },
+        commit: { coauthor: '' },
         deploy: d.deploy ?? { test: '', prod: '' },
     };
     return { cfg: applyConfigSets(cfg, set), detected: d };
@@ -1055,7 +1101,7 @@ function cmdPlan(root, values) {
 /** config.jsonc with comments, so the file explains itself when Brandon opens it. */
 function renderConfig(cfg) {
     return `// the-cycle bindings for this repo.
-// Everything repo-specific lives here; the skills in .claude/skills are rendered
+// Everything repo-specific lives here; the skills in configured harness trees are rendered
 // from shared templates and should not be hand-edited (\`cycle check\` will tell you
 // if they have been). Re-render with \`cycle update\` after changing this file.
 ${JSON.stringify(cfg, null, 2)}
@@ -1073,7 +1119,7 @@ ${JSON.stringify(cfg, null, 2)}
  * authenticated, no network) is reported as a skip, never as a mismatch — an
  * unanswerable question must not read as a failed answer.
  */
-function verifyForge(cfg) {
+export function verifyForge(cfg, { exec = execFileSync } = {}) {
     const problems = [];
     const slug = cfg.repo?.slug;
     if (cfg.backend !== 'github') return { problems, skipped: `backend ${cfg.backend} has no forge probe` };
@@ -1082,7 +1128,7 @@ function verifyForge(cfg) {
     let repoJson;
     try {
         repoJson = JSON.parse(
-            execFileSync('gh', ['api', `repos/${slug}`, '--jq', '{allow_auto_merge,delete_branch_on_merge}'], {
+            exec('gh', ['api', `repos/${slug}`, '--jq', '{allow_auto_merge,delete_branch_on_merge}'], {
                 encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'],
             }),
         );
@@ -1113,7 +1159,7 @@ function verifyForge(cfg) {
     if (declared) {
         try {
             const contexts = JSON.parse(
-                execFileSync('gh', ['api', `repos/${slug}/branches/main/protection`, '--jq', '.required_status_checks.contexts'], {
+                exec('gh', ['api', `repos/${slug}/branches/main/protection`, '--jq', '.required_status_checks.contexts'], {
                     encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'],
                 }),
             );

@@ -1,6 +1,7 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides repository guidance to AI coding agents. `AGENTS.md` is the Codex entry point;
+this historical filename remains the detailed canonical guide.
 
 ## What this is
 
@@ -16,11 +17,11 @@ with no module resolution games.
 
 ## This repo dogfoods itself
 
-**`.claude/skills/**` in this checkout is *rendered output*, not hand-written.** the-cycle installs
+**`.claude/skills/**` and `.agents/skills/**` in this checkout are *rendered output*, not hand-written.** the-cycle installs
 its own pipeline into itself (`.cycle/config.jsonc`, profile `lean`, backend `github`) to manage its
 own backlog — issues in `brndnsh-labs/the-cycle`, routed by `status:*` labels, which also makes this repo
 the live proof that the `github` backend works.
-Every file under `.claude/skills/` carries a provenance comment and must never be hand-edited
+Every file under either harness skill tree carries a provenance comment and must never be hand-edited
 — `cycle check` will flag it as drifted.
 
 - To change pipeline **behavior/procedure**: edit `templates/DOCTRINE.md.tmpl` or
@@ -28,7 +29,7 @@ Every file under `.claude/skills/` carries a provenance comment and must never b
   eventually every other consuming repo).
 - To change **this repo's bindings** (gates, brakes, tracker fields): edit `.cycle/config.jsonc`,
   then `cycle update`.
-- Read `.claude/skills/DOCTRINE.md` once per session — it's the shared rule spine every skill here
+- Read the `DOCTRINE.md` in your harness tree once per session — it's the shared rule spine every skill here
   cites as `§N` (tracker/labels/routing/gates/autonomy/merge/commit conventions). Don't restate its
   rules; skills and this file both just point at it.
 
@@ -100,8 +101,10 @@ into the template or config, don't force over it.
 
 ## CI
 
-`.github/workflows/ci.yml` — one `gates` job (`npm test` + `node bin/cycle.mjs check`), on
-`ubuntu-latest`, no install step (zero dependencies). GitHub-hosted rather than ghrunner01 because this repo is public and the org's
+`.github/workflows/ci.yml` — the required `gates` job runs `npm test` plus
+`node bin/cycle.mjs check` first on Node 22 and then on the exact declared 20.0.0 floor, so branch
+protection cannot pass before compatibility does. It uses `ubuntu-latest` with no install step
+(zero dependencies). GitHub-hosted rather than ghrunner01 because this repo is public and the org's
 runner group refuses public repos. `main` is branch-protected on the bare context name `gates` (not
-a scoped `CI / gates (pull_request)` form); PRs merge via the backend's poll-then-merge guard once
-CI is green, not a server-side auto-merge.
+a scoped `CI / gates (pull_request)` form); safe PRs queue server-side auto-merge, which waits for
+that required context.

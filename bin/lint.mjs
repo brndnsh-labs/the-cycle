@@ -364,7 +364,7 @@ export function lint({ CYCLE_HOME }) {
     // every consuming repo, and the top-level docs because they are what a reader meets
     // first. Both are prose this repo owns and can hold to one dialect.
     const prose = new Map(templates);
-    for (const rel of ['README.md', 'CLAUDE.md']) {
+    for (const rel of ['README.md', 'AGENTS.md', 'CLAUDE.md']) {
         const p = join(CYCLE_HOME, rel);
         if (existsSync(p)) prose.set(rel, readFileSync(p, 'utf8'));
     }

@@ -2,13 +2,13 @@
 name: dep-update
 description: Routine dependency hygiene for the-cycle — survey what's outdated, plan the bump, update, run the gates, and land one dependency-metadata commit. Distinguishes a stale test expectation from a real regression. Never uses `audit fix --force`; never auto-pushes. Plan-first. Usage `/dep-update` (or `/dep-update <package>`).
 ---
-<!-- cycle:rendered template=skills/dep-update.md.tmpl hash=b5d36ac6dff1 — managed by the-cycle; edit the template, not this file -->
+<!-- cycle:rendered template=skills/dep-update.md.tmpl hash=70677227a33a — managed by the-cycle; edit the template, not this file -->
 
 # /dep-update — dependency hygiene
 
 Goal: keep dependencies current without turning a routine bump into an outage.
 
-**Shared rules in `.claude/skills/DOCTRINE.md` — read it if not already in context.** Leans on §4
+**Shared rules in `.agents/skills/DOCTRINE.md` — read it if not already in context.** Leans on §4
 (Gates), §8 (commit conventions — explicit paths), §9 (branch policy).
 
 ## Workflow

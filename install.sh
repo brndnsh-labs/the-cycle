@@ -11,10 +11,10 @@ set -euo pipefail
 
 CYCLE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BIN_DIR="$HOME/.local/bin"
-SKILL_DIR="$HOME/.claude/skills"
+SKILL_DIRS=("$HOME/.claude/skills" "$HOME/.agents/skills")
 PATH_LINE='export PATH="$HOME/.local/bin:$PATH"'
 
-mkdir -p "$BIN_DIR" "$SKILL_DIR"
+mkdir -p "$BIN_DIR" "${SKILL_DIRS[@]}"
 
 # Only cycle.mjs. The other files in bin/ are subcommand modules it imports on
 # demand — on PATH they would look like commands and do nothing when run.
@@ -26,12 +26,23 @@ echo
 # The setup skills are PERSONAL, not per-repo: /cycle-setup has to be available in a
 # repo that doesn't have the-cycle installed yet, which is the entire point of it.
 # Symlinked so a `git pull` here updates them without re-running this script.
-echo "Linking setup skills into $SKILL_DIR:"
-for src in "$CYCLE"/skills/*/; do
-    [ -d "$src" ] || continue
-    name="$(basename "$src")"
-    ln -sfn "${src%/}" "$SKILL_DIR/$name"
-    echo "  /$name"
+echo "Linking setup skills into personal harness skill directories:"
+for skill_dir in "${SKILL_DIRS[@]}"; do
+    echo "  $skill_dir"
+    for src in "$CYCLE"/skills/*/; do
+        [ -d "$src" ] || continue
+        name="$(basename "$src")"
+        target="$skill_dir/$name"
+        # `ln -sfn source existing-directory` nests the link inside that directory
+        # instead of replacing it. Refuse the collision so a stale hand-installed
+        # skill cannot survive behind a misleading success message.
+        if [ -e "$target" ] && [ ! -L "$target" ]; then
+            echo "error: refusing to replace existing directory or file: $target" >&2
+            exit 1
+        fi
+        ln -sfn "${src%/}" "$target"
+        echo "    /$name"
+    done
 done
 
 echo

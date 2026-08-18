@@ -1,6 +1,6 @@
 ---
 name: dep-update
-description: Routine dependency hygiene for {{repo.name}} — survey what's outdated, plan the bump, update, run the gates, and land one lockfile commit. Distinguishes a stale test expectation from a real regression. Never uses `audit fix --force`; never auto-pushes. Plan-first. Usage `/dep-update` (or `/dep-update <package>`).
+description: {{#if deps.has_manager}}Routine dependency hygiene for {{repo.name}} — survey what's outdated, plan the bump, update, run the gates, and land one dependency-metadata commit. Distinguishes a stale test expectation from a real regression. Never uses `audit fix --force`; never auto-pushes. Plan-first. Usage `/dep-update` (or `/dep-update <package>`).{{/if}}{{#unless deps.has_manager}}Dependency updates are not configured for {{repo.name}} because no supported dependency manifest was detected. Explains how to configure the workflow without inventing package-manager commands. Usage `/dep-update`.{{/unless}}
 ---
 
 # /dep-update — dependency hygiene
@@ -11,6 +11,18 @@ Goal: keep dependencies current without turning a routine bump into an outage.
 (Gates), §8 (commit conventions — explicit paths), §9 (branch policy).
 
 {{> overlay?:dep-update-landmines}}
+
+{{#unless deps.has_manager}}
+## Not configured
+
+No supported dependency manifest was detected when the-cycle was installed. Dependency updates are
+not applicable until the repository adopts a package manager or `.cycle/config.jsonc` is updated
+with real dependency commands and manifests. Do not invent a package manager, manifest, or
+lockfile merely to make this skill actionable; run `/cycle-setup` after the repository's dependency
+workflow exists.
+{{/unless}}
+
+{{#if deps.has_manager}}
 
 ## Workflow
 
@@ -48,9 +60,11 @@ Goal: keep dependencies current without turning a routine bump into an outage.
 
 ## Edge cases
 
-- **Lockfile drift with nothing outdated:** `{{deps.install}}` rewrote the lockfile without any
+- {{#if deps.lockfile}}**Lockfile drift with nothing outdated:** `{{deps.install}}` rewrote `{{deps.lockfile}}` without any
   version change (a transitive resolution moved). That's a legitimate standalone commit — say so, don't
-  bury it in an unrelated diff.
+  bury it in an unrelated diff.{{/if}}{{#unless deps.lockfile}}**This repo has no configured
+  lockfile.** Work from the configured manifests ({{deps.manifests_md}}); do not invent a lockfile
+  as an unrelated side effect.{{/unless}}
 - **A formatter or linter bumped** and now reformats files nobody touched: separate the
   reformat-everything commit from the version bump, or the diff is unreviewable.
 - **A native or compiled dependency's ABI changed**: the gates may pass locally and fail on the
@@ -58,3 +72,4 @@ Goal: keep dependencies current without turning a routine bump into an outage.
 - **A patch/override is in play:** confirm it still applies after the bump. A silently-dropped
   patch is the classic "it worked locally" failure.
 - **Nothing is outdated:** say so and stop. Don't manufacture a bump.
+{{/if}}

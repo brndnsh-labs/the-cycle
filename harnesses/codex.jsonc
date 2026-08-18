@@ -9,8 +9,10 @@
 //     repo-root path is what a rendered install writes to).
 //   - subagents: GA 2026-03-14 — parallel spawn from a single task, so /fan-out and
 //     /cover's per-unit spawn apply here too.
-//   - structured questions: `ask_user_question` — a tabbed, recommendation-first
-//     choice tool, functionally equivalent to Claude Code's AskUserQuestion.
+//   - structured questions: `request_user_input` exists in Plan mode, but repository
+//     skills normally run in Default mode. Advertise the capability as unavailable so
+//     rendered workflows use their direct-chat fallback instead of naming a tool they
+//     cannot call.
 {
   "name": "codex",
   "display": "Codex CLI",
@@ -19,12 +21,12 @@
   "skill_file": "SKILL.md",
 
   "capabilities": {
-    "has_menus": true,
+    "has_menus": false,
     "has_subagents": true
   },
 
   "notes": {
     "attribution": "🤖 Generated with [Codex CLI](https://developers.openai.com/codex/cli)",
-    "ask": "`ask_user_question`"
+    "ask": "plain chat"
   }
 }

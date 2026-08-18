@@ -1,9 +1,24 @@
 {
-  "name": "the-cycle",
+  "name": "@brndnsh/the-cycle",
   "version": "0.1.0",
-  "private": true,
   "type": "module",
   "description": "An installable, self-updating work pipeline for AI coding harnesses",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/brndnsh-labs/the-cycle.git"
+  },
+  "publishConfig": { "access": "public" },
+  "files": [
+    "backends/",
+    "bin/",
+    "docs/",
+    "harnesses/",
+    "profiles/",
+    "skills/",
+    "templates/",
+    "install.sh"
+  ],
   "bin": { "cycle": "bin/cycle.mjs" },
   "scripts": {
     "test": "node --test test/*.test.mjs"

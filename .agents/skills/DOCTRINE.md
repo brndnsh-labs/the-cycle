@@ -1,4 +1,4 @@
-<!-- cycle:rendered template=DOCTRINE.md.tmpl hash=0a060e228db8 — managed by the-cycle; edit the template, not this file -->
+<!-- cycle:rendered template=DOCTRINE.md.tmpl hash=53ecb293e2c7 — managed by the-cycle; edit the template, not this file -->
 # Pipeline doctrine (shared)
 
 Single source of truth for the rules the the-cycle work-loop skills share. A skill that says
@@ -196,7 +196,7 @@ that isn't in the §1 table.
   **with `Closes #<n>`** (closing the issue is the done-signal), title = the Conventional-Commit
   subject. PR bodies end with:
   ```
-  🤖 Generated with [Claude Code](https://claude.com/claude-code)
+  🤖 Generated with [Codex CLI](https://developers.openai.com/codex/cli)
   ```
 - The `Closes/Fixes/Resolves #N` keyword fires **anywhere** in the body regardless of surrounding
   prose — writing "`Closes #844` is NOT set" still closes #844. When carving one item out of a

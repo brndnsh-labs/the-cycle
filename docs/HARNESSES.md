@@ -37,10 +37,10 @@ executables to keep in sync.
 | `harness.display` | `Claude Code` | `Codex CLI` | human-readable, for prose |
 | `harness.root` | `.claude/skills` | `.agents/skills` | where this tree's skills land |
 | `harness.doctrine_path` | `.claude/skills/DOCTRINE.md` | `.agents/skills/DOCTRINE.md` | computed (`root/DOCTRINE.md`) — every skill's "Shared rules in `…`" line |
-| `harness.has_menus` | `true` | `true` | a structured, recommendation-first choice tool exists |
+| `harness.has_menus` | `true` | `false` | a structured choice tool is callable in normal skill execution |
 | `harness.has_subagents` | `true` | `true` | a native parallel-subagent spawn tool exists |
 | `harness.attribution` | `🤖 Generated with [Claude Code](…)` | `🤖 Generated with [Codex CLI](…)` | the §8 PR-body trailer |
-| `harness.ask` | `` `AskUserQuestion` `` | `` `ask_user_question` `` | the structured-question tool's name, backticked |
+| `harness.ask` | `` `AskUserQuestion` `` | `plain chat` | how a workflow asks a discrete question |
 
 `doctrine_path` is computed by the engine (`buildHarnessContext` in `bin/cycle.mjs`) from `root` —
 it isn't a field a harness file declares. Everything else comes straight from the `.jsonc` file.
@@ -54,15 +54,14 @@ otherwise silently falsy, not a hard error — see `bin/lint.mjs`):
 
 | | Claude Code | Codex CLI |
 | --- | --- | --- |
-| `has_menus` | `true` — `AskUserQuestion` | `true` — `ask_user_question` (GA 2026) |
+| `has_menus` | `true` — `AskUserQuestion` | `false` — `request_user_input` is Plan-mode only |
 | `has_subagents` | `true` — the Agent tool | `true` — subagents, GA 2026-03-14 |
 
-Both current harnesses happen to have both capabilities — Codex was chosen as the second target
-*because* it's nearly a structural copy of Claude Code's model (same open agent-skills format, a
-comparable menu tool, comparable subagent support). The `{{#unless harness.has_menus}}` /
-`{{#unless harness.has_subagents}}` branches exist for a **future**, less-capable harness (Opencode,
-Pi — see the harness-target follow-up issues), and are exercised by the render tests even though no
-shipped harness takes that path today.
+Both harnesses support the same open agent-skills format and native subagents. Codex's structured
+question tool is mode-scoped, however, so ordinary skill execution takes the direct-chat menu
+fallback. The `{{#unless harness.has_menus}}` / `{{#unless harness.has_subagents}}` branches are
+real shipped behavior as well as the extension seam for a future, less-capable harness (Opencode,
+Pi — see the harness-target follow-up issues).
 
 ## Verified discovery paths, not assumed
 

@@ -1,0 +1,68 @@
+---
+name: patch
+description: Address /review findings on the uncommitted the-cycle diff. Reads the most-recent review output from context, triages (fix-now is the DEFAULT for any finding about this diff — P0/P1/bounded-P2; escalate to Brandon if it needs a decision or is too big), presents a fix plan, then patches inline — no agent spawn, the orchestrator already holds the diff + findings. Re-runs the gates after. Use after /review, before /done. Plan-first.
+---
+<!-- cycle:rendered template=skills/patch.md.tmpl hash=21b0fc67d17f — managed by the-cycle; edit the template, not this file -->
+
+# /patch — address reviewer findings
+
+Goal: close the review→done seam — sort `/review`'s findings and apply inline fixes.
+
+**Shared rules in `.agents/skills/DOCTRINE.md` — read it if not already in context.** The triage
+below applies §5 (findings get actioned not parked — the `finding` issue set trends to empty) and
+§2 (the `finding` label); the re-run gates are §4. **Patch does not change Status** — the story
+stays in progress.
+
+## Workflow
+
+1. **Load findings** from the most-recent `/review` output in context (severity, `file:line`,
+   verbatim quote, suggested direction). If not in context (new session), ask Brandon to
+   re-run `/review`.
+2. **Triage:**
+
+   | Triage | Criteria | Action |
+   |---|---|---|
+   | **Fix now (DEFAULT)** | Any finding about the diff under review — P0, P1, **or a bounded P2** (mechanical, or a small/localized change). This is the default, not the exception. | patch inline this turn |
+   | **Escalate to Brandon** | A real finding that (a) needs a design call (§5 — auth / tokens / secrets, schema / data migration, anything destructive or irreversible, or any genuinely ambiguous call), or (b) is large / cross-cutting / would balloon the diff | stop; surface it; **on Brandon's nod** open a `finding` issue (`gh issue create --title "<title>" --body "<body>" --label "finding"`) and/or recommend `/implement #<n>` with a fix-focused prompt — **never silently shelve a real finding** |
+   | **New idea** | A genuinely *new* idea/feature surfaced during review — not a flaw in this code | **note it to Brandon**; don't open an issue unprompted |
+
+   **Bias to fix now.** Deferring a real finding to a list is the thing we're eliminating — the
+   open `finding` issues should trend to *empty* (§2). A fix that's genuinely too big to do
+   in-cycle is an **escalation** (with Brandon's nod), not a silent defer.
+3. **Present the patch plan** (Fix-now / Escalate, each with
+   `file:line` + a fix sketch + the §4 gates) — a status update, not a gate (§5).
+4. **Patch inline immediately** in the same turn, with Edit/Write — no "Apply?" wait, unless a
+   finding needed escalation (§5). **No spawn**: the orchestrator's context already holds the diff
+   and the findings; a subagent would re-derive both and get them subtly wrong. Add a `**Why:**`
+   comment at any non-obvious fix site.
+5. **Re-run gates** (§4):
+   ```
+   npm test
+   node bin/cycle.mjs check
+   ```
+   Re-spawn a specific reviewer if the patch landed in their lane. If a Fix-now patch fails a gate,
+   stop and surface — don't pile on.
+6. **Report:** a table of patches applied (finding → fix), any **escalated** findings, and gate
+   status. The default expectation is that real findings were *fixed*, not parked — call out
+   anything that wasn't, and why. Then suggest `/done` (if green) or `/review` again (if the
+   patches were substantive).
+
+## Safety
+
+- Never patch a file the most-recent `/review` didn't flag — that's scope creep.
+- Never silently downgrade a P0 to avoid escalation; if you think it's overblown, say so and let
+  Brandon decide.
+- Don't run reviewers here — that's `/review`'s job.
+
+## Edge cases
+
+- **No findings:** report; suggest `/done` directly.
+- **All findings are P0 design calls:** patch none; surface the questions; recommend
+  `/implement #<n>`.
+- **Findings conflict** (one says tighten, one says loosen the same threshold): present both; ask —
+  don't auto-pick.
+- **Cited line has moved** (the diff was edited since `/review`): re-Read, relocate by content
+  match, and note the drift.
+- **A finding contradicts a project memory note:** this is a §5 always-brake — **escalate, don't
+  resolve it here.** The memory usually wins, but "usually" is not a license to drop a finding
+  silently: surface both, say which you'd keep and why, and let Brandon call it.

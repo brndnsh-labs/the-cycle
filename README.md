@@ -39,12 +39,15 @@ Full rationale for all of the above: `docs/AUTHORING.md`.
 Bootstrap, no clone required:
 
 ```sh
-npx @brndnsh/the-cycle install       # runs the interview, renders into the current repo
+# runs the interview and renders into the current repo
+npx --yes --allow-git=root --package=github:brndnsh-labs/the-cycle cycle install
 ```
 
-npx is for a one-off first render — the fetched copy lives in npx's ephemeral cache, so `cycle
-update` / `cycle check` and the personal `/cycle-setup` skill need the durable
-clone below. `cycle install`'s own output says as much when it ran this way.
+npx is for a one-off first render directly from GitHub — the fetched copy lives in npx's
+ephemeral cache, so `cycle update` / `cycle check` and the personal `/cycle-setup` skill need the
+durable clone below. `--allow-git=root` is the narrow npm opt-in for this explicitly requested root
+package; transitive git dependencies remain disabled. `cycle install`'s own output says as much
+when it ran this way.
 
 For everyday use:
 
@@ -59,7 +62,7 @@ automatically, for machines that would rather not reach GitHub.
 
 Don't push to the Forgejo mirror directly — the next sync from GitHub overwrites it.
 
-`install.sh` also links `/cycle-setup` into `~/.claude/skills` as a personal
+`install.sh` also links `/cycle-setup` into both `~/.claude/skills` and `~/.agents/skills` as a personal
 skill — it has to work in a repo that doesn't have the-cycle yet.
 
 Then, in a repo:
@@ -117,7 +120,7 @@ picks one or more; `cycle update` renders a complete, independent skill tree per
 | | Claude Code | Codex CLI |
 | --- | --- | --- |
 | skills discovered at | `.claude/skills/<name>/SKILL.md` | `.agents/skills/<name>/SKILL.md` |
-| structured questions | `AskUserQuestion` | `ask_user_question` |
+| structured questions | `AskUserQuestion` | direct chat (`request_user_input` is Plan-mode only) |
 | parallel subagents | the Agent tool | subagents (GA 2026-03-14) |
 
 Full vocabulary, the honesty rule around capability flags, and how to add a third harness:
@@ -127,6 +130,7 @@ Full vocabulary, the honesty rule around capability flags, and how to add a thir
 
 ```
 .github/workflows/ci.yml    `npm test` on PR + push to main
+AGENTS.md               cross-harness repository entry point
 bin/
   cycle.mjs            the CLI — Node ESM, zero dependencies
 install.sh             symlink bin/cycle onto PATH
@@ -145,12 +149,13 @@ docs/
   BACKENDS.md          the verb vocabulary; adding a backend
   HARNESSES.md         the harness.* vocabulary; adding a harness
   PATTERNS.md          reviewer-agent skeleton, hooks, permissions
+  RELEASING.md         package boundary, preflight, and explicit publish gate
 ```
 
 ## Requirements
 
-Node ≥ 20, git, and bash for `install.sh`. No dependencies, no build step. `gh` authed with the
-`project` scope.
+Node ≥ 20, git, and bash for `install.sh`. No dependencies, no build step. `gh` must be
+authenticated for tracker operations; rendering, linting, and drift checks work offline.
 
 ## Adopting an existing repo
 
