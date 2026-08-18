@@ -42,3 +42,9 @@ jobs:
       # CI-safe. Fails if a template moved without `cycle update` re-rendering this
       # repo's own copy — the drift the tool exists to catch, caught on itself.
       - run: node bin/cycle.mjs check
+      # Exercise the exact declared floor, not merely the latest 20.x release.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20.0.0'
+      - run: npm test
+      - run: node bin/cycle.mjs check

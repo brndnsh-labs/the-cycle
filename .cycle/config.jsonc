@@ -1,5 +1,5 @@
 // the-cycle bindings for this repo.
-// Everything repo-specific lives here; the skills in .claude/skills are rendered
+// Everything repo-specific lives here; the skills in configured harness trees are rendered
 // from shared templates and should not be hand-edited (`cycle check` will tell you
 // if they have been). Re-render with `cycle update` after changing this file.
 {
@@ -10,6 +10,8 @@
   },
   "profile": "lean",
   "backend": "github",
+  // Dogfood both supported render targets so their dialects cannot drift unnoticed.
+  "harnesses": ["claude", "codex"],
   // the-cycle is PUBLIC, so a Free org can branch-protect it, and `main` requires the
   // `gates` context — so `gh pr merge --auto` genuinely waits instead of firing on the
   // spot. Enabled on the repo 2026-08-07 alongside `delete_branch_on_merge` (which is
@@ -64,7 +66,7 @@
     "milestones": []
   },
   "routing": {
-    "model": "**opus for everything** (spawned agents included).",
+    "model": "Use the active harness's default model unless the task explicitly requires another.",
     "executor_default": "orchestrator-inline"
   },
   "gates": {
@@ -76,13 +78,14 @@
   },
   "deps": {
     "outdated": "npm outdated",
-    "audit": "npm audit",
-    "audit_fix": "npm audit fix",
-    "update": "npm update",
-    "install": "npm install",
+    // This package intentionally has no dependency lockfile. `npm audit` fails with ENOLOCK,
+    // so don't teach agents to run a gate the repository cannot satisfy.
+    "audit": "",
+    "audit_fix": "",
+    "update": "npm update --package-lock=false",
+    "install": "npm install --package-lock=false",
     "manifests": [
-      "package.json",
-      "package-lock.json"
+      "package.json"
     ]
   },
   "brakes": [
@@ -98,7 +101,8 @@
     "minor_edits_direct": false
   },
   "commit": {
-    "coauthor": "Claude Opus 5 <noreply@anthropic.com>"
+    // Let each harness use its real identity rather than inventing a shared one.
+    "coauthor": ""
   },
   "deploy": {
     "test": "",

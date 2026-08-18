@@ -104,10 +104,11 @@ Broad, intentional entries (`Bash(npm run *)`, `Bash(git *)`) are worth keeping;
 literals are noise that never gets reused. `/fewer-permission-prompts` exists to replace this pile
 — run it occasionally instead of letting the file grow.
 
-## Scoped CLAUDE.md files
+## Scoped agent instruction files
 
-Invariants that only matter inside one directory belong in a `CLAUDE.md` *in that directory*, not
-in the global memory index — the index loads wholesale every session, so every line is a tax paid
-forever, while a scoped file costs nothing until someone opens that directory.
+Invariants that only matter inside one directory belong in the harness's scoped instruction file
+(`AGENTS.md` for Codex or `CLAUDE.md` for Claude Code) *in that directory*, not in the global memory
+index — the index loads wholesale every session, so every line is a tax paid forever, while a
+scoped file costs nothing until someone opens that directory.
 
 Leave a one-line pointer in the index saying the detail lives there.

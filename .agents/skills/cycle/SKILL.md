@@ -2,14 +2,14 @@
 name: cycle
 description: Run the full the-cycle story loop on one issue or a chain — composes /implement → /review → /patch → /done (→ optional /deploy-test), interrupting only on a judgment call. Usage `/cycle #<n>` · `/cycle next` · `/cycle next --until-blocked` · add `--deploy`.
 ---
-<!-- cycle:rendered template=skills/cycle.md.tmpl hash=c5fa85661a41 — managed by the-cycle; edit the template, not this file -->
+<!-- cycle:rendered template=skills/cycle.md.tmpl hash=260b386a0a4c — managed by the-cycle; edit the template, not this file -->
 
 # /cycle — full loop on one story or a chain
 
 Goal: collapse the routine `/implement → /review → /patch → /done` rhythm into one invocation.
 Plan-first.
 
-**Shared rules in `.claude/skills/DOCTRINE.md` — read it if not already in context.** This skill is
+**Shared rules in `.agents/skills/DOCTRINE.md` — read it if not already in context.** This skill is
 the orchestrator of the others, so it leans on nearly all of it: §1 readiness, §3 routing, §4
 Gates, **§5 Judgment calls & autonomy (the governing rule below IS §5)**, §6 Merge guard, §8/§9
 commit and branch policy. The phases invoke `/implement`, `/review`, `/patch`, `/done` — run their

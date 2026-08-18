@@ -1,13 +1,14 @@
 ---
 name: done
-description: Ship a {{repo.name}} story — commit the reviewed work, push, open a PR that Closes #<n>, and (for a safe story) merge it via the background poll-then-merge guard; a judgment-call story's PR is left for {{repo.human}}'s manual merge. Done = the issue closes on merge. Plan-first. Usage `/done #<n>`. Use after /review (+ /patch) pass clean.
+description: Ship a {{repo.name}} story — commit the reviewed work, push, open a PR that Closes #<n>, and (for a safe story) {{#if backend.auto_merge}}queue server-side auto-merge{{/if}}{{#unless backend.auto_merge}}land it through the background poll-then-merge guard{{/unless}}; a judgment-call story's PR is left for {{repo.human}}'s manual merge. Done = the issue closes on merge. Plan-first. Usage `/done #<n>`. Use after /review (+ /patch) pass clean.
 ---
 
 # /done #<n> — ship a story
 
-Goal: commit the reviewed work, push, open a PR that closes the issue, and land it — auto-merging
-a safe story (CI-gated, via the background guard) or leaving a judgment-call PR for
-{{repo.human}}.
+Goal: commit the reviewed work, push, open a PR that closes the issue, and land it —
+{{#if backend.auto_merge}}queueing a safe story for CI-gated server-side auto-merge{{/if}}{{#unless backend.auto_merge}}
+auto-merging a safe story through the CI-gated background guard{{/unless}}, or leaving a
+judgment-call PR for {{repo.human}}.
 
 **Shared rules in `{{harness.doctrine_path}}` — read it if not already in context.** This skill
 leans on §4 Gates, §5 Judgment calls (the safe-vs-brake split), §6 Merge guard, §7 Tracker
@@ -29,8 +30,10 @@ mechanics, §8 Commit & PR conventions, §9 Branch policy. The procedure below i
 5. **Branch check** (§9) — must be on a feature branch, not `main`. If on `main`, stop.
 6. **Compose the narrative** — the "what shipped + which findings were actioned + why" summary
    that becomes the **PR body**.
-7. **Commit** (§8) — Conventional Commit, explicit paths (never `-A` / `.`), the `Co-Authored-By`
-   trailer, HEREDOC body.
+7. **Commit** (§8) — Conventional Commit, explicit paths (never `-A` / `.`), HEREDOC body.{{#if commit.coauthor}}
+   Include the configured `Co-Authored-By: {{commit.coauthor}}` trailer.{{/if}}{{#unless commit.coauthor}}
+   Use the harness's standard identity if it supplies one; otherwise omit a co-author trailer
+   rather than inventing an identity.{{/unless}}
 8. **Push** — `git push -u origin <branch>`.
 9. **Open the PR** (§8) — `{{@pr_create "<branch>" "<title>" "<body>"}}` — base `main`, the
    narrative body, **`Closes #<n>`**, the attribution trailer at the end (§8), the

@@ -304,13 +304,17 @@ describe('multi-harness render', () => {
         assert.match(codexCycle, /Shared rules in `\.agents\/skills\/DOCTRINE\.md`/);
     });
 
-    test('the structured-menu tool name differs per harness, both wrapped correctly', () => {
+    test('Codex uses direct chat when its structured menu is unavailable in normal skill execution', () => {
         const claudeIntake = readFileSync(join(dir, '.claude', 'skills', 'intake', 'SKILL.md'), 'utf8');
         const codexIntake = readFileSync(join(dir, '.agents', 'skills', 'intake', 'SKILL.md'), 'utf8');
         assert.match(claudeIntake, /`AskUserQuestion`/);
-        assert.doesNotMatch(claudeIntake, /ask_user_question/);
-        assert.match(codexIntake, /`ask_user_question`/);
+        assert.doesNotMatch(claudeIntake, /request_user_input/);
+        assert.match(codexIntake, /no structured menu tool/);
+        assert.doesNotMatch(codexIntake, /request_user_input/);
         assert.doesNotMatch(codexIntake, /AskUserQuestion/);
+
+        const codexDoctrine = readFileSync(join(dir, '.agents', 'skills', 'DOCTRINE.md'), 'utf8');
+        assert.doesNotMatch(codexDoctrine, /Sonnet|opus/);
     });
 
     test('check reports clean across both trees, and re-render is a byte-identical no-op', () => {
@@ -326,6 +330,95 @@ describe('multi-harness render', () => {
         assert.match(out, /\.agents\/skills\/wrap-up\/SKILL\.md/);
         assert.doesNotMatch(readFileSync(join(dir, '.claude', 'skills', 'wrap-up', 'SKILL.md'), 'utf8'), /cycle:rendered/);
         assert.doesNotMatch(readFileSync(join(dir, '.agents', 'skills', 'wrap-up', 'SKILL.md'), 'utf8'), /cycle:rendered/);
+    });
+});
+
+describe('dependency metadata contracts', () => {
+    test('a package.json-only repository gets a truthful no-lock workflow', () => {
+        const dir = scratchRepo('github');
+        dirs.push(dir);
+        cycle(dir, ['install', '--profile', 'standard', '-y']);
+
+        const skill = readFileSync(join(dir, '.claude', 'skills', 'dep-update', 'SKILL.md'), 'utf8');
+        assert.match(skill, /npm outdated/);
+        assert.doesNotMatch(skill, /npm audit/);
+        assert.doesNotMatch(skill, /package-lock\.json/);
+        assert.match(skill, /no configured\s+lockfile/i);
+        assert.match(skill, /`package\.json`/);
+    });
+
+    test('a configured manifest that does not exist fails with an actionable error', () => {
+        const dir = scratchRepo('github');
+        dirs.push(dir);
+        cycle(dir, ['install', '--profile', 'lean', '-y']);
+        const cfgPath = join(dir, '.cycle', 'config.jsonc');
+        writeFileSync(cfgPath, readFileSync(cfgPath, 'utf8').replace(
+            '"manifests": [\n      "package.json"\n    ]',
+            '"manifests": ["package.json", "missing.lock"]',
+        ));
+
+        const checked = cycleRaw(dir, ['check']);
+        assert.equal(checked.status, 1);
+        assert.match(checked.out, /configured dependency manifest missing: missing\.lock/);
+        assert.match(checked.out, /fix deps\.manifests/);
+    });
+
+    test('legacy configs infer their lockfile from dependency manifests', () => {
+        const dir = scratchRepo('github');
+        dirs.push(dir);
+        writeFileSync(join(dir, 'package-lock.json'), '{"name":"demo","lockfileVersion":3,"packages":{}}\n');
+        cycle(dir, ['install', '--profile', 'standard', '-y']);
+        const cfgPath = join(dir, '.cycle', 'config.jsonc');
+        const configured = readFileSync(cfgPath, 'utf8');
+        assert.match(configured, /"lockfile": "package-lock\.json"/);
+        const legacyConfig = configured.replace(
+            /^\s*"lockfile": "package-lock\.json",\n/m,
+            '',
+        );
+        assert.doesNotMatch(legacyConfig, /"lockfile":/);
+        writeFileSync(cfgPath, legacyConfig);
+
+        cycle(dir, ['update']);
+        const skill = readFileSync(join(dir, '.claude', 'skills', 'dep-update', 'SKILL.md'), 'utf8');
+        assert.match(skill, /Lockfile drift with nothing outdated/);
+        assert.match(skill, /`package-lock\.json`/);
+        assert.doesNotMatch(skill, /no configured\s+lockfile/i);
+    });
+
+    test('a repository with no recognized dependency ecosystem renders an honest stub', () => {
+        const dir = mkdtempSync(join(tmpdir(), 'cycle-no-deps-'));
+        dirs.push(dir);
+        execFileSync('git', ['init', '-q', '.'], { cwd: dir });
+        execFileSync('git', ['remote', 'add', 'origin', REMOTES.github], { cwd: dir });
+        execFileSync('git', ['config', 'user.name', 'Brandon Shea'], { cwd: dir });
+        cycle(dir, ['install', '--profile', 'standard', '-y']);
+
+        const skill = readFileSync(join(dir, '.claude', 'skills', 'dep-update', 'SKILL.md'), 'utf8');
+        assert.match(skill, /## Not configured/);
+        assert.match(skill, /No supported dependency manifest was detected/);
+        assert.doesNotMatch(skill, /npm (?:outdated|update|install|audit)/);
+        assert.match(cycle(dir, ['check']), /clean/);
+    });
+});
+
+describe('commit attribution', () => {
+    test('omits invented coauthors by default and preserves legacy configured trailers', () => {
+        const dir = scratchRepo('github');
+        dirs.push(dir);
+        cycle(dir, ['install', '--profile', 'lean', '-y']);
+        const donePath = join(dir, '.claude', 'skills', 'done', 'SKILL.md');
+        assert.doesNotMatch(readFileSync(donePath, 'utf8'), /Co-Authored-By/);
+
+        const cfgPath = join(dir, '.cycle', 'config.jsonc');
+        writeFileSync(cfgPath, readFileSync(cfgPath, 'utf8').replace(
+            '"coauthor": ""',
+            '"coauthor": "Configured Agent <agent@example.com>"',
+        ));
+        cycle(dir, ['update']);
+        assert.match(
+            readFileSync(donePath, 'utf8'),
+            /Co-Authored-By: Configured Agent <agent@example\.com>/,
+        );
     });
 });
 
@@ -363,6 +456,22 @@ describe('deploy-test on a repo with no test environment', () => {
         assert.match(out, /put it on the test box/);
         assert.match(out, /\.\/deploy\.sh test/, 'the configured command must appear');
         assert.doesNotMatch(out, /not applicable here/);
+    });
+
+    test('Codex asks for the post-deploy verdict directly in chat', () => {
+        const dir = scratchRepo('github');
+        dirs.push(dir);
+        cycle(dir, ['install', '--profile', 'standard', '-y']);
+        const cfgPath = join(dir, '.cycle', 'config.jsonc');
+        const cfg = readCfg(cfgPath);
+        cfg.harnesses = ['claude', 'codex'];
+        cfg.deploy = { test: './deploy.sh test', prod: './deploy.sh prod' };
+        writeFileSync(cfgPath, JSON.stringify(cfg, null, 2));
+        cycle(dir, ['update', '--force']);
+
+        const out = readFileSync(join(dir, '.agents', 'skills', 'deploy-test', 'SKILL.md'), 'utf8');
+        assert.match(out, /directly in chat, offering \*\*Works\*\*/);
+        assert.doesNotMatch(out, /request_user_input/);
     });
 
     test('the stub is managed — it renders clean instead of reporting drift', () => {
@@ -533,6 +642,7 @@ describe('backend_overrides.auto_merge', () => {
 
     const doctrine = (d) => readFileSync(join(d, '.claude', 'skills', 'DOCTRINE.md'), 'utf8');
     const done = (d) => readFileSync(join(d, '.claude', 'skills', 'done', 'SKILL.md'), 'utf8');
+    const cycleSkill = (d) => readFileSync(join(d, '.claude', 'skills', 'cycle', 'SKILL.md'), 'utf8');
 
     test('default renders the poll-then-merge guard, not --auto', () => {
         const src = doctrine(guardDir);
@@ -549,8 +659,20 @@ describe('backend_overrides.auto_merge', () => {
     test('/done follows the same switch, so the flag is not doctrine-only', () => {
         assert.match(done(guardDir), /until gh pr checks/);
         assert.doesNotMatch(done(guardDir), /gh pr merge .*--auto/);
+        assert.match(done(guardDir), /background poll-then-merge guard/);
+        assert.doesNotMatch(done(guardDir), /queue server-side auto-merge/);
         assert.match(done(autoDir), /gh pr merge .*--auto/);
         assert.doesNotMatch(done(autoDir), /until gh pr checks/);
+        assert.match(done(autoDir), /queue server-side auto-merge/);
+        assert.match(done(autoDir), /CI-gated server-side auto-merge/);
+        assert.doesNotMatch(done(autoDir), /background poll-then-merge guard/);
+    });
+
+    test('/cycle reports the actual completion boundary in both modes', () => {
+        assert.match(cycleSkill(guardDir), /poll-then-merge → issue closed/);
+        assert.doesNotMatch(cycleSkill(guardDir), /server-side merge queued/);
+        assert.match(cycleSkill(autoDir), /server-side merge queued; issue closes when the forge lands it/);
+        assert.doesNotMatch(cycleSkill(autoDir), /poll-then-merge → issue closed/);
     });
 
     // The regression this change exists to prevent: `Closes #<n>` used to live INSIDE

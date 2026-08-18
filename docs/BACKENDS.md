@@ -192,7 +192,7 @@ below as stand-ins for "the old backend" / "the new backend" if this ever needs 
    refusal as a finding, not an obstacle: `git rm` the file and re-render.
 6. **Fix the overlays that name the tracker in prose.** Verbs are abstracted; sentences aren't.
    Grep `.cycle/overlays/` for the old forge's name — and edit the overlay, not the rendered copy
-   under `.claude/skills/`, or the next `cycle update` reverts you.
+   under a configured harness skill tree, or the next `cycle update` reverts you.
 7. **Then re-run `cycle update` and actually confirm it ran.** Editing overlays during a migration
    and never re-rendering leaves the skills — the files the agent reads — stale against their own
    source. `cycle check` reports that drift; a repo with more than one harness renders a tree per

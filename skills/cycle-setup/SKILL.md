@@ -10,9 +10,10 @@ irreversibly, which directories deserve which reviewer, or what "ready" means he
 reading problems, and reading is what you're for.
 
 **Your output is data, never prose that ships.** You write `.cycle/config.jsonc` and
-`.cycle/overlays/*.md`. The renderer writes the skills. Never hand-write or hand-edit a file under
-`.claude/skills/` — a rendered skill that doesn't match its template is drift, and `cycle check`
-will report it as a defect for as long as it survives.
+`.cycle/overlays/*.md`. The renderer writes every configured harness tree (for example,
+`.claude/skills/` and `.agents/skills/`). Never hand-write or hand-edit a rendered skill — one
+that doesn't match its template is drift, and `cycle check` will report it as a defect for as
+long as it survives.
 
 ## 0. Orient
 
@@ -24,7 +25,7 @@ Writes nothing. If it reports `existing_config`, this repo is already installed 
 re-setup, so read the current config before proposing changes and treat every existing value as a
 decision someone made until you find evidence otherwise.
 
-If the repo has hand-written skills in `.claude/skills/` with no `.cycle/` directory, it predates
+If the repo has hand-written skills in a supported harness root with no `.cycle/` directory, it predates
 the-cycle. **Stop and surface it** — the automated conversion path (`cycle adopt`) was retired
 after the last legacy repo converged, so reconciliation is now a deliberate manual job: extract
 the repo facts into config and overlays, then diff each hand-written skill against its rendered
@@ -56,8 +57,9 @@ to prevent.
 
 ## 2. Ask only what reading can't settle
 
-Use `AskUserQuestion` for genuine forks: a profile call that hinges on intent rather than
-evidence, a brake surface you can argue either way. Recommend one option and say why.
+Use the current harness's structured-question tool for genuine forks: a profile call that hinges
+on intent rather than evidence, a brake surface you can argue either way. Recommend one option
+and say why.
 
 Do not ask what the codebase already answers. A question you could have resolved by reading is a
 tax on the person you're supposed to be helping.
@@ -108,13 +110,13 @@ the rendered file.
 - Overlays written, and overlays deliberately skipped.
 - Anything you couldn't verify — an unreachable tracker, a gate you couldn't run, a guessed brake.
   Say it plainly; a silent guess here becomes a rule every skill enforces.
-- The suggested next step: commit `.cycle/` and `.claude/skills/` together, so config and rendered
-  output stay in sync in history.
+- The suggested next step: commit `.cycle/` and every configured harness tree together, so config
+  and rendered output stay in sync in history.
 
 ## Rules
 
-- **Never write under `.claude/skills/`.** Config and overlays are yours; skills are the
-  renderer's.
+- **Never write under a configured harness skill tree.** Config and overlays are yours; skills
+  are the renderer's.
 - **Never invent a gate command.** If you can't confirm it runs, leave it out and say so.
 - **A wrong brake is expensive in both directions** — a missing one lets an agent make an
   irreversible change alone; a spurious one stops work that should have proceeded. Argue for each

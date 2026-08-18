@@ -73,8 +73,8 @@ skill at `/cycle` time, from what the diff actually touches, not at filing time.
     **human-triggered** — the loop cannot invoke it; offer it on a large or risky diff and leave
     the call to {{repo.human}}.
   - **`/security-review`** — **additionally**, whenever the diff touches {{brakes|join:, }}.
-  - A **second-model angle** (a Sonnet pass over an opus diff, or vice-versa) is a cheap way to
-    catch same-prior blind spots on a meaty diff.
+  - A **second-model angle** (a different model family or tier from the implementer) is a cheap
+    way to catch same-prior blind spots on a meaty diff.
 
 {{> overlay?:doctrine-routing}}
 
@@ -218,10 +218,11 @@ that isn't in the §1 table.
 ## §8 Commit & PR conventions
 
 - **Conventional Commit** (`feat(scope)` / `fix` / `docs` / `chore` / `test`), scoped to the area;
-  body names the story. Ends with:
+  body names the story.{{#if commit.coauthor}} Ends with:
   ```
   Co-Authored-By: {{commit.coauthor}}
-  ```
+  ```{{/if}}{{#unless commit.coauthor}} Use the harness's standard identity if it supplies one;
+  otherwise omit a co-author trailer rather than inventing an identity.{{/unless}}
 - **`git add <explicit paths>` — never `-A` / `.`**. Never `--no-verify`; never amend; never
   **force**-push.
 - **PR:** base `main`, a "what shipped + which findings were actioned" narrative as the body,
