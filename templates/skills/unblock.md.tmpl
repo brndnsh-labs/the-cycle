@@ -48,10 +48,11 @@ both and presents desk first, then hands-on.
    **A recommendation is mandatory on every item.** "What do you want to do?" hands the work back;
    the point of this skill is to hand back only the *decision*.
 
-6. **Ask.** {{#if harness.has_menus}}Via {{harness.ask}} — one question per item, **recommended
-   option first and labeled `(Recommended)`**, max 4 per call.{{/if}}{{#unless harness.has_menus}}
-   This harness has no structured menu tool — ask one question per item directly in chat, stating
-   the recommendation first, and wait for the reply before moving to the next item.{{/unless}}
+{{#if harness.has_menus}}6. **Ask.** Via {{harness.ask}} — one question per item, **recommended
+   option first and labeled `(Recommended)`**, max 4 per call.{{/if}}
+{{#unless harness.has_menus}}6. **Ask.** This harness has no structured menu tool — ask one question
+   per item directly in chat, stating the recommendation first, and wait for the reply before
+   moving to the next item.{{/unless}}
    - **desk** verdicts: the actual options, recommendation first.
    - **hands-on** verdicts: **Works** / **Doesn't work** / **Not now**.
      **"Not now" is a first-class answer, not a failure** — declining to go test something is a
