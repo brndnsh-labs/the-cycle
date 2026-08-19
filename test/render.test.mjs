@@ -102,6 +102,13 @@ for (const backend of BACKENDS) {
                 }
             });
 
+            test('managed output contains no trailing whitespace', () => {
+                for (const s of [...skills.map((x) => join('.claude/skills', x, 'SKILL.md')), '.claude/skills/DOCTRINE.md']) {
+                    const text = readFileSync(join(dir, s), 'utf8');
+                    assert.doesNotMatch(text, /[ \t]+$/m, `${s}: trailing whitespace`);
+                }
+            });
+
             // The inverse of the guard that used to live here. An install renders prose
             // and nothing else: no executable is installed into a consuming repo, so a
             // rendered command can never point at a script the repo doesn't have. If a
