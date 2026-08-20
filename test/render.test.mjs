@@ -599,6 +599,7 @@ describe('version stamp — no .git in CYCLE_HOME (an npm/npx install)', () => {
             [/Repo display name/, ''],
             [/interrupt\?/, ''],
             [/Profile \(lean/, ''],
+            [/Harnesses \(comma-separated/, ''],
             [/Typecheck gate/, ''],
             [/Test gate/, ''],
             [/Always-brake surfaces/, ''],

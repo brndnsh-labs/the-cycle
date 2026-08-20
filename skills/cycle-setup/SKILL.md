@@ -54,6 +54,11 @@ to prevent.
   GitHub verbs over the wrong tracker.
 - **Profile** — `lean` unless the repo already does the thing a bigger profile assumes. Don't
   install `/nightly` because it sounds useful; install it when there's an overnight lane.
+- **Harnesses** — which AI coding tool(s) actually run here. Detect before asking: a `.claude/`
+  tree means Claude Code, `AGENTS.md` or a `.agents/` tree means Codex CLI, a `.github/` skills
+  convention means Copilot CLI. More than one can be configured together — each gets its own
+  complete, independent skill tree. Default to what's detected; ask only when nothing points at
+  an answer. `cycle install --plan` lists the full registry as `options`.
 
 ## 2. Ask only what reading can't settle
 
@@ -105,7 +110,7 @@ the rendered file.
 
 ## Report
 
-- Profile and backend, with the evidence for each.
+- Profile, backend, and harnesses, with the evidence for each.
 - Every config value that differs from the draft, and why.
 - Overlays written, and overlays deliberately skipped.
 - Anything you couldn't verify — an unreachable tracker, a gate you couldn't run, a guessed brake.
