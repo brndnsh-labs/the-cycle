@@ -1,0 +1,35 @@
+// OpenCode — a secondary render target (#3): capture the registry entry now, same
+// shape as the priority three (claude/codex/copilot), since the abstraction already
+// exists and there's nothing else to build.
+//
+// Verified against the current release (2026-08), not assumed:
+//   - discovery path: opencode.ai/docs/skills — OpenCode walks up from cwd to the git
+//     worktree root loading `.opencode/skills/*/SKILL.md`, and *also* passively reads
+//     any `.claude/skills` or `.agents/skills` it passes along the way (plus global
+//     `~/.config/opencode/skills`, `~/.claude/skills`, `~/.agents/skills`). `.opencode/skills`
+//     is used here as the dedicated root — reusing `.claude/skills` or `.agents/skills`
+//     would collide with the claude/codex harness roots if a repo configured both.
+//   - subagents: a `task` tool spawns subagents with model/prompt/description params,
+//     matching the shape /fan-out and /cover's per-unit spawn rely on.
+//   - structured questions: a `question` tool presents multiple-choice options with an
+//     optional custom-text answer, single/multi-select, pausing execution for the
+//     response — functionally equivalent to AskUserQuestion. Gated by a `permission`
+//     config key that defaults to "allow" (most permissions do), so it's live out of
+//     the box rather than needing a repo to opt in.
+{
+  "name": "opencode",
+  "display": "OpenCode",
+
+  "root": ".opencode/skills",
+  "skill_file": "SKILL.md",
+
+  "capabilities": {
+    "has_menus": true,
+    "has_subagents": true
+  },
+
+  "notes": {
+    "attribution": "🤖 Generated with [OpenCode](https://opencode.ai)",
+    "ask": "`question`"
+  }
+}
