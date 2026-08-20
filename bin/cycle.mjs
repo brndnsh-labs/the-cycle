@@ -812,6 +812,20 @@ export function detect(root) {
     // nothing to sniff for.
     out.backend = 'github';
 
+    // A repo can already show which AI harness(es) it runs — a .claude/ tree, an
+    // AGENTS.md or .agents/ tree (Codex), a .github/skills convention (Copilot CLI).
+    // A guess worth confirming, like everything else here — not proof of intent.
+    const harnessSignals = [
+        ['.claude', 'claude'],
+        ['AGENTS.md', 'codex'],
+        ['.agents', 'codex'],
+        [join('.github', 'skills'), 'copilot'],
+    ];
+    const harnesses = [...new Set(
+        harnessSignals.filter(([marker]) => existsSync(join(root, marker))).map(([, h]) => h),
+    )];
+    if (harnesses.length) out.harnesses = harnesses;
+
     if (existsSync(join(root, 'scripts', 'deploy.sh'))) {
         out.deploy = { test: './scripts/deploy.sh test', prod: './scripts/deploy.sh prod' };
     }
@@ -896,10 +910,10 @@ export function draftConfig(root, { backend: wanted, profile, set } = {}) {
         },
         profile: profile ?? 'lean',
         backend,
-        // Which harness trees to render. Claude Code only, by default — add another
-        // (e.g. "codex") by hand to also render into that harness's discovery root.
-        // See harnesses/*.jsonc and docs/HARNESSES.md.
-        harnesses: ['claude'],
+        // Which harness trees to render. Detected from filesystem markers when
+        // present (see `detect`), else Claude Code only. See harnesses/*.jsonc and
+        // docs/HARNESSES.md.
+        harnesses: d.harnesses ?? ['claude'],
         tracker: {
             description: `**GitHub issues** (\`${d.slug ?? ''}\`)`,
             statuses: DEFAULT_STATUSES[backend] ?? DEFAULT_STATUSES.github,
@@ -954,6 +968,8 @@ async function cmdInstall(args) {
         cfg.repo.name = await ask('Repo display name', cfg.repo.name);
         cfg.repo.human = await ask('Who does this pipeline interrupt?', cfg.repo.human);
         cfg.profile = await ask('Profile (lean/standard/full)', cfg.profile);
+        const harnesses = await ask('Harnesses (comma-separated, from the registry)', cfg.harnesses.join(', '));
+        cfg.harnesses = harnesses.split(',').map((s) => s.trim()).filter(Boolean);
         // No interactive question for backend itself: github is the only one the-cycle
         // binds today, so asking would be a confirm-the-only-answer prompt. `--backend`
         // still overrides it (draftConfig above), for whenever a second one exists.
@@ -972,6 +988,7 @@ async function cmdInstall(args) {
 
     loadProfile(cfg.profile);
     loadBackend(cfg.backend);
+    for (const h of harnessNames(cfg)) loadHarness(h);
 
     mkdirSync(join(root, '.cycle'), { recursive: true });
     mkdirSync(overlayDir(root), { recursive: true });
@@ -1024,6 +1041,9 @@ function cmdPlan(root, values) {
     const profiles = readdirSync(join(CYCLE_HOME, 'profiles'))
         .filter((f) => f.endsWith('.jsonc'))
         .map((f) => basename(f, '.jsonc'));
+    const harnesses = readdirSync(join(CYCLE_HOME, 'harnesses'))
+        .filter((f) => f.endsWith('.jsonc'))
+        .map((f) => basename(f, '.jsonc'));
 
     const overlayManifest = existsSync(templatePath('overlays.jsonc')) ? readJsonc(templatePath('overlays.jsonc')) : {};
 
@@ -1040,6 +1060,7 @@ function cmdPlan(root, values) {
             backend: detected.backend,
             gates: detected.gates,
             deploy: detected.deploy ?? null,
+            harnesses: detected.harnesses ?? null,
         },
         draft: cfg,
         // The decisions a draft cannot make for itself.
@@ -1050,6 +1071,13 @@ function cmdPlan(root, values) {
                 why: 'Machinery is opt-in — a repo should take a lane when it has earned it, not by default. Start lean unless the repo already does the thing.',
                 options: profiles,
                 default: cfg.profile,
+            },
+            {
+                path: 'harnesses',
+                asks: 'Which AI coding harnesses should this pipeline render into?',
+                why: 'Each configured harness gets its own complete, independent skill tree — same doctrine, same procedure, only the discovery root and harness-conditional prose differ. Detect what the repo already runs: a .claude/ tree suggests Claude Code, AGENTS.md or a .agents/ tree suggests Codex, a .github/ convention suggests Copilot CLI. Multiple can be configured together.',
+                options: harnesses,
+                default: cfg.harnesses,
             },
             {
                 path: 'repo.human',
