@@ -920,6 +920,39 @@ describe('backend_overrides.auto_merge', () => {
     });
 });
 
+describe('autonomy checkpoints (#41)', () => {
+    let dir;
+    const skill = (name) => readFileSync(join(dir, '.claude', 'skills', name, 'SKILL.md'), 'utf8');
+
+    before(() => {
+        dir = scratchRepo('github');
+        dirs.push(dir);
+        cycle(dir, ['install', '--profile', 'full', '--backend', 'github', '-y']);
+    });
+
+    test('/cycle continues after visibility checkpoints and pauses only for no progress', () => {
+        const src = skill('cycle');
+        assert.match(src, /emits a progress checkpoint after every 5 stories, then continues/);
+        assert.doesNotMatch(src, /then confirms/);
+        assert.match(src, /without fresh evidence of progress/);
+        assert.match(src, /Elapsed time alone does not require confirmation/);
+    });
+
+    test('/burndown refreshes its safe queue at a checkpoint instead of stopping there', () => {
+        const src = skill('burndown');
+        assert.match(src, /reports progress every 5 shipped items but stops only for a real gate, a dry queue, or an interrupt/);
+        assert.match(src, /After every 5 shipped items, report a progress checkpoint/);
+        assert.match(src, /refresh the open set, and reapply the safe filter before continuing/);
+        assert.doesNotMatch(src, /5 items shipped.*check in \(runaway guard\)/);
+    });
+
+    test('/nightly treats the five-item boundary as visibility, not a stop condition', () => {
+        const src = skill('nightly');
+        assert.match(src, /Continues through `\/burndown`'s five-item visibility checkpoints/);
+        assert.doesNotMatch(src, /including the 5-item guard/);
+    });
+});
+
 // The fast path (issue #24): implement/review/done compress ceremony for a small,
 // deterministic, gate-verifiable docs/config diff, handed off via an in-context
 // "verification receipt" whose freshness is a diff fingerprint. Eligibility criteria

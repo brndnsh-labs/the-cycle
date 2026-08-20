@@ -90,7 +90,8 @@ The smoke-test checklist is the part that earns its keep, so build it properly:
 - **Never deploys to prod.** That's `/deploy-prod`, and it requires an explicit human go that
   cannot exist at 3am.
 - **Never lifts a §5 brake.** Parked work stays parked.
-- Honors `/burndown`'s stop conditions unchanged — including the 5-item guard.
+- Continues through `/burndown`'s five-item visibility checkpoints; its real stop conditions stay
+  unchanged.
 - **Scout output is never built in the run that filed it.** `/burndown` runs first and the run
   never loops back, so everything `/scout` files sits in at least one morning report before any
   unattended path can pick it up. That one-night latency is the loop's only guaranteed human
