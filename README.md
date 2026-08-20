@@ -40,14 +40,13 @@ Bootstrap, no clone required:
 
 ```sh
 # runs the interview and renders into the current repo
-npx --yes --allow-git=root --package=github:brndnsh-labs/the-cycle cycle install
+npx --yes @brndnsh/the-cycle install
 ```
 
-npx is for a one-off first render directly from GitHub — the fetched copy lives in npx's
-ephemeral cache, so `cycle update` / `cycle check` and the personal `/cycle-setup` skill need the
-durable clone below. `--allow-git=root` is the narrow npm opt-in for this explicitly requested root
-package; transitive git dependencies remain disabled. `cycle install`'s own output says as much
-when it ran this way.
+npx is for a one-off first render from npm — the fetched copy lives in npx's ephemeral cache, so
+`cycle update` / `cycle check` and the personal `/cycle-setup` skill need the durable clone below.
+`--yes` accepts npx's package-download prompt. `cycle install`'s own output says as much when it
+ran this way.
 
 For everyday use:
 
