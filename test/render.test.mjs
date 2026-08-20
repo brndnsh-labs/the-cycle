@@ -536,6 +536,32 @@ describe('formatter guidance (#11)', () => {
         assert.match(out, /\.claude\/skills\//);
     });
 
+    test('every supported standalone prettier config filename triggers guidance', () => {
+        const markers = [
+            '.prettierrc', '.prettierrc.json', '.prettierrc.yaml', '.prettierrc.yml',
+            '.prettierrc.json5', '.prettierrc.toml',
+            '.prettierrc.js', '.prettierrc.cjs', '.prettierrc.mjs', '.prettierrc.ts',
+            '.prettierrc.cts', '.prettierrc.mts',
+            'prettier.config.js', 'prettier.config.cjs', 'prettier.config.mjs',
+            'prettier.config.ts', 'prettier.config.cts', 'prettier.config.mts',
+        ];
+        for (const marker of markers) {
+            const dir = scratchRepo('github');
+            dirs.push(dir);
+            writeFileSync(join(dir, marker), '{}');
+            const out = cycle(dir, ['install', '--profile', 'lean', '-y']);
+            assert.match(out, /prettier reformats markdown/, marker);
+        }
+    });
+
+    test('a package.yaml prettier key triggers guidance without a local dependency', () => {
+        const dir = scratchRepo('github');
+        dirs.push(dir);
+        writeFileSync(join(dir, 'package.yaml'), 'name: example\nprettier:\n  printWidth: 100\n');
+        const out = cycle(dir, ['install', '--profile', 'lean', '-y']);
+        assert.match(out, /prettier reformats markdown/);
+    });
+
     test('a prettier repo whose .prettierignore already covers the harness root gets no guidance', () => {
         const dir = scratchRepo('github');
         dirs.push(dir);
@@ -546,6 +572,15 @@ describe('formatter guidance (#11)', () => {
 
         const updated = cycleRaw(dir, ['update']);
         assert.doesNotMatch(updated.out, /formatter:/);
+    });
+
+    test('a later prettier negation makes whole-tree coverage unproven', () => {
+        const dir = scratchRepo('github');
+        dirs.push(dir);
+        writeFileSync(join(dir, '.prettierrc.json'), '{}');
+        writeFileSync(join(dir, '.prettierignore'), '.claude/skills/\n!.claude/skills/DOCTRINE.md\n');
+        const out = cycle(dir, ['install', '--profile', 'lean', '-y']);
+        assert.match(out, /prettier reformats markdown/);
     });
 
     test('a dprint repo with no matching exclude is told exactly what to add', () => {
@@ -562,6 +597,36 @@ describe('formatter guidance (#11)', () => {
         const dir = scratchRepo('github');
         dirs.push(dir);
         writeFileSync(join(dir, 'dprint.json'), JSON.stringify({ excludes: ['.claude/skills/**'] }));
+        const out = cycle(dir, ['install', '--profile', 'lean', '-y']);
+        assert.doesNotMatch(out, /formatter:/);
+    });
+
+    test('dprint hidden config filenames are detected', () => {
+        for (const config of ['.dprint.json', '.dprint.jsonc']) {
+            const dir = scratchRepo('github');
+            dirs.push(dir);
+            writeFileSync(join(dir, config), JSON.stringify({ excludes: [] }));
+            const out = cycle(dir, ['install', '--profile', 'lean', '-y']);
+            assert.match(out, /dprint reformats markdown/, config);
+        }
+    });
+
+    test('a later dprint negation makes whole-tree coverage unproven', () => {
+        const dir = scratchRepo('github');
+        dirs.push(dir);
+        writeFileSync(join(dir, 'dprint.json'), JSON.stringify({
+            excludes: ['.claude/skills/**', '!.claude/skills/DOCTRINE.md'],
+        }));
+        const out = cycle(dir, ['install', '--profile', 'lean', '-y']);
+        assert.match(out, /dprint reformats markdown/);
+    });
+
+    test('an unrelated later dprint negation leaves whole-tree coverage intact', () => {
+        const dir = scratchRepo('github');
+        dirs.push(dir);
+        writeFileSync(join(dir, 'dprint.json'), JSON.stringify({
+            excludes: ['.claude/skills/**', '!dist.js'],
+        }));
         const out = cycle(dir, ['install', '--profile', 'lean', '-y']);
         assert.doesNotMatch(out, /formatter:/);
     });
