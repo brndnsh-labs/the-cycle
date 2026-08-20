@@ -50,6 +50,17 @@ template, stop — it belongs in config. The same applies to a harness-specific 
 Codex support made them wrong in a second tree; use `{{harness.doctrine_path}}` / `{{harness.ask}}`
 instead of naming one harness's mechanics in portable prose.
 
+### Commit attribution is runtime state
+
+A `Co-Authored-By` identity is not a repo fact or a harness fact. The active model can change while
+the repo and harness stay the same, so templates include the trailer only when the active runtime
+explicitly supplies a truthful identity for that work. Otherwise they omit it. Do not add a static
+identity to `.cycle/config.jsonc` or derive one from `harness.display`, a model name, or an older
+commit. Existing `commit.coauthor` config values are retired and ignored on render.
+
+The `harness.attribution` line is separate: it names the coding product in the PR body and remains
+the durable harness-level provenance marker. It does not claim which model authored a commit.
+
 ## Overlays
 
 Some skills are portable procedure wrapped around irreducibly local content: `/review`'s reviewer

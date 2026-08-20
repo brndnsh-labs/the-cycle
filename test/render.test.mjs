@@ -462,23 +462,39 @@ describe('dependency metadata contracts', () => {
 });
 
 describe('commit attribution', () => {
-    test('omits invented coauthors by default and preserves legacy configured trailers', () => {
+    test('ignores legacy repo coauthors and keeps harness-specific PR provenance', () => {
         const dir = scratchRepo('github');
         dirs.push(dir);
         cycle(dir, ['install', '--profile', 'lean', '-y']);
-        const donePath = join(dir, '.claude', 'skills', 'done', 'SKILL.md');
-        assert.doesNotMatch(readFileSync(donePath, 'utf8'), /Co-Authored-By/);
-
         const cfgPath = join(dir, '.cycle', 'config.jsonc');
-        writeFileSync(cfgPath, readFileSync(cfgPath, 'utf8').replace(
-            '"coauthor": ""',
-            '"coauthor": "Configured Agent <agent@example.com>"',
-        ));
+        assert.doesNotMatch(readFileSync(cfgPath, 'utf8'), /"coauthor"/);
+
+        const donePath = join(dir, '.claude', 'skills', 'done', 'SKILL.md');
+        assert.doesNotMatch(readFileSync(donePath, 'utf8'), /Co-Authored-By:/);
+
+        writeFileSync(cfgPath, readFileSync(cfgPath, 'utf8')
+            .replace('"harnesses": [\n    "claude"\n  ],', '"harnesses": ["claude", "opencode"],')
+            .replace(
+                '  "deploy": {',
+                '  "commit": { "coauthor": "Stale Model <stale@example.com>" },\n  "deploy": {',
+            ));
+        assert.match(readFileSync(cfgPath, 'utf8'), /Stale Model <stale@example\.com>/);
         cycle(dir, ['update']);
-        assert.match(
-            readFileSync(donePath, 'utf8'),
-            /Co-Authored-By: Configured Agent <agent@example\.com>/,
-        );
+
+        const openCodeDone = join(dir, '.opencode', 'skills', 'done', 'SKILL.md');
+        for (const path of [donePath, openCodeDone]) {
+            const rendered = readFileSync(path, 'utf8');
+            assert.doesNotMatch(rendered, /Stale Model|stale@example\.com/);
+            assert.match(rendered, /active runtime explicitly supplies a truthful identity/);
+            assert.match(rendered, /Never infer an identity from repo config/);
+        }
+
+        const claudeDoctrine = readFileSync(join(dir, '.claude', 'skills', 'DOCTRINE.md'), 'utf8');
+        const openCodeDoctrine = readFileSync(join(dir, '.opencode', 'skills', 'DOCTRINE.md'), 'utf8');
+        assert.match(claudeDoctrine, /Generated with \[Claude Code\]/);
+        assert.match(openCodeDoctrine, /Generated with \[OpenCode\]/);
+        assert.doesNotMatch(`${claudeDoctrine}\n${openCodeDoctrine}`, /Stale Model|stale@example\.com/);
+        assert.match(cycle(dir, ['check']), /clean/);
     });
 });
 

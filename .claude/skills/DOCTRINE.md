@@ -1,4 +1,4 @@
-<!-- cycle:rendered template=DOCTRINE.md.tmpl hash=db83b82616d4 — managed by the-cycle; edit the template, not this file -->
+<!-- cycle:rendered template=DOCTRINE.md.tmpl hash=0b3ee75adab9 — managed by the-cycle; edit the template, not this file -->
 # Pipeline doctrine (shared)
 
 Single source of truth for the rules the the-cycle work-loop skills share. A skill that says
@@ -226,8 +226,9 @@ that isn't in the §1 table.
 ## §8 Commit & PR conventions
 
 - **Conventional Commit** (`feat(scope)` / `fix` / `docs` / `chore` / `test`), scoped to the area;
-  body names the story. Use the harness's standard identity if it supplies one;
-  otherwise omit a co-author trailer rather than inventing an identity.
+  body names the story. Include `Co-Authored-By` only when the active runtime explicitly supplies
+  a truthful identity for this work. Otherwise omit it. Never infer an identity from repo config,
+  the harness/product name, a model name, or a historical commit.
 - **`git add <explicit paths>` — never `-A` / `.`**. Never `--no-verify`; never amend; never
   **force**-push.
 - **PR:** base `main`, a "what shipped + which findings were actioned" narrative as the body,
