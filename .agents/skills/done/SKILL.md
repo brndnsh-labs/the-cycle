@@ -2,7 +2,7 @@
 name: done
 description: Ship a the-cycle story — commit the reviewed work, push, open a PR that Closes #<n>, and (for a safe story) queue server-side auto-merge; a judgment-call story's PR is left for Brandon's manual merge. Done = the issue closes on merge. Plan-first. Usage `/done #<n>`. Use after /review (+ /patch) pass clean.
 ---
-<!-- cycle:rendered template=skills/done.md.tmpl hash=00fab4fd845d — managed by the-cycle; edit the template, not this file -->
+<!-- cycle:rendered template=skills/done.md.tmpl hash=dcab23d1cfda — managed by the-cycle; edit the template, not this file -->
 
 # /done #<n> — ship a story
 
@@ -19,8 +19,9 @@ just the ordering.
 
 ## Workflow
 
-1. **Parse the issue ref(s)** — `#<n>`. Several only if one diff genuinely ships them together;
-   usually one PR = one issue.
+1. **Parse and read the issue ref(s)** — `#<n>`. Several only if one diff genuinely ships them
+   together; usually one PR = one issue. Run `gh issue view "<n>" --json number,title,state,url,labels,milestone,body` for each and capture its title
+   plus milestone/epic before choosing a branch.
 2. **Confirm gates green** (§4) — never `/done` over a red build. If a fast-path verification
    receipt (§5) is in context, recompute its diff fingerprint over the same file list: a match,
    with every gate in it reading PASS, **stands as this confirmation** — don't re-run. A stale
@@ -32,7 +33,15 @@ just the ordering.
 3. **Confirm findings were actioned, not parked** (§5) — `/patch` fixed every real finding, or
    each was an explicit escalation to a `finding` issue. Never a silent defer.
 4. **Survey the diff** — `git status` + `git diff --stat`. Only expected files; flag drift.
-5. **Branch check** (§9) — must be on a feature branch, not `main`. If on `main`, stop.
+5. **Branch check** (§9) — inspect `git status --short` and the current branch before staging.
+   - If an existing epic branch applies, switch to and reuse it as `/implement` does. Otherwise,
+     on a feature branch, continue.
+   - On `main` with a reviewed uncommitted diff that has something to ship and no applicable epic
+     branch, derive `<slug>` from the issue title, create `fix/<issue>-<slug>`, and continue
+     (`git checkout -b fix/<issue>-<slug>`). If that branch name already exists, STOP for the
+     naming collision — do not guess or build on `main`.
+   - On `main` with no diff or nothing to ship, STOP. Never stage, commit, or otherwise build on
+     `main`; branch before delivery work.
 6. **Compose the narrative** — the "what shipped + which findings were actioned + why" summary
    that becomes the **PR body**.
 7. **Commit** (§8) — Conventional Commit, explicit paths (never `-A` / `.`), HEREDOC body.
