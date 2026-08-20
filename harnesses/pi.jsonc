@@ -1,0 +1,37 @@
+// Pi (earendil-works/pi coding agent) — a secondary render target (#3), same as
+// OpenCode: the abstraction already exists, so this is just a registry entry.
+//
+// Verified against the current release (2026-08), not assumed:
+//   - discovery path: github.com/badlogic/pi-mono's coding-agent README — skills are
+//     discovered at `.pi/skills/*/SKILL.md` or `.agents/skills/*/SKILL.md` (walking cwd
+//     up through parent directories), plus global `~/.pi/agent/skills` and
+//     `~/.agents/skills`, or via a pi package. `.pi/skills` is used here as the
+//     dedicated root, to avoid colliding with the codex harness's `.agents/skills`.
+//   - subagents: explicitly absent by design. Pi's own docs: "No sub-agents. There's
+//     many ways to do this. Spawn pi instances via tmux, or build your own with
+//     extensions." Nothing to advertise here.
+//   - structured questions: an `ask_question` tool is real (it's excludable via
+//     `--exclude-tools ask_question` / `excludeTools`, which only makes sense for a
+//     tool that exists and runs by default), but Pi's docs never describe its actual
+//     shape — nothing confirms multi-choice options the way OpenCode's `question` tool
+//     or AskUserQuestion are documented. Advertised as unavailable rather than assumed;
+//     re-verify directly (a live Pi session, not just docs) before flipping this to
+//     true — Pi is a fast-moving minimalist tool and this is the flag most likely to
+//     be wrong here.
+{
+  "name": "pi",
+  "display": "Pi",
+
+  "root": ".pi/skills",
+  "skill_file": "SKILL.md",
+
+  "capabilities": {
+    "has_menus": false,
+    "has_subagents": false
+  },
+
+  "notes": {
+    "attribution": "🤖 Generated with [Pi](https://github.com/earendil-works/pi)",
+    "ask": "plain chat"
+  }
+}
