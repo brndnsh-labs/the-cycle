@@ -1,4 +1,4 @@
-<!-- cycle:rendered template=DOCTRINE.md.tmpl hash=db27d5bb6420 — managed by the-cycle; edit the template, not this file -->
+<!-- cycle:rendered template=DOCTRINE.md.tmpl hash=4352fab2aa2a — managed by the-cycle; edit the template, not this file -->
 # Pipeline doctrine (shared)
 
 Single source of truth for the rules the the-cycle work-loop skills share. A skill that says
@@ -235,7 +235,9 @@ that isn't in the §1 table.
   🤖 Generated with [Codex CLI](https://developers.openai.com/codex/cli)
   ```
 - The `Closes/Fixes/Resolves #N` keyword fires **anywhere** in the body regardless of surrounding
-  prose — writing "`Closes #844` is NOT set" still closes #844. When carving one item out of a
+  prose — writing "Closes #844 is NOT set" still closes #844 — **except inside a code span or code
+  block, which suppresses it entirely.** Never backtick the token when the close is wanted, and
+  never leave it bare next to a number that shouldn't close. When carving one item out of a
   multi-item umbrella issue, never put that token next to the umbrella's number at all, not even to
   deny it — write "part of #844" instead.
 - Post a one-line issue comment linking the PR; the narrative lives in the PR body.
