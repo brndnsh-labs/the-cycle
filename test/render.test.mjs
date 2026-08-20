@@ -696,3 +696,93 @@ describe('backend_overrides.auto_merge', () => {
         assert.match(out, /clean/);
     });
 });
+
+// The fast path (issue #24): implement/review/done compress ceremony for a small,
+// deterministic, gate-verifiable docs/config diff, handed off via an in-context
+// "verification receipt" whose freshness is a diff fingerprint. Eligibility criteria
+// live once in DOCTRINE §5 (implement/review/done only cite it), so "identical
+// eligibility across skills" is structural rather than something to assert per file.
+describe('fast path & verification receipts (#24)', () => {
+    let dir;
+    let customBrakeDir;
+
+    before(() => {
+        dir = scratchRepo('github');
+        dirs.push(dir);
+        cycle(dir, ['install', '--profile', 'lean', '--backend', 'github', '-y']);
+
+        customBrakeDir = scratchRepo('github');
+        dirs.push(customBrakeDir);
+        cycle(customBrakeDir, ['install', '--profile', 'lean', '--backend', 'github', '-y']);
+        const cfgPath = join(customBrakeDir, '.cycle', 'config.jsonc');
+        const cfg = JSON.parse(
+            readFileSync(cfgPath, 'utf8').replace(/^\s*\/\/.*$/gm, '').replace(/,(\s*[}\]])/g, '$1'),
+        );
+        cfg.brakes = ['payments / billing'];
+        writeFileSync(cfgPath, JSON.stringify(cfg, null, 2));
+        cycle(customBrakeDir, ['update']);
+    });
+
+    const doctrine = (d) => readFileSync(join(d, '.claude', 'skills', 'DOCTRINE.md'), 'utf8');
+    const implement = (d) => readFileSync(join(d, '.claude', 'skills', 'implement', 'SKILL.md'), 'utf8');
+    const review = (d) => readFileSync(join(d, '.claude', 'skills', 'review', 'SKILL.md'), 'utf8');
+    const done = (d) => readFileSync(join(d, '.claude', 'skills', 'done', 'SKILL.md'), 'utf8');
+
+    test('DOCTRINE defines one eligibility bar: one or two files, docs/config, deterministic, gate-provable', () => {
+        const src = doctrine(dir);
+        assert.match(src, /fast path/i);
+        assert.match(src, /one or two files/);
+        assert.match(src, /docs and\/or config/);
+        assert.match(src, /deterministic/);
+        assert.match(src, /§4's gates can \*\*prove\*\*/);
+    });
+
+    test('eligibility explicitly excludes every configured brake, not a hardcoded list', () => {
+        const defaultSrc = doctrine(dir);
+        assert.match(defaultSrc, /none\*\* of the always-brake classes above/);
+        assert.match(defaultSrc, /auth \/ tokens \/ secrets/);
+
+        const customSrc = doctrine(customBrakeDir);
+        assert.match(customSrc, /none\*\* of the always-brake classes above/);
+        assert.match(customSrc, /payments \/ billing/);
+        assert.doesNotMatch(customSrc, /auth \/ tokens \/ secrets/);
+    });
+
+    test('/implement emits a verification receipt with issue, files, fingerprint, and per-gate PASS/FAIL', () => {
+        const src = implement(dir);
+        assert.match(src, /Fast path:\*\* one sentence/);
+        assert.match(src, /## Verification receipt/);
+        assert.match(src, /\*\*Diff fingerprint:\*\*/);
+        assert.match(src, /— <PASS\/FAIL>/);
+        assert.match(src, /gate that read FAIL drops the story out of the fast path/);
+    });
+
+    test('/review replaces silent docs-skip with the editorial lens, and never for code', () => {
+        const src = review(dir);
+        assert.doesNotMatch(src, /None — report "docs-only/);
+        assert.match(src, /### Editorial lens/);
+        assert.match(src, /Issue fidelity/);
+        assert.match(src, /Contradictory wording/);
+        assert.match(src, /References/);
+        assert.match(src, /Unintended edits/);
+        assert.match(src, /never "skipping review\."/);
+    });
+
+    test('/review and /done both fall back to normal verification on a stale or missing receipt', () => {
+        const reviewSrc = review(dir);
+        assert.match(reviewSrc, /recompute its diff fingerprint/);
+        assert.match(reviewSrc, /stale fingerprint or no receipt: proceed\s+normally/);
+        assert.match(reviewSrc, /stale or missing a PASS.*treat it as absent/s);
+
+        const doneSrc = done(dir);
+        assert.match(doneSrc, /recompute its diff fingerprint/);
+        assert.match(doneSrc, /A stale/);
+        assert.match(doneSrc, /a missing receipt, or any gate reading FAIL: run them here as usual/);
+    });
+
+    test('the fast path never skips gates, branch policy, or tracker status — only ceremony', () => {
+        const src = doctrine(dir);
+        assert.match(src, /still performs tracker status, branch policy, §4's gates, and normal delivery safety/);
+        assert.match(src, /compresses \*\*ceremony and duplicate reads\*\*, never the checks themselves/);
+    });
+});
