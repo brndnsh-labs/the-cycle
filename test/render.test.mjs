@@ -970,6 +970,21 @@ describe('fast path & verification receipts (#24)', () => {
         assert.match(doneSrc, /a missing receipt, or any gate reading FAIL: run them here as usual/);
     });
 
+    test('/done turns a dirty main tree into an issue branch, with bounded hard stops', () => {
+        const src = done(dir);
+        assert.match(src, /gh issue view "<n>"/);
+        assert.match(src, /capture its title\s+plus milestone\/epic before choosing a branch/);
+        assert.match(src, /existing epic branch applies, switch to and reuse it as `\/implement` does/);
+        assert.match(src, /On `main` with a reviewed uncommitted diff that has something to ship/);
+        assert.match(src, /derive `<slug>` from the issue title/);
+        assert.match(src, /create\s+`fix\/<issue>-<slug>`, and continue/);
+        assert.match(src, /git checkout -b fix\/<issue>-<slug>/);
+        assert.match(src, /branch name\s+already exists, STOP for the\s+naming collision/);
+        assert.match(src, /On `main` with no diff or nothing to ship, STOP/);
+        assert.match(src, /Never stage, commit, or otherwise build on\s+`main`/);
+        assert.doesNotMatch(src, /must be on a feature branch, not `main`\. If on `main`, stop/);
+    });
+
     test('the fast path never skips gates, branch policy, or tracker status — only ceremony', () => {
         const src = doctrine(dir);
         assert.match(src, /still performs tracker status, branch policy, §4's gates, and normal delivery safety/);
