@@ -2,7 +2,7 @@
 name: done
 description: Ship a the-cycle story — commit the reviewed work, push, open a PR that Closes #<n>, and (for a safe story) queue server-side auto-merge; a judgment-call story's PR is left for Brandon's manual merge. Done = the issue closes on merge. Plan-first. Usage `/done #<n>`. Use after /review (+ /patch) pass clean.
 ---
-<!-- cycle:rendered template=skills/done.md.tmpl hash=6d9f7d9b949f — managed by the-cycle; edit the template, not this file -->
+<!-- cycle:rendered template=skills/done.md.tmpl hash=bb780a9b5880 — managed by the-cycle; edit the template, not this file -->
 
 # /done #<n> — ship a story
 
@@ -52,8 +52,10 @@ just the ordering.
 9. **Open the PR** (§8) — `gh pr create --head "<branch>" --base main --title "<title>" --body "<body>"` — base `main`, the
    narrative body, **`Closes #<n>`**, the attribution trailer at the end (§8), the
    Conventional-Commit subject as title.
-10. **Post a one-line issue comment** linking the PR: `gh issue comment "<n>" --body "<text>"`
-11. **Land it — the auto-merge decision (§5 + §6):**
+10. **Mark it `status:in-review`** — the PR is now open, so its review-routing state is
+    truthful: `gh issue edit "<n>" --remove-label "status:ready,status:in-progress,status:in-review,status:needs-decision,status:blocked" && gh issue edit "<n>" --add-label "status:in-review"`.
+11. **Post a one-line issue comment** linking the PR: `gh issue comment "<n>" --body "<text>"`
+12. **Land it — the auto-merge decision (§5 + §6):**
     - **Safe story** — none of §5's always-brake classes (auth / tokens / secrets, schema / data migration, anything destructive or irreversible) → **queue the
       server-side merge** (§6). No polling, no background job: the forge holds it until the
       required checks pass.
@@ -61,12 +63,11 @@ just the ordering.
       gh pr merge "<pr>" --auto --squash
       ```
       This returns immediately with the merge *queued*, so the PR is normally still open when
-      you look — that is success, not a pending failure. Set Status explicitly right away:
-      `gh issue edit "<n>" --remove-label "status:ready,status:in-progress,status:in-review,status:needs-decision,status:blocked" && gh issue edit "<n>" --add-label "status:in-review"`. Sync local main and prune on the next
-      run that needs it, rather than waiting around for the merge to land.
+      you look — that is success, not a pending failure. Sync local main and prune on the next run
+      that needs it, rather than waiting around for the merge to land.
     - **Judgment-call story** → **leave the PR open**, report "ready for your merge: <url>" + *why*
       it's gated. Do NOT auto-merge.
-12. **Suggest next:** `/deploy-test`, `/next`, or `/cycle` continues.
+13. **Suggest next:** `/deploy-test`, `/next`, or `/cycle` continues.
 
 ## Edge cases
 

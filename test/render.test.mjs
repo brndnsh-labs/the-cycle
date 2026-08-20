@@ -881,6 +881,23 @@ describe('backend_overrides.auto_merge', () => {
         assert.doesNotMatch(done(autoDir), /background poll-then-merge guard/);
     });
 
+    test('/done marks review when the PR opens, never after merge or queueing', () => {
+        for (const src of [done(guardDir), done(autoDir)]) {
+            const pr = src.indexOf('gh pr create');
+            const review = src.indexOf('--add-label "status:in-review"');
+            const comment = src.indexOf('gh issue comment');
+            assert.ok(pr >= 0 && review > pr && comment > review, 'review must follow PR creation');
+            assert.equal(src.indexOf('--add-label "status:in-review"', review + 1), -1);
+            assert.doesNotMatch(src, /Status explicitly/);
+        }
+    });
+
+    test('the doctrine makes closure authoritative and reopening an explicit reroute', () => {
+        const src = doctrine(guardDir);
+        assert.match(src, /Status labels route \*\*open\*\* issues only/);
+        assert.match(src, /Reopening starts a new routing decision: explicitly set the next status/);
+    });
+
     test('/cycle reports the actual completion boundary in both modes', () => {
         assert.match(cycleSkill(guardDir), /poll-then-merge → issue closed/);
         assert.doesNotMatch(cycleSkill(guardDir), /server-side merge queued/);
