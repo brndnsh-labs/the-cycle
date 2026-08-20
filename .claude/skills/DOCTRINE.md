@@ -1,4 +1,4 @@
-<!-- cycle:rendered template=DOCTRINE.md.tmpl hash=2f8fb7cb28e9 — managed by the-cycle; edit the template, not this file -->
+<!-- cycle:rendered template=DOCTRINE.md.tmpl hash=db83b82616d4 — managed by the-cycle; edit the template, not this file -->
 # Pipeline doctrine (shared)
 
 Single source of truth for the rules the the-cycle work-loop skills share. A skill that says
@@ -27,10 +27,12 @@ nothing to be on or off. Status is one `status:*` label on the issue itself.
 | `status:blocked` | blocked on a dependency | skip; name the blocker |
 | *(none)* | the idea pile — filed but not scheduled | triage/scope it first; don't pick |
 
-Exactly one `status:*` label at a time: every write clears the whole set before adding one, so
-the states can't overlap. **No label is a real state**, not a gap — it's every issue still waiting
-on a §10.5 certainty call (a review-carved observation, §2; a finding the filer couldn't
-confidently route), and that untriaged pile is where triage starts.
+After a successful status transition, exactly one `status:*` label remains. The ordered write
+clears the whole set before adding the target, so there is a brief unlabeled intermediate event
+but never overlapping status values. Outside that in-flight transition, **no label is a real
+state**, not a gap — it's every issue still waiting on a §10.5 certainty call (a review-carved
+observation, §2; a finding the filer couldn't confidently route), and that untriaged pile is where
+triage starts.
 
 **Ranking pickable work** (`/next`): **milestone first** (a real numbered epic beats no milestone), then **issue number** (lower first).
 
@@ -207,8 +209,8 @@ no way for a stale row to linger.
 
 - **Read the tracker:** `gh issue list --state open --json number,title,labels,milestone,url` (one label: `gh issue list --state open --label "<label>" --json number,title,labels,milestone,url`)
 - **Read one issue:** `gh issue view "<n>" --json number,title,state,url,labels,milestone,body`
-- **Write a routing value:** `gh issue edit "<n>" --remove-label "status:ready,status:in-progress,status:in-review,status:needs-decision,status:blocked" --add-label "<status:label>"` — clears the other status
-  labels and sets this one, in a single call. Non-status labels: `gh issue edit "<n>" --add-label "<label>"` ·
+- **Write a routing value:** `gh issue edit "<n>" --remove-label "status:ready,status:in-progress,status:in-review,status:needs-decision,status:blocked" && gh issue edit "<n>" --add-label "<status:label>"` — clears the status set,
+  then sets this one in an explicitly ordered second call. Non-status labels: `gh issue edit "<n>" --add-label "<label>"` ·
   `gh issue edit "<n>" --remove-label "<label>"`
 - **Bulk writes:** an ordinary loop, one call per issue. These are REST calls against the
   5,000/hr core pool, not GraphQL points, so there is nothing to batch around.

@@ -62,10 +62,11 @@
     // flag is redundant there; pass it explicitly if that isn't the case.
     "merge_auto": "gh pr merge $1 --auto --squash",
 
-    // One call, and idempotent: clearing every status label before adding the target
-    // keeps the set mutually exclusive without a read first. Both halves are safe —
-    // removing a label the issue doesn't carry is a no-op that still exits 0, and the
-    // add is applied after the removes, so naming the target in both lists is fine.
+    // Two ordered calls, and idempotent after the chain succeeds: clear every status
+    // label, then add the target. `gh issue edit` does not document ordering between
+    // --remove-label and --add-label in one invocation, and live use proved they can
+    // race when the target appears in both lists. `&&` makes the order explicit while
+    // preserving every non-status label and avoiding a stale read/replace cycle.
     // The labels must EXIST in the repo (`gh` errors on an unknown label, loudly —
     // which is the intended failure, unlike the board's silent misroute).
     //
@@ -73,7 +74,7 @@
     // the whole read path, and it carries open/closed state intrinsically instead of
     // needing an intersect. There is no `batch` either — these are REST calls off the
     // 5,000/hr core pool, not GraphQL points, so an ordinary loop is now correct.
-    "set_status": "gh issue edit $1 --remove-label \"{{tracker.status_labels}}\" --add-label $2",
+    "set_status": "gh issue edit $1 --remove-label \"{{tracker.status_labels}}\" && gh issue edit $1 --add-label $2",
 
     "ci_runs": "gh run list",
     "ci_log": "gh run view $1 --log",

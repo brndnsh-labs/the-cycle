@@ -146,6 +146,59 @@ for (const backend of BACKENDS) {
     }
 }
 
+// #29: `gh issue edit` does not guarantee remove-before-add when both flags are
+// used in one invocation. The target is deliberately present in the derived
+// clear-list, so every rendered transition must use two ordered calls rather
+// than letting the CLI race the same label against itself.
+describe('status transition ordering (#29)', () => {
+    let dir;
+    let rendered;
+
+    before(() => {
+        dir = scratchRepo('github');
+        dirs.push(dir);
+        cycle(dir, ['install', '--profile', 'full', '--backend', 'github', '-y']);
+        const skillRoot = join(dir, '.claude', 'skills');
+        const files = [
+            join(skillRoot, 'DOCTRINE.md'),
+            ...readdirSync(skillRoot, { withFileTypes: true })
+                .filter((entry) => entry.isDirectory())
+                .map((entry) => join(skillRoot, entry.name, 'SKILL.md')),
+        ];
+        rendered = files.map((file) => readFileSync(file, 'utf8')).join('\n');
+    });
+
+    test('the backend verb separates removal from addition with an explicit guard', () => {
+        const raw = readFileSync(join(HERE, '..', 'backends', 'github.jsonc'), 'utf8');
+        const backend = JSON.parse(raw.replace(/^\s*\/\/.*$/gm, '').replace(/,(\s*[}\]])/g, '$1'));
+        assert.equal(
+            backend.verbs.set_status,
+            'gh issue edit $1 --remove-label "{{tracker.status_labels}}" && gh issue edit $1 --add-label $2',
+        );
+    });
+
+    test('every rendered status transition removes, then conditionally adds', () => {
+        const transitions = rendered.split('\n').filter(
+            (line) => line.includes('--remove-label "status:') && line.includes('--add-label "'),
+        );
+        assert.ok(transitions.length > 0, 'fixture rendered no status transitions');
+        for (const line of transitions) {
+            const [remove, add, ...extra] = line.split(' && ');
+            assert.equal(extra.length, 0, line);
+            const removed = /--remove-label "([^"]+)"/.exec(remove)?.[1].split(',') ?? [];
+            const target = /--add-label "([^"]+)"/.exec(add)?.[1];
+            assert.ok(removed.length > 0 && removed.every((label) => label.startsWith('status:')), remove);
+            assert.doesNotMatch(remove, /--add-label/);
+            assert.match(add, /gh issue edit .* --add-label "(?:status:|<status:label>)/);
+            assert.doesNotMatch(add, /--remove-label/);
+            assert.ok(target, add);
+            if (target !== '<status:label>') {
+                assert.ok(removed.includes(target), `target ${target} missing from clear-list: ${remove}`);
+            }
+        }
+    });
+});
+
 // `install --plan` is the seam between the deterministic renderer and a guided setup
 // that has judgment. Its contract: emit everything needed to fill in a config, write
 // nothing, and stay in step with the templates.

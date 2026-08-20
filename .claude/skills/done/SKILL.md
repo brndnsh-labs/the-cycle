@@ -2,7 +2,7 @@
 name: done
 description: Ship a the-cycle story — commit the reviewed work, push, open a PR that Closes #<n>, and (for a safe story) queue server-side auto-merge; a judgment-call story's PR is left for Brandon's manual merge. Done = the issue closes on merge. Plan-first. Usage `/done #<n>`. Use after /review (+ /patch) pass clean.
 ---
-<!-- cycle:rendered template=skills/done.md.tmpl hash=12cea35b47c0 — managed by the-cycle; edit the template, not this file -->
+<!-- cycle:rendered template=skills/done.md.tmpl hash=efd1862e7324 — managed by the-cycle; edit the template, not this file -->
 
 # /done #<n> — ship a story
 
@@ -52,7 +52,7 @@ just the ordering.
       ```
       This returns immediately with the merge *queued*, so the PR is normally still open when
       you look — that is success, not a pending failure. Set Status explicitly right away:
-      `gh issue edit "<n>" --remove-label "status:ready,status:in-progress,status:in-review,status:needs-decision,status:blocked" --add-label "status:in-review"`. Sync local main and prune on the next
+      `gh issue edit "<n>" --remove-label "status:ready,status:in-progress,status:in-review,status:needs-decision,status:blocked" && gh issue edit "<n>" --add-label "status:in-review"`. Sync local main and prune on the next
       run that needs it, rather than waiting around for the merge to land.
     - **Judgment-call story** → **leave the PR open**, report "ready for your merge: <url>" + *why*
       it's gated. Do NOT auto-merge.
