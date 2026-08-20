@@ -843,6 +843,95 @@ export function detect(root) {
     return out;
 }
 
+// A formatter that reflows a rendered skill's markdown (prettier, dprint) changes
+// only whitespace, but the drift hash is over raw bytes — so a reflow reads as a
+// hand edit and permanently blocks `cycle update` until someone passes --force.
+// The fix is to keep the formatter off these files entirely, not to weaken the
+// hash. Detected and reported, never auto-written — same reasoning as the `gh
+// label create` lines below: a command this runs should be one the operator ran
+// on purpose, and a third-party tool's config isn't this command's to touch.
+const PRETTIER_MARKERS = [
+    '.prettierrc', '.prettierrc.json', '.prettierrc.yaml', '.prettierrc.yml',
+    '.prettierrc.js', '.prettierrc.cjs', '.prettierrc.mjs', '.prettierrc.ts',
+    'prettier.config.js', 'prettier.config.cjs', 'prettier.config.mjs',
+];
+function usesPrettier(root) {
+    if (PRETTIER_MARKERS.some((m) => existsSync(join(root, m)))) return true;
+    const pkgPath = join(root, 'package.json');
+    if (!existsSync(pkgPath)) return false;
+    try {
+        const pkg = JSON.parse(readFileSync(pkgPath, 'utf8'));
+        return Boolean(pkg.prettier ?? pkg.devDependencies?.prettier ?? pkg.dependencies?.prettier);
+    } catch {
+        return false;
+    }
+}
+
+const DPRINT_CONFIGS = ['dprint.json', 'dprint.jsonc', '.dprintrc.json', '.dprintrc.jsonc'];
+const findDprintConfig = (root) => DPRINT_CONFIGS.map((f) => join(root, f)).find((p) => existsSync(p)) ?? null;
+
+/**
+ * Missing formatter-ignore entries for the currently configured harness roots, as
+ * ready-to-paste blocks — or `[]` if every detected formatter already covers them
+ * (or none is detected). Best-effort: a malformed dprint config is reported as
+ * "can't verify", never a crash.
+ */
+function formatterGuidance(root, cfg) {
+    const roots = harnessNames(cfg).map((h) => loadHarness(h).root);
+    const blocks = [];
+
+    if (usesPrettier(root)) {
+        const ignorePath = join(root, '.prettierignore');
+        const have = existsSync(ignorePath) ? readFileSync(ignorePath, 'utf8').split('\n') : [];
+        const missing = roots.filter((r) => !have.includes(`${r}/`));
+        if (missing.length) {
+            blocks.push([
+                'prettier reformats markdown here, which will fight `cycle update`\'s drift detection.',
+                `add these lines to ${relative(root, ignorePath)} (create it if missing):`,
+                ...missing.map((r) => `  ${r}/`),
+            ]);
+        }
+    }
+
+    const dprintPath = findDprintConfig(root);
+    if (dprintPath) {
+        let excludes = [];
+        try {
+            const parsed = readJsonc(dprintPath);
+            excludes = Array.isArray(parsed.excludes) ? parsed.excludes : [];
+        } catch {
+            blocks.push([`dprint config at ${relative(root, dprintPath)} could not be parsed — check its "excludes" by hand.`]);
+            excludes = null;
+        }
+        if (excludes) {
+            // Only a glob that denotes the whole subtree counts as coverage — a prefix
+            // match like `startsWith` would also accept `.claude/skills/README.md`,
+            // which excludes one file and leaves every actual SKILL.md (nested one
+            // level deeper) still exposed to reflow. Erring toward an extra reminder
+            // beats erring toward a silent gap.
+            const missing = roots.filter((r) => !excludes.some((e) => e === r || e === `${r}/` || e === `${r}/**`));
+            if (missing.length) {
+                blocks.push([
+                    'dprint reformats markdown here, which will fight `cycle update`\'s drift detection.',
+                    `add these globs to ${relative(root, dprintPath)}'s "excludes" array:`,
+                    ...missing.map((r) => `  "${r}/**"`),
+                ]);
+            }
+        }
+    }
+
+    return blocks;
+}
+
+function printFormatterGuidance(blocks) {
+    if (!blocks.length) return;
+    console.log(`\n${yellow('formatter:')} a reflow-only edit will read as local drift until this is addressed —`);
+    for (const block of blocks) {
+        for (const line of block) console.log(`  ${dim(line)}`);
+        console.log('');
+    }
+}
+
 // ---------------------------------------------------------------------------
 // commands
 // ---------------------------------------------------------------------------
@@ -1016,6 +1105,8 @@ async function cmdInstall(args) {
             console.log(`  ${dim(`gh label create "${s.name}" --description ${JSON.stringify(s.meaning ?? '')} --force`)}`);
         }
     }
+
+    printFormatterGuidance(formatterGuidance(root, cfg));
 
     if (!cycleHomeIsClone()) {
         console.log(
@@ -1301,6 +1392,7 @@ function cmdUpdate(args) {
     });
     const cfg = loadConfig(root);
     const plan = planRender(root, cfg);
+    const guidance = formatterGuidance(root, cfg);
 
     const writes = [];
     const conflicts = [];
@@ -1326,6 +1418,7 @@ function cmdUpdate(args) {
 
     if (!writes.length) {
         console.log(conflicts.length ? dim('nothing else to update.') : green('✓ already up to date — nothing to write'));
+        printFormatterGuidance(guidance);
         process.exitCode = conflicts.length ? 1 : 0;
         return;
     }
@@ -1337,6 +1430,7 @@ function cmdUpdate(args) {
 
     if (values['dry-run']) {
         console.log(dim(`\n(dry run — ${writes.length} file(s) would change)`));
+        printFormatterGuidance(guidance);
         return;
     }
 
@@ -1346,6 +1440,7 @@ function cmdUpdate(args) {
     }
     writeState(root, plan);
     console.log(`${green('✓')} updated ${bold(String(writes.length))} file(s) to the-cycle@${upstreamSha()}`);
+    printFormatterGuidance(guidance);
     if (conflicts.length) process.exitCode = 1;
 }
 

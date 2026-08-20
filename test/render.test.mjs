@@ -522,6 +522,77 @@ describe('drift detection', () => {
     });
 });
 
+// #11: a reflow-only formatter pass reads as a hand edit under the byte-hash drift
+// check, which permanently blocks `cycle update` — the fix keeps the formatter off
+// rendered trees, reported (never auto-written) at both install and update time.
+describe('formatter guidance (#11)', () => {
+    test('a prettier repo with no .prettierignore is told exactly what to add', () => {
+        const dir = scratchRepo('github');
+        dirs.push(dir);
+        writeFileSync(join(dir, '.prettierrc.json'), '{}');
+        const out = cycle(dir, ['install', '--profile', 'lean', '-y']);
+        assert.match(out, /prettier reformats markdown/);
+        assert.match(out, /\.prettierignore/);
+        assert.match(out, /\.claude\/skills\//);
+    });
+
+    test('a prettier repo whose .prettierignore already covers the harness root gets no guidance', () => {
+        const dir = scratchRepo('github');
+        dirs.push(dir);
+        writeFileSync(join(dir, '.prettierrc.json'), '{}');
+        writeFileSync(join(dir, '.prettierignore'), '.claude/skills/\n');
+        const out = cycle(dir, ['install', '--profile', 'lean', '-y']);
+        assert.doesNotMatch(out, /formatter:/);
+
+        const updated = cycleRaw(dir, ['update']);
+        assert.doesNotMatch(updated.out, /formatter:/);
+    });
+
+    test('a dprint repo with no matching exclude is told exactly what to add', () => {
+        const dir = scratchRepo('github');
+        dirs.push(dir);
+        writeFileSync(join(dir, 'dprint.json'), JSON.stringify({ excludes: [] }));
+        const out = cycle(dir, ['install', '--profile', 'lean', '-y']);
+        assert.match(out, /dprint reformats markdown/);
+        assert.match(out, /dprint\.json/);
+        assert.match(out, /"\.claude\/skills\/\*\*"/);
+    });
+
+    test('a dprint repo whose excludes already cover the harness root gets no guidance', () => {
+        const dir = scratchRepo('github');
+        dirs.push(dir);
+        writeFileSync(join(dir, 'dprint.json'), JSON.stringify({ excludes: ['.claude/skills/**'] }));
+        const out = cycle(dir, ['install', '--profile', 'lean', '-y']);
+        assert.doesNotMatch(out, /formatter:/);
+    });
+
+    test('a dprint exclude that only names one file still gets flagged as missing', () => {
+        // `.claude/skills/README.md` excludes a single file, not the subtree — every
+        // actual SKILL.md (nested one level deeper) is still exposed to reflow, so this
+        // must not be mistaken for coverage the way a naive prefix match would.
+        const dir = scratchRepo('github');
+        dirs.push(dir);
+        writeFileSync(join(dir, 'dprint.json'), JSON.stringify({ excludes: ['.claude/skills/README.md'] }));
+        const out = cycle(dir, ['install', '--profile', 'lean', '-y']);
+        assert.match(out, /dprint reformats markdown/);
+    });
+
+    test('a malformed dprint config is reported, not crashed on', () => {
+        const dir = scratchRepo('github');
+        dirs.push(dir);
+        writeFileSync(join(dir, 'dprint.json'), '{ not valid json');
+        const out = cycle(dir, ['install', '--profile', 'lean', '-y']);
+        assert.match(out, /could not be parsed/);
+    });
+
+    test('a repo with neither formatter gets no guidance at all', () => {
+        const dir = scratchRepo('github');
+        dirs.push(dir);
+        const out = cycle(dir, ['install', '--profile', 'lean', '-y']);
+        assert.doesNotMatch(out, /formatter:/);
+    });
+});
+
 describe('version stamp — no .git in CYCLE_HOME (an npm/npx install)', () => {
     let gitlessHome;
     let expectedVersion;

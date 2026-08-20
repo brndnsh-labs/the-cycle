@@ -101,3 +101,19 @@ Current overlay points (all optional):
 3. If a repo has locally drifted, `update` refuses. That's the design — resolve it by folding the
    local edit **into the template**, not by forcing over it. A local edit that's genuinely
    repo-specific means you found a missing config value or overlay point.
+
+## Formatters and drift
+
+Drift detection hashes a rendered file's raw bytes (`stripProvenance` then `hashContent` — both in
+`bin/cycle.mjs`), so a markdown formatter that reflows line wrapping — prettier, dprint — reads as
+a hand edit even though the prose is identical. Left alone, that permanently blocks `cycle update`
+for that repo: every run refuses the "edit" and `--force` becomes a habit, which eventually
+clobbers a genuine local change.
+
+The fix is keeping the formatter off rendered skill trees entirely, not loosening the hash — a
+looser hash would let a real reflow-only hand edit pass silently, which is the failure this
+detector exists to catch. `cycle install` and `cycle update` detect a configured prettier or dprint
+setup and, if the configured harness roots aren't already excluded, print the exact lines to add
+(`.prettierignore` entries, or a dprint `excludes` glob) — never written automatically, same
+reasoning as the `gh label create` lines they sit next to: a repo's own tooling config isn't
+`cycle`'s to touch without the operator asking for it.
