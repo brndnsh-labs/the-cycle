@@ -1,4 +1,4 @@
-<!-- cycle:rendered template=DOCTRINE.md.tmpl hash=00497ab460c0 — managed by the-cycle; edit the template, not this file -->
+<!-- cycle:rendered template=DOCTRINE.md.tmpl hash=bc4a598c89a1 — managed by the-cycle; edit the template, not this file -->
 # Pipeline doctrine (shared)
 
 Single source of truth for the rules the the-cycle work-loop skills share. A skill that says
@@ -38,8 +38,11 @@ triage starts.
 
 **A closed issue is "done."** `Closes #<n>` closes the issue on merge, and that close *is* the
 completion record — there is no `status:done`, because a second source of truth can disagree with
-the close and will eventually go stale. The last label the pipeline writes is `status:in-review`;
-the merge finishes the story. The pipeline doesn't argue with the close; it lets the close speak.
+the close and will eventually go stale. Status labels route **open** issues only; the last one may
+remain as the issue's final open-state history after closure, but the open-only board ignores it.
+The pipeline writes `status:in-review` when the PR opens, then lets the merge finish the
+story. Reopening starts a new routing decision: explicitly set the next status; never infer it
+from the retained label.
 
 **A stale-*open* issue may already be shipped.** An umbrella/parent issue's slices often ship
 under sibling-numbered PRs that never reference the umbrella's own number — `git log --grep=#<n>`
