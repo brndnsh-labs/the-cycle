@@ -2,7 +2,7 @@
 name: done
 description: Ship a the-cycle story — commit the reviewed work, push, open a PR that Closes #<n>, and (for a safe story) queue server-side auto-merge; a judgment-call story's PR is left for Brandon's manual merge. Done = the issue closes on merge. Plan-first. Usage `/done #<n>`. Use after /review (+ /patch) pass clean.
 ---
-<!-- cycle:rendered template=skills/done.md.tmpl hash=ce89688f4e8a — managed by the-cycle; edit the template, not this file -->
+<!-- cycle:rendered template=skills/done.md.tmpl hash=6d9f7d9b949f — managed by the-cycle; edit the template, not this file -->
 
 # /done #<n> — ship a story
 
@@ -44,9 +44,10 @@ just the ordering.
      `main`; branch before delivery work.
 6. **Compose the narrative** — the "what shipped + which findings were actioned + why" summary
    that becomes the **PR body**.
-7. **Commit** (§8) — Conventional Commit, explicit paths (never `-A` / `.`), HEREDOC body.
-   Use the harness's standard identity if it supplies one; otherwise omit a co-author trailer
-   rather than inventing an identity.
+7. **Commit** (§8) — Conventional Commit, explicit paths (never `-A` / `.`), HEREDOC body. Include
+   `Co-Authored-By` only when the active runtime explicitly supplies a truthful identity for this
+   work. Otherwise omit it. Never infer an identity from repo config, the harness/product name, a
+   model name, or a historical commit.
 8. **Push** — `git push -u origin <branch>`.
 9. **Open the PR** (§8) — `gh pr create --head "<branch>" --base main --title "<title>" --body "<body>"` — base `main`, the
    narrative body, **`Closes #<n>`**, the attribution trailer at the end (§8), the

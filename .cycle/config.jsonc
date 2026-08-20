@@ -100,10 +100,6 @@
     // PR could ever merge and the merge guard would hang forever.
     "minor_edits_direct": false
   },
-  "commit": {
-    // Let each harness use its real identity rather than inventing a shared one.
-    "coauthor": ""
-  },
   "deploy": {
     "test": "",
     "prod": ""

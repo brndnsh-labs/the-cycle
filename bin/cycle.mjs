@@ -1068,7 +1068,6 @@ export function draftConfig(root, { backend: wanted, profile, set } = {}) {
         deps: d.deps ?? NO_DEPENDENCY_WORKFLOW,
         brakes: ['auth / tokens / secrets', 'schema / data migration', 'anything destructive or irreversible'],
         branch: { minor_edits_direct: true },
-        commit: { coauthor: '' },
         deploy: d.deploy ?? { test: '', prod: '' },
     };
     return { cfg: applyConfigSets(cfg, set), detected: d };
