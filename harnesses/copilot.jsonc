@@ -1,0 +1,40 @@
+// GitHub Copilot CLI — the third render target, and the second registry entry on top
+// of the harness abstraction (that machinery shipped with Claude Code + Codex CLI).
+//
+// Skills are the same open agent-skills format the other two harnesses use (SKILL.md +
+// name/description frontmatter), so almost nothing here differs from claude.jsonc or
+// codex.jsonc. Verified against the current release (2026-08), not assumed:
+//   - discovery path: docs.github.com/en/copilot/how-tos/copilot-cli/customize-copilot/add-skills
+//     — project skills are discovered at .github/skills, .claude/skills, OR .agents/skills
+//     at the repo root, all three equally valid. .github/skills is used here rather than
+//     .agents/skills specifically to avoid colliding with the codex harness's root if a
+//     repo ever configures both (cycle lint's root-collision check would catch a clash,
+//     but there's no reason to court it).
+//   - subagents: a `task` tool exists for general-purpose delegation in normal/default
+//     sessions (it survives even Plan mode's stripped-to-4-tools set), plus a `/fleet`
+//     user command for larger multi-agent decomposition — so /fan-out and /cover's
+//     per-unit spawn apply here too.
+//   - structured questions: an `ask_user` tool exists with predefined choices plus an
+//     auto-appended "Other" freeform escape hatch, functionally equivalent to
+//     AskUserQuestion, and available in normal/default sessions (unlike Codex's
+//     Plan-mode-only equivalent). Note for future re-verification: Copilot CLI ships
+//     updates constantly and there's at least one open upstream report of `ask_user`
+//     intermittently disappearing — re-confirm this flag against a live session before
+//     leaning on it hard.
+{
+  "name": "copilot",
+  "display": "Copilot CLI",
+
+  "root": ".github/skills",
+  "skill_file": "SKILL.md",
+
+  "capabilities": {
+    "has_menus": true,
+    "has_subagents": true
+  },
+
+  "notes": {
+    "attribution": "🤖 Generated with [Copilot CLI](https://github.com/features/copilot/cli)",
+    "ask": "`ask_user`"
+  }
+}

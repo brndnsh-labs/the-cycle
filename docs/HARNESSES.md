@@ -31,16 +31,16 @@ executables to keep in sync.
 
 ## The `harness.*` field vocabulary
 
-| Field | Example (claude) | Example (codex) | Purpose |
-| --- | --- | --- | --- |
-| `harness.name` | `claude` | `codex` | the config key |
-| `harness.display` | `Claude Code` | `Codex CLI` | human-readable, for prose |
-| `harness.root` | `.claude/skills` | `.agents/skills` | where this tree's skills land |
-| `harness.doctrine_path` | `.claude/skills/DOCTRINE.md` | `.agents/skills/DOCTRINE.md` | computed (`root/DOCTRINE.md`) — every skill's "Shared rules in `…`" line |
-| `harness.has_menus` | `true` | `false` | a structured choice tool is callable in normal skill execution |
-| `harness.has_subagents` | `true` | `true` | a native parallel-subagent spawn tool exists |
-| `harness.attribution` | `🤖 Generated with [Claude Code](…)` | `🤖 Generated with [Codex CLI](…)` | the §8 PR-body trailer |
-| `harness.ask` | `` `AskUserQuestion` `` | `plain chat` | how a workflow asks a discrete question |
+| Field | Example (claude) | Example (codex) | Example (copilot) | Purpose |
+| --- | --- | --- | --- | --- |
+| `harness.name` | `claude` | `codex` | `copilot` | the config key |
+| `harness.display` | `Claude Code` | `Codex CLI` | `Copilot CLI` | human-readable, for prose |
+| `harness.root` | `.claude/skills` | `.agents/skills` | `.github/skills` | where this tree's skills land |
+| `harness.doctrine_path` | `.claude/skills/DOCTRINE.md` | `.agents/skills/DOCTRINE.md` | `.github/skills/DOCTRINE.md` | computed (`root/DOCTRINE.md`) — every skill's "Shared rules in `…`" line |
+| `harness.has_menus` | `true` | `false` | `true` | a structured choice tool is callable in normal skill execution |
+| `harness.has_subagents` | `true` | `true` | `true` | a native parallel-subagent spawn tool exists |
+| `harness.attribution` | `🤖 Generated with [Claude Code](…)` | `🤖 Generated with [Codex CLI](…)` | `🤖 Generated with [Copilot CLI](…)` | the §8 PR-body trailer |
+| `harness.ask` | `` `AskUserQuestion` `` | `plain chat` | `` `ask_user` `` | how a workflow asks a discrete question |
 
 `doctrine_path` is computed by the engine (`buildHarnessContext` in `bin/cycle.mjs`) from `root` —
 it isn't a field a harness file declares. Everything else comes straight from the `.jsonc` file.
@@ -52,16 +52,17 @@ them via `{{#if harness.…}}` / `{{#unless harness.…}}` — and `cycle lint`'
 the build if a template branches on a field the engine never populates (a typo inside a block is
 otherwise silently falsy, not a hard error — see `bin/lint.mjs`):
 
-| | Claude Code | Codex CLI |
-| --- | --- | --- |
-| `has_menus` | `true` — `AskUserQuestion` | `false` — `request_user_input` is Plan-mode only |
-| `has_subagents` | `true` — the Agent tool | `true` — subagents, GA 2026-03-14 |
+| | Claude Code | Codex CLI | Copilot CLI |
+| --- | --- | --- | --- |
+| `has_menus` | `true` — `AskUserQuestion` | `false` — `request_user_input` is Plan-mode only | `true` — `ask_user` |
+| `has_subagents` | `true` — the Agent tool | `true` — subagents, GA 2026-03-14 | `true` — the `task` tool / `/fleet` |
 
-Both harnesses support the same open agent-skills format and native subagents. Codex's structured
-question tool is mode-scoped, however, so ordinary skill execution takes the direct-chat menu
-fallback. The `{{#unless harness.has_menus}}` / `{{#unless harness.has_subagents}}` branches are
-real shipped behavior as well as the extension seam for a future, less-capable harness (Opencode,
-Pi — see the harness-target follow-up issues).
+All three harnesses support the same open agent-skills format and native subagents. Codex's
+structured question tool is mode-scoped, so ordinary skill execution takes the direct-chat menu
+fallback there; Claude Code and Copilot CLI both expose theirs in normal sessions. The
+`{{#unless harness.has_menus}}` / `{{#unless harness.has_subagents}}` branches are real shipped
+behavior as well as the extension seam for a future, less-capable harness (Opencode, Pi — see the
+harness-target follow-up issues).
 
 ## Verified discovery paths, not assumed
 
@@ -74,6 +75,10 @@ finds the skills at all, and that failure is silent (no error, just nothing to i
   `developers.openai.com/codex/skills` (2026-07). Codex also discovers skills at a parent directory,
   `~/.agents/skills`, `/etc/codex/skills`, and its own built-ins — the repo-root path is what a
   rendered install writes to.
+- **Copilot CLI** — `.github/skills/<name>/SKILL.md` at the repo root, confirmed against
+  `docs.github.com/en/copilot/how-tos/copilot-cli/customize-copilot/add-skills` (2026-08). Copilot
+  also discovers `.claude/skills` and `.agents/skills` as equally valid project-skill roots —
+  `.github/skills` is used here to avoid colliding with the codex harness's root.
 
 Before adding a harness, re-verify its current discovery path against that tool's own docs at
 implementation time — these move, and a stale path here is worse than no harness at all.
