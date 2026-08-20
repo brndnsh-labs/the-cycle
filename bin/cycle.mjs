@@ -852,11 +852,22 @@ export function detect(root) {
 // on purpose, and a third-party tool's config isn't this command's to touch.
 const PRETTIER_MARKERS = [
     '.prettierrc', '.prettierrc.json', '.prettierrc.yaml', '.prettierrc.yml',
+    '.prettierrc.json5', '.prettierrc.toml',
     '.prettierrc.js', '.prettierrc.cjs', '.prettierrc.mjs', '.prettierrc.ts',
+    '.prettierrc.cts', '.prettierrc.mts',
     'prettier.config.js', 'prettier.config.cjs', 'prettier.config.mjs',
+    'prettier.config.ts', 'prettier.config.cts', 'prettier.config.mts',
 ];
 function usesPrettier(root) {
     if (PRETTIER_MARKERS.some((m) => existsSync(join(root, m)))) return true;
+    const packageYamlPath = join(root, 'package.yaml');
+    if (existsSync(packageYamlPath)) {
+        // Prettier recognizes a top-level `prettier` key in package.yaml. Keep
+        // this deliberately narrow so an unrelated nested key does not make a
+        // non-Prettier repo look configured.
+        const packageYaml = readFileSync(packageYamlPath, 'utf8');
+        if (/^(?:prettier|["']prettier["'])\s*:/m.test(packageYaml)) return true;
+    }
     const pkgPath = join(root, 'package.json');
     if (!existsSync(pkgPath)) return false;
     try {
@@ -867,8 +878,42 @@ function usesPrettier(root) {
     }
 }
 
-const DPRINT_CONFIGS = ['dprint.json', 'dprint.jsonc', '.dprintrc.json', '.dprintrc.jsonc'];
+const DPRINT_CONFIGS = ['dprint.json', 'dprint.jsonc', '.dprint.json', '.dprint.jsonc'];
 const findDprintConfig = (root) => DPRINT_CONFIGS.map((f) => join(root, f)).find((p) => existsSync(p)) ?? null;
+
+function negationMayReincludeRoot(entry, root) {
+    if (typeof entry !== 'string' || !entry.startsWith('!')) return false;
+    const pattern = entry.slice(1).replace(/^\/+/, '');
+    if (pattern === root || pattern.startsWith(`${root}/`)) return true;
+
+    // A slashless gitignore pattern applies at any depth. Managed harness trees
+    // contain markdown only, so a literal non-markdown basename (for example
+    // `!dist.js`) is provably unrelated; wildcard or markdown patterns are not.
+    if (!pattern.includes('/')) return /[*?\[]/.test(pattern) || pattern.endsWith('.md');
+
+    // For globbed paths, compare the literal prefix on either side of the first
+    // wildcard. An empty prefix (`!**/DOCTRINE.md`) may match anywhere.
+    const wildcard = pattern.search(/[*?\[]/);
+    if (wildcard === -1) return false;
+    const prefix = pattern.slice(0, wildcard);
+    return prefix === '' || root.startsWith(prefix) || prefix.startsWith(`${root}/`);
+}
+
+function ignorePatternsCoverRoot(patterns, root) {
+    let covered = false;
+    for (const rawEntry of patterns) {
+        const entry = typeof rawEntry === 'string' ? rawEntry.trim() : rawEntry;
+        if (entry === root || entry === `${root}/` || entry === `${root}/**`) {
+            covered = true;
+            continue;
+        }
+        // Both formatter ignore formats use ordered gitignore-style patterns. A
+        // relevant later negation reopens the tree; a later exact whole-tree
+        // exclude restores coverage.
+        if (covered && negationMayReincludeRoot(entry, root)) covered = false;
+    }
+    return covered;
+}
 
 /**
  * Missing formatter-ignore entries for the currently configured harness roots, as
@@ -883,7 +928,7 @@ function formatterGuidance(root, cfg) {
     if (usesPrettier(root)) {
         const ignorePath = join(root, '.prettierignore');
         const have = existsSync(ignorePath) ? readFileSync(ignorePath, 'utf8').split('\n') : [];
-        const missing = roots.filter((r) => !have.includes(`${r}/`));
+        const missing = roots.filter((r) => !ignorePatternsCoverRoot(have, r));
         if (missing.length) {
             blocks.push([
                 'prettier reformats markdown here, which will fight `cycle update`\'s drift detection.',
@@ -909,7 +954,7 @@ function formatterGuidance(root, cfg) {
             // which excludes one file and leaves every actual SKILL.md (nested one
             // level deeper) still exposed to reflow. Erring toward an extra reminder
             // beats erring toward a silent gap.
-            const missing = roots.filter((r) => !excludes.some((e) => e === r || e === `${r}/` || e === `${r}/**`));
+            const missing = roots.filter((r) => !ignorePatternsCoverRoot(excludes, r));
             if (missing.length) {
                 blocks.push([
                     'dprint reformats markdown here, which will fight `cycle update`\'s drift detection.',
