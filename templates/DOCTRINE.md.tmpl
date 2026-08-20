@@ -24,10 +24,12 @@ nothing to be on or off. Status is one `status:*` label on the issue itself.
 {{#each tracker.statuses}}| `{{.name}}` | {{.meaning}} | {{.action}} |
 {{/each}}| *(none)* | the idea pile — filed but not scheduled | triage/scope it first; don't pick |
 
-Exactly one `status:*` label at a time: every write clears the whole set before adding one, so
-the states can't overlap. **No label is a real state**, not a gap — it's every issue still waiting
-on a §10.5 certainty call (a review-carved observation, §2; a finding the filer couldn't
-confidently route), and that untriaged pile is where triage starts.
+After a successful status transition, exactly one `status:*` label remains. The ordered write
+clears the whole set before adding the target, so there is a brief unlabeled intermediate event
+but never overlapping status values. Outside that in-flight transition, **no label is a real
+state**, not a gap — it's every issue still waiting on a §10.5 certainty call (a review-carved
+observation, §2; a finding the filer couldn't confidently route), and that untriaged pile is where
+triage starts.
 
 **Ranking pickable work** (`/next`): {{tracker.ranking}}.
 
@@ -234,8 +236,8 @@ no way for a stale row to linger.
 
 - **Read the tracker:** `{{@issue_list}}` (one label: `{{@issue_list_label "<label>"}}`)
 - **Read one issue:** `{{@issue_view "<n>"}}`
-- **Write a routing value:** `{{@set_status "<n>" "<status:label>"}}` — clears the other status
-  labels and sets this one, in a single call. Non-status labels: `{{@issue_edit_label "<n>" "<label>"}}` ·
+- **Write a routing value:** `{{@set_status "<n>" "<status:label>"}}` — clears the status set,
+  then sets this one in an explicitly ordered second call. Non-status labels: `{{@issue_edit_label "<n>" "<label>"}}` ·
   `{{@issue_unlabel "<n>" "<label>"}}`
 - **Bulk writes:** an ordinary loop, one call per issue. These are REST calls against the
   5,000/hr core pool, not GraphQL points, so there is nothing to batch around.

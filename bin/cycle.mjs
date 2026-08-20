@@ -522,8 +522,9 @@ function buildContext(cfg, backend) {
         tracker: {
             ...(cfg.tracker ?? {}),
             // The whole status vocabulary as one comma-joined list, for the backend's
-            // set_status verb: it clears every status label before adding the target,
-            // which is what keeps the set mutually exclusive without reading first.
+            // set_status verb: its ordered calls clear every status label before adding
+            // the target, which keeps the successful end state mutually exclusive
+            // without a read/replace cycle.
             // Derived rather than configured so the list can never disagree with the
             // table §1 renders from the same source.
             status_labels: (cfg.tracker?.statuses ?? []).map((s) => s.name).join(','),

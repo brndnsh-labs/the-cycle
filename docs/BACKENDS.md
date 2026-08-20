@@ -35,12 +35,12 @@ idea, different axis: this file is about the tracker, that one is about the harn
 | `ci_log` / `ci_log_failed` | `$1` run | read one run's log / its failed steps |
 
 There is no `board_list`: **the open issue list is the board**, so `issue_list` is the whole read
-path. There is no `batch` either — the status write is a single REST call against the 5,000/hr
-core pool, not GraphQL points, so an ordinary loop is correct and a batching verb would only be a
-second way to do the same thing.
+path. There is no `batch` either — each status transition is two ordered `gh issue edit` calls
+backed by the 5,000/hr REST pool, not GraphQL points, so an ordinary loop is correct and a batching
+verb would only be a second way to do the same thing.
 
 A verb's value is itself a template, so it can embed config:
-`"set_status": "gh issue edit $1 --remove-label \"{{tracker.status_labels}}\" --add-label $2"`.
+`"set_status": "gh issue edit $1 --remove-label \"{{tracker.status_labels}}\" && gh issue edit $1 --add-label $2"`.
 `tracker.status_labels` is derived at render time from `tracker.statuses`, so the clear-list can
 never disagree with the table DOCTRINE §1 prints from the same source.
 
@@ -100,9 +100,10 @@ needs network and auth; a plain `cycle check` stays offline and deterministic.
 returns the work *and* its routing. Because it queries issues directly it carries open/closed
 state intrinsically: there is nothing to intersect and no way for a stale row to linger.
 
-Status is exactly one `status:*` label. `set_status` clears the whole set and adds the target in a
-single call — removing a label the issue doesn't carry is a no-op that still exits 0, and the add
-is applied after the removes, so the call is idempotent and needs no read first.
+Status is exactly one `status:*` label after a successful transition. `set_status` clears the whole
+set, then adds the target in a second call joined with `&&`. The explicit ordering avoids the
+remove/add race `gh issue edit` can produce when both flags name the target in one invocation,
+while preserving unrelated labels and avoiding a stale read/replace cycle.
 
 The labels must **exist in the repo**. `gh` fails loudly on one that doesn't, which is the
 intended behavior — `cycle install` prints the `gh label create` lines for the configured
