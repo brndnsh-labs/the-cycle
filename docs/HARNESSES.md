@@ -31,16 +31,16 @@ executables to keep in sync.
 
 ## The `harness.*` field vocabulary
 
-| Field | Example (claude) | Example (codex) | Example (copilot) | Purpose |
-| --- | --- | --- | --- | --- |
-| `harness.name` | `claude` | `codex` | `copilot` | the config key |
-| `harness.display` | `Claude Code` | `Codex CLI` | `Copilot CLI` | human-readable, for prose |
-| `harness.root` | `.claude/skills` | `.agents/skills` | `.github/skills` | where this tree's skills land |
-| `harness.doctrine_path` | `.claude/skills/DOCTRINE.md` | `.agents/skills/DOCTRINE.md` | `.github/skills/DOCTRINE.md` | computed (`root/DOCTRINE.md`) — every skill's "Shared rules in `…`" line |
-| `harness.has_menus` | `true` | `false` | `true` | a structured choice tool is callable in normal skill execution |
-| `harness.has_subagents` | `true` | `true` | `true` | a native parallel-subagent spawn tool exists |
-| `harness.attribution` | `🤖 Generated with [Claude Code](…)` | `🤖 Generated with [Codex CLI](…)` | `🤖 Generated with [Copilot CLI](…)` | the §8 PR-body trailer |
-| `harness.ask` | `` `AskUserQuestion` `` | `plain chat` | `` `ask_user` `` | how a workflow asks a discrete question |
+| Field | Example (claude) | Example (codex) | Example (copilot) | Example (opencode) | Example (pi) | Purpose |
+| --- | --- | --- | --- | --- | --- | --- |
+| `harness.name` | `claude` | `codex` | `copilot` | `opencode` | `pi` | the config key |
+| `harness.display` | `Claude Code` | `Codex CLI` | `Copilot CLI` | `OpenCode` | `Pi` | human-readable, for prose |
+| `harness.root` | `.claude/skills` | `.agents/skills` | `.github/skills` | `.opencode/skills` | `.pi/skills` | where this tree's skills land |
+| `harness.doctrine_path` | `.claude/skills/DOCTRINE.md` | `.agents/skills/DOCTRINE.md` | `.github/skills/DOCTRINE.md` | `.opencode/skills/DOCTRINE.md` | `.pi/skills/DOCTRINE.md` | computed (`root/DOCTRINE.md`) — every skill's "Shared rules in `…`" line |
+| `harness.has_menus` | `true` | `false` | `true` | `true` | `false` | a structured choice tool is callable in normal skill execution |
+| `harness.has_subagents` | `true` | `true` | `true` | `true` | `false` | a native parallel-subagent spawn tool exists |
+| `harness.attribution` | `🤖 Generated with [Claude Code](…)` | `🤖 Generated with [Codex CLI](…)` | `🤖 Generated with [Copilot CLI](…)` | `🤖 Generated with [OpenCode](…)` | `🤖 Generated with [Pi](…)` | the §8 PR-body trailer |
+| `harness.ask` | `` `AskUserQuestion` `` | `plain chat` | `` `ask_user` `` | `` `question` `` | `plain chat` | how a workflow asks a discrete question |
 
 `doctrine_path` is computed by the engine (`buildHarnessContext` in `bin/cycle.mjs`) from `root` —
 it isn't a field a harness file declares. Everything else comes straight from the `.jsonc` file.
@@ -52,17 +52,19 @@ them via `{{#if harness.…}}` / `{{#unless harness.…}}` — and `cycle lint`'
 the build if a template branches on a field the engine never populates (a typo inside a block is
 otherwise silently falsy, not a hard error — see `bin/lint.mjs`):
 
-| | Claude Code | Codex CLI | Copilot CLI |
-| --- | --- | --- | --- |
-| `has_menus` | `true` — `AskUserQuestion` | `false` — `request_user_input` is Plan-mode only | `true` — `ask_user` |
-| `has_subagents` | `true` — the Agent tool | `true` — subagents, GA 2026-03-14 | `true` — the `task` tool / `/fleet` |
+| | Claude Code | Codex CLI | Copilot CLI | OpenCode | Pi |
+| --- | --- | --- | --- | --- | --- |
+| `has_menus` | `true` — `AskUserQuestion` | `false` — `request_user_input` is Plan-mode only | `true` — `ask_user` | `true` — `question` | `false` — `ask_question` exists but its shape is unconfirmed |
+| `has_subagents` | `true` — the Agent tool | `true` — subagents, GA 2026-03-14 | `true` — the `task` tool / `/fleet` | `true` — the `task` tool | `false` — none by design |
 
-All three harnesses support the same open agent-skills format and native subagents. Codex's
-structured question tool is mode-scoped, so ordinary skill execution takes the direct-chat menu
-fallback there; Claude Code and Copilot CLI both expose theirs in normal sessions. The
-`{{#unless harness.has_menus}}` / `{{#unless harness.has_subagents}}` branches are real shipped
-behavior as well as the extension seam for a future, less-capable harness (Opencode, Pi — see the
-harness-target follow-up issues).
+All five harnesses support the same open agent-skills format. Codex's structured question tool is
+mode-scoped, so ordinary skill execution takes the direct-chat menu fallback there; Pi doesn't
+document its `ask_question` tool's shape well enough to assume it's multi-choice, so it gets the
+same conservative fallback. Claude Code, Copilot CLI, and OpenCode all expose a confirmed
+structured-choice tool in normal sessions. Pi also has no subagent mechanism at all, by explicit
+design choice — every other harness here does. The `{{#unless harness.has_menus}}` /
+`{{#unless harness.has_subagents}}` branches are real shipped behavior for both Codex and Pi, not
+just a speculative extension seam.
 
 ## Verified discovery paths, not assumed
 
@@ -79,6 +81,14 @@ finds the skills at all, and that failure is silent (no error, just nothing to i
   `docs.github.com/en/copilot/how-tos/copilot-cli/customize-copilot/add-skills` (2026-08). Copilot
   also discovers `.claude/skills` and `.agents/skills` as equally valid project-skill roots —
   `.github/skills` is used here to avoid colliding with the codex harness's root.
+- **OpenCode** — `.opencode/skills/<name>/SKILL.md`, walking from cwd up to the git worktree root,
+  confirmed against `opencode.ai/docs/skills` (2026-08). OpenCode also passively reads
+  `.claude/skills` and `.agents/skills` along that walk — `.opencode/skills` is its dedicated root,
+  used here for the same collision-avoidance reason as Copilot's.
+- **Pi** — `.pi/skills/<name>/SKILL.md`, walking from cwd up through parent directories, confirmed
+  against `github.com/badlogic/pi-mono`'s coding-agent README (2026-08). Pi also discovers
+  `.agents/skills` the same way — `.pi/skills` is used here to avoid colliding with the codex
+  harness's root.
 
 Before adding a harness, re-verify its current discovery path against that tool's own docs at
 implementation time — these move, and a stale path here is worse than no harness at all.
