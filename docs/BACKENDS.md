@@ -29,7 +29,7 @@ idea, different axis: this file is about the tracker, that one is about the harn
 | `issue_close` | `$1` number | close |
 | `pr_create` | `$1` branch `$2` title `$3` body | open a PR against `main` |
 | `pr_list` / `pr_view` / `pr_close` | `$1` number | PR surface |
-| `merge_guard` | `$1` pr `$2` issue | **backgrounded** poll-then-merge on green |
+| `merge_guard` | `$1` pr `$2` issue | **foreground, resumable** poll-then-merge on green (do not background with `&`) |
 | `set_status` | `$1` number `$2` status label | write the status value |
 | `ci_runs` | — | list CI runs |
 | `ci_log` / `ci_log_failed` | `$1` run | read one run's log / its failed steps |
