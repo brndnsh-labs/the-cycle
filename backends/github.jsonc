@@ -51,9 +51,10 @@
     "pr_close": "gh pr close $1",
 
     // Two-step on purpose: --watch errors with "no checks reported" if it runs before
-    // any run exists, so wait for registration first. The && is the guard — merge only
-    // happens if every check passed.
-    "merge_guard": "(until gh pr checks $1 >/dev/null 2>&1; do sleep 30; done; gh pr checks $1 --watch --interval 30 --fail-fast && gh pr merge $1 --squash --delete-branch) &",
+    // any run exists, so wait for registration first. Keep this foreground so a harness
+    // can resume the yielded command instead of reaping the only merge process. The &&
+    // is the guard — merge only happens if every check passed.
+    "merge_guard": "until gh pr checks $1 >/dev/null 2>&1; do sleep 30; done; gh pr checks $1 --watch --interval 30 --fail-fast && gh pr merge $1 --squash --delete-branch",
 
     // The protected-repo counterpart to merge_guard: one foreground call, no polling.
     // Only rendered when `auto_merge` is true, because without required status checks

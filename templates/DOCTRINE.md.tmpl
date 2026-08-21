@@ -177,16 +177,19 @@ report "ready for your merge: <url>" + *why* it's gated.
 **This repo has no server-side enforcement**, so the **poll-then-merge guard IS the enforcement**.
 Never use a fire-and-forget auto-merge flag here — `--auto` merges when the repo's merge
 *requirements* are met, and with no branch protection there are none, so it fires immediately with
-nothing to wait on. Run the guard in the **background** (the poll takes minutes; a foreground
-`sleep` is harness-blocked):
+nothing to wait on. Run the guard as **one foreground, resumable command**. If the command tool
+yields while CI is pending, resume that same command/session; do not append `&`, launch a detached
+watcher, or treat the yielded call as completion:
 
 ```bash
 {{@merge_guard "<pr>" "<n>"}}
 ```
 
-The guard is a client-side *simulation* of branch protection, with a simulation's weaknesses: it
-dies with the session, costs polling quota, and the harness can refuse to run it. If this repo ever
-gains protection, set `backend_overrides.auto_merge` and delete the guard.
+The guard is a client-side *simulation* of branch protection, with a simulation's weaknesses: the
+calling session must stay alive, it costs polling quota, and the harness can refuse to run it. If
+the session cannot retain a foreground command, leave the PR open and report that delivery is not
+complete — never detach the guard and claim success. If this repo ever gains protection, set
+`backend_overrides.auto_merge` and delete the guard.
 {{/unless}}
 {{#if backend.auto_merge}}
 **Server-side auto-merge is enabled here**, and the forge enforces the required checks — so queue
@@ -221,7 +224,7 @@ unexplained red a hard stop.
 After a safe merge: **sync local main** (`git checkout main && git fetch origin && git reset --hard
 origin/main`) and prune the branch.
 
-**The harness's own auto-mode classifier can independently deny the background merge command**, even
+**The harness's own auto-mode classifier can independently deny the merge command**, even
 on a safe story with everything above satisfied. That's an environment-level permission gate, not a
 pipeline judgment call, and no skill text can route around it. If it fires: report the open,
 CI-pending PR and ask {{repo.human}} for a one-turn approval to re-run the merge (or to
