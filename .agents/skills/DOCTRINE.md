@@ -1,4 +1,4 @@
-<!-- cycle:rendered template=DOCTRINE.md.tmpl hash=bc4a598c89a1 — managed by the-cycle; edit the template, not this file -->
+<!-- cycle:rendered template=DOCTRINE.md.tmpl hash=e8da0295b5f6 — managed by the-cycle; edit the template, not this file -->
 # Pipeline doctrine (shared)
 
 Single source of truth for the rules the the-cycle work-loop skills share. A skill that says
@@ -224,7 +224,12 @@ A status label that doesn't exist in the repo makes `gh` **fail loudly** — tha
 behavior. Create the label rather than working around the error, and never invent a status value
 that isn't in the §1 table.
 
-**Unreachable → STOP.** `gh` unauthenticated or offline: say so and stop. Never guess tracker state.
+**Confirm unreachable, then STOP.** A first transport or OS-permission failure can be the harness
+sandbox rather than the tracker. When the error is compatible with a sandbox restriction and the
+harness exposes a policy-supported escalation or approval path, retry the **exact same read once**
+through that path — same target and arguments, with no weakened authentication or command. Stop if
+that retry fails, `gh` is unauthenticated, the API rejects the authenticated request, or no allowed
+escalation path exists. Never loop, guess tracker state, or substitute cached data.
 
 ## §8 Commit & PR conventions
 

@@ -331,6 +331,16 @@ describe('multi-harness render', () => {
         assert.ok(existsSync(join(dir, '.agents', 'skills', 'cycle', 'SKILL.md')));
     });
 
+    test('both doctrines distinguish a sandbox-blocked read from a confirmed tracker outage', () => {
+        for (const root of ['.claude', '.agents']) {
+            const doctrine = readFileSync(join(dir, root, 'skills', 'DOCTRINE.md'), 'utf8');
+            assert.match(doctrine, /first transport or OS-permission failure can be the harness\s+sandbox/);
+            assert.match(doctrine, /retry the \*\*exact same read once\*\*/);
+            assert.match(doctrine, /Stop if\s+that retry fails/);
+            assert.match(doctrine, /Never loop, guess tracker state, or substitute cached data/);
+        }
+    });
+
     test('every codex-tree skill has parseable frontmatter and a provenance stamp', () => {
         for (const s of readdirSync(join(dir, '.agents', 'skills'), { withFileTypes: true })
             .filter((e) => e.isDirectory()).map((e) => e.name)) {
