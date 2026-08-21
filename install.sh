@@ -11,7 +11,7 @@ set -euo pipefail
 
 CYCLE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BIN_DIR="$HOME/.local/bin"
-SKILL_DIRS=("$HOME/.claude/skills" "$HOME/.agents/skills")
+SKILL_DIRS=("$HOME/.claude/skills" "$HOME/.agents/skills" "$HOME/.github/skills" "$HOME/.opencode/skills" "$HOME/.pi/skills")
 PATH_LINE='export PATH="$HOME/.local/bin:$PATH"'
 
 mkdir -p "$BIN_DIR" "${SKILL_DIRS[@]}"
