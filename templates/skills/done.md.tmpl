@@ -1,13 +1,13 @@
 ---
 name: done
-description: Ship a {{repo.name}} story — commit the reviewed work, push, open a PR that Closes #<n>, and (for a safe story) {{#if backend.auto_merge}}queue server-side auto-merge{{/if}}{{#unless backend.auto_merge}}land it through the background poll-then-merge guard{{/unless}}; a judgment-call story's PR is left for {{repo.human}}'s manual merge. Done = the issue closes on merge. Plan-first. Usage `/done #<n>`. Use after /review (+ /patch) pass clean.
+description: Ship a {{repo.name}} story — commit the reviewed work, push, open a PR that Closes #<n>, and (for a safe story) {{#if backend.auto_merge}}queue server-side auto-merge{{/if}}{{#unless backend.auto_merge}}land it through the foreground poll-then-merge guard{{/unless}}; a judgment-call story's PR is left for {{repo.human}}'s manual merge. Done = the issue closes on merge. Plan-first. Usage `/done #<n>`. Use after /review (+ /patch) pass clean.
 ---
 
 # /done #<n> — ship a story
 
 Goal: commit the reviewed work, push, open a PR that closes the issue, and land it —
 {{#if backend.auto_merge}}queueing a safe story for CI-gated server-side auto-merge{{/if}}{{#unless backend.auto_merge}}
-auto-merging a safe story through the CI-gated background guard{{/unless}}, or leaving a
+auto-merging a safe story through the CI-gated foreground guard{{/unless}}, or leaving a
 judgment-call PR for {{repo.human}}.
 
 **Shared rules in `{{harness.doctrine_path}}` — read it if not already in context.** This skill
@@ -57,7 +57,7 @@ just the ordering.
 12. **Land it — the auto-merge decision (§5 + §6):**
 {{#unless backend.auto_merge}}
     - **Safe story** — none of §5's always-brake classes ({{brakes|join:, }}) **and** green CI →
-      run the **poll-then-merge guard in the background** (§6):
+      run the **poll-then-merge guard as one foreground, resumable command** (§6):
       ```bash
       {{@merge_guard "<pr>" "<n>"}}
       ```

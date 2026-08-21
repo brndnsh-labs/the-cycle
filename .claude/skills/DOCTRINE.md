@@ -1,4 +1,4 @@
-<!-- cycle:rendered template=DOCTRINE.md.tmpl hash=6bb6a5b2186f — managed by the-cycle; edit the template, not this file -->
+<!-- cycle:rendered template=DOCTRINE.md.tmpl hash=93cd41a26537 — managed by the-cycle; edit the template, not this file -->
 # Pipeline doctrine (shared)
 
 Single source of truth for the rules the the-cycle work-loop skills share. A skill that says
@@ -196,7 +196,7 @@ unexplained red a hard stop.
 After a safe merge: **sync local main** (`git checkout main && git fetch origin && git reset --hard
 origin/main`) and prune the branch.
 
-**The harness's own auto-mode classifier can independently deny the background merge command**, even
+**The harness's own auto-mode classifier can independently deny the merge command**, even
 on a safe story with everything above satisfied. That's an environment-level permission gate, not a
 pipeline judgment call, and no skill text can route around it. If it fires: report the open,
 CI-pending PR and ask Brandon for a one-turn approval to re-run the merge (or to

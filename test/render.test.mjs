@@ -869,7 +869,12 @@ describe('backend_overrides.auto_merge', () => {
 
     test('default renders the poll-then-merge guard, not --auto', () => {
         const src = doctrine(guardDir);
+        const guardLine = src.split('\n').find((line) => line.includes('until gh pr checks'));
+        assert.ok(guardLine, 'expected a rendered foreground guard command');
         assert.match(src, /gh pr checks .* --watch/, 'expected the poll guard');
+        assert.match(src, /one foreground, resumable command/);
+        assert.match(src, /resume that same command\/session/);
+        assert.doesNotMatch(guardLine, /&\s*$/, 'poll guard must not detach');
         assert.doesNotMatch(src, /gh pr merge .*--auto/, 'must not offer --auto without protection');
     });
 
@@ -882,13 +887,14 @@ describe('backend_overrides.auto_merge', () => {
     test('/done follows the same switch, so the flag is not doctrine-only', () => {
         assert.match(done(guardDir), /until gh pr checks/);
         assert.doesNotMatch(done(guardDir), /gh pr merge .*--auto/);
-        assert.match(done(guardDir), /background poll-then-merge guard/);
+        assert.match(done(guardDir), /foreground poll-then-merge guard/);
+        assert.match(done(guardDir), /one foreground, resumable command/);
         assert.doesNotMatch(done(guardDir), /queue server-side auto-merge/);
         assert.match(done(autoDir), /gh pr merge .*--auto/);
         assert.doesNotMatch(done(autoDir), /until gh pr checks/);
         assert.match(done(autoDir), /queue server-side auto-merge/);
         assert.match(done(autoDir), /CI-gated server-side auto-merge/);
-        assert.doesNotMatch(done(autoDir), /background poll-then-merge guard/);
+        assert.doesNotMatch(done(autoDir), /foreground poll-then-merge guard/);
     });
 
     test('/done marks review when the PR opens, never after merge or queueing', () => {
