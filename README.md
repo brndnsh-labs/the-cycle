@@ -1,7 +1,6 @@
 # the-cycle
 
-An installable, self-updating work pipeline for AI coding harnesses — Claude Code and Codex CLI
-today, with more on the way (`docs/HARNESSES.md`).
+An installable, self-updating work pipeline for AI coding harnesses — Claude Code, Codex CLI, Copilot CLI, OpenCode and Pi (`docs/HARNESSES.md`).
 
 `the-cycle` renders a set of skills — `/cycle`, `/implement`, `/review`, `/patch`, `/done` and a
 maintenance layer around them — into any repo, adapted to that repo's gates, tracker, and risk
@@ -116,11 +115,11 @@ Which AI coding tool runs the rendered skills sits behind `{{harness.*}}` fields
 tracker sits behind backend verbs. `.cycle/config.jsonc`'s `harnesses` array (default `["claude"]`)
 picks one or more; `cycle update` renders a complete, independent skill tree per harness.
 
-| | Claude Code | Codex CLI |
-| --- | --- | --- |
-| skills discovered at | `.claude/skills/<name>/SKILL.md` | `.agents/skills/<name>/SKILL.md` |
-| structured questions | `AskUserQuestion` | direct chat (`request_user_input` is Plan-mode only) |
-| parallel subagents | the Agent tool | subagents (GA 2026-03-14) |
+| | Claude Code | Codex CLI | Copilot CLI | OpenCode | Pi |
+| --- | --- | --- | --- | --- |
+| skills discovered at | `.claude/skills/<name>/SKILL.md` | `.agents/skills/<name>/SKILL.md` | `.github/skills/<name>/SKILL.md` | `.opencode/skills/<name>/SKILL.md` | `.pi/skills/<name>/SKILL.md` |
+| structured questions | `AskUserQuestion` | direct chat | `ask_user` | `question` | plain chat |
+| parallel subagents | the Agent tool | subagents | task tool | task tool | none by design |
 
 Full vocabulary, the honesty rule around capability flags, and how to add a third harness:
 `docs/HARNESSES.md`.
@@ -128,10 +127,10 @@ Full vocabulary, the honesty rule around capability flags, and how to add a thir
 ## Layout
 
 ```
-.github/workflows/ci.yml    `npm test` on PR + push to main
+.github/workflows/ci.yml    `npm test` + `cycle check` on PR + push to main
 AGENTS.md               cross-harness repository entry point
 bin/
-  cycle.mjs            the CLI — Node ESM, zero dependencies
+  cycle.mjs            the CLI — Node ESM, zero dependencies (plus lazily-imported lint.mjs)
 install.sh             symlink bin/cycle onto PATH
 skills/
   cycle-setup/         guided install — personal skill, linked by install.sh
