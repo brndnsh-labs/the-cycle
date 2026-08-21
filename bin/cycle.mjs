@@ -127,7 +127,7 @@ function resolvePath(ctx, path) {
     let cur = path.startsWith('.') ? ctx.__item : ctx;
     const parts = (path.startsWith('.') ? path.slice(1) : path).split('.').filter(Boolean);
     for (const p of parts) {
-        if (cur == null || typeof cur !== 'object' || !(p in cur)) return undefined;
+        if (cur == null || typeof cur !== 'object' || !Object.hasOwn(cur, p)) return undefined;
         cur = cur[p];
     }
     return cur;
