@@ -425,8 +425,10 @@ export function stampProvenance(body, template, rel = template) {
 
 function git(args, cwd = process.cwd()) {
     try {
-        return execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
-    } catch {
+        return execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
+    } catch (e) {
+        const msg = e.stderr?.toString?.().trim() ?? '';
+        if (msg) console.error(dim(`git ${args.join(' ')} failed: ${msg}`));
         return '';
     }
 }
