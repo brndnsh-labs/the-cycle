@@ -94,6 +94,15 @@ export function readJsonc(path) {
     }
 }
 
+function readJson(path) {
+    const raw = readFileSync(path, 'utf8');
+    try {
+        return JSON.parse(raw);
+    } catch (e) {
+        fail(`invalid JSON in ${path}`, e.message);
+    }
+}
+
 // ---------------------------------------------------------------------------
 // template engine
 // ---------------------------------------------------------------------------
@@ -719,7 +728,11 @@ function writeState(root, plan) {
     writeFileSync(statePath(root), `${JSON.stringify(state, null, 2)}\n`);
 }
 
-const readState = (root) => (existsSync(statePath(root)) ? JSON.parse(readFileSync(statePath(root), 'utf8')) : null);
+function readState(root) {
+    const p = statePath(root);
+    if (!existsSync(p)) return null;
+    return readJson(p);
+}
 
 // ---------------------------------------------------------------------------
 // inspection: what does this repo look like?
@@ -787,7 +800,7 @@ export function detect(root) {
     const out = { gates: {} };
     const pkgPath = join(root, 'package.json');
     if (existsSync(pkgPath)) {
-        const pkg = JSON.parse(readFileSync(pkgPath, 'utf8'));
+        const pkg = readJson(pkgPath);
         out.name = pkg.name;
         const s = pkg.scripts ?? {};
         for (const [key, candidates] of Object.entries({
@@ -871,12 +884,8 @@ function usesPrettier(root) {
     }
     const pkgPath = join(root, 'package.json');
     if (!existsSync(pkgPath)) return false;
-    try {
-        const pkg = JSON.parse(readFileSync(pkgPath, 'utf8'));
-        return Boolean(pkg.prettier ?? pkg.devDependencies?.prettier ?? pkg.dependencies?.prettier);
-    } catch {
-        return false;
-    }
+    const pkg = readJson(pkgPath);
+    return Boolean(pkg.prettier ?? pkg.devDependencies?.prettier ?? pkg.dependencies?.prettier);
 }
 
 const DPRINT_CONFIGS = ['dprint.json', 'dprint.jsonc', '.dprint.json', '.dprint.jsonc'];
@@ -1604,6 +1613,7 @@ if (invokedDirectly()) {
             console.error(`${red('✗')} ${e.message}`);
             process.exit(1);
         }
-        throw e;
+        console.error(e.stack ?? String(e));
+        process.exit(1);
     });
 }
