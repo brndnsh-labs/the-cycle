@@ -1491,6 +1491,8 @@ function cmdUpdate(args) {
         else console.log(`${bold(f.rel)}  ${green('new')}`);
     }
 
+    process.exitCode = conflicts.length ? 1 : 0;
+
     if (values['dry-run']) {
         console.log(dim(`\n(dry run — ${writes.length} file(s) would change)`));
         printFormatterGuidance(guidance);
@@ -1504,7 +1506,6 @@ function cmdUpdate(args) {
     writeState(root, plan);
     console.log(`${green('✓')} updated ${bold(String(writes.length))} file(s) to the-cycle@${upstreamSha()}`);
     printFormatterGuidance(guidance);
-    if (conflicts.length) process.exitCode = 1;
 }
 
 function cmdEject(args) {
