@@ -60,7 +60,7 @@ automatically, for machines that would rather not reach GitHub.
 
 Don't push to the Forgejo mirror directly — the next sync from GitHub overwrites it.
 
-`install.sh` also links `/cycle-setup` into both `~/.claude/skills` and `~/.agents/skills` as a personal
+`install.sh` also links `/cycle-setup` into your personal skills directory (`~/.claude/skills`, `~/.agents/skills`, `~/.github/skills`, `~/.opencode/skills`, or `~/.pi/skills`) as a personal
 skill — it has to work in a repo that doesn't have the-cycle yet.
 
 Then, in a repo:
