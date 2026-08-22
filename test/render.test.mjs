@@ -529,6 +529,45 @@ describe('commit attribution', () => {
     });
 });
 
+// A repository with no production command must not render executable-sounding verification or
+// generic rollback instructions after the explicit stop. A consuming repo may document its real
+// external release topology in the deploy overlay; the shared template must not contradict it.
+describe('deploy-prod on a repo with no production command', () => {
+    const renderWith = (deployProd) => {
+        const dir = scratchRepo('github');
+        dirs.push(dir);
+        cycle(dir, ['install', '--profile', 'lean', '-y']);
+        const cfgPath = join(dir, '.cycle', 'config.jsonc');
+        const cfg = JSON.parse(
+            readFileSync(cfgPath, 'utf8').replace(/^\s*\/\/.*$/gm, '').replace(/,(\s*[}\]])/g, '$1'),
+        );
+        cfg.deploy = deployProd ? { prod: deployProd } : {};
+        writeFileSync(cfgPath, JSON.stringify(cfg, null, 2));
+        cycle(dir, ['update', '--force']);
+        return readFileSync(join(dir, '.claude', 'skills', 'deploy-prod', 'SKILL.md'), 'utf8');
+    };
+
+    test('renders an honest stop without generic verification or rollback steps', () => {
+        const out = renderWith(null);
+        assert.match(out, /has no configured production deploy/);
+        assert.match(out, /deploy\.prod` is not set/);
+        assert.doesNotMatch(out, /## 4\. Verify independently/);
+        assert.doesNotMatch(out, /Rollback = roll forward/);
+        assert.doesNotMatch(out, /Deploy fails partway/);
+        assert.doesNotMatch(out, /Verification disagrees with the deploy script/);
+    });
+
+    test('keeps the full verification and rollback flow when production is configured', () => {
+        const out = renderWith('./deploy.sh prod');
+        assert.match(out, /\.\/deploy\.sh prod/);
+        assert.match(out, /## 4\. Verify independently/);
+        assert.match(out, /Rollback = roll forward/);
+        assert.match(out, /Deploy fails partway/);
+        assert.match(out, /Verification disagrees with the deploy script/);
+        assert.doesNotMatch(out, /has no configured production deploy/);
+    });
+});
+
 // A single-environment repo has nowhere lower-stakes to deploy. The test-box flow is
 // deliberately ungated ("no gate, no explicit go") because a test box is cheap to get wrong;
 // rendering that framing where prod is the ONLY environment turns a preview into an unreviewed

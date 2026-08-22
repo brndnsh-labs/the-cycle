@@ -1,6 +1,6 @@
 ---
 name: deploy-prod
-description: Deploy {{repo.name}} to production — the gated ritual. Preflight (clean pushed main, what's actually shipping, any migration plan), then STOP for {{repo.human}}'s explicit go, then deploy, then independently verify the public origin. Includes the rollback path. Never runs unattended. Usage `/deploy-prod`.
+description: {{#if deploy.prod}}Deploy {{repo.name}} to production — the gated ritual. Preflight (clean pushed main, what's actually shipping, any migration plan), then STOP for {{repo.human}}'s explicit go, then deploy, then independently verify the public origin. Includes the rollback path. Never runs unattended. Usage `/deploy-prod`.{{/if}}{{#unless deploy.prod}}{{repo.name}} has no configured production deploy — a gated stub that refuses to improvise a command. Usage `/deploy-prod`.{{/unless}}
 ---
 
 # /deploy-prod — ship to production
@@ -41,7 +41,7 @@ What that command does — and does *not* — do is the `deploy` overlay's job t
 assume it takes a backup, runs migrations, or waits for a healthy result; assume none of
 those unless the overlay says otherwise.{{/if}}
 
-## 4. Verify independently
+{{#if deploy.prod}}## 4. Verify independently
 
 Don't trust the deploy script's own success report — check the **public origin** yourself:
 
@@ -57,7 +57,7 @@ State what shipped, the live revision, and the verification results.
 
 **Rollback = roll forward.** `git revert` → PR → green → deploy again. Reverting the deploy in
 place leaves the repo and the box disagreeing about reality, which is worse than the bug you're
-rolling back.
+rolling back.{{/if}}
 
 ## Why this one is gated
 
@@ -69,8 +69,10 @@ function* changes here, and the person who owns the consequences should be the o
 ## Edge cases
 
 - **Preflight fails:** stop, report which check. Never "deploy anyway."
+{{#if deploy.prod}}
 - **Deploy fails partway:** say exactly which step, and whether a migration ran. Do not retry
   blindly — a half-applied migration needs a decision, not a rerun.
 - **Verification disagrees with the deploy script:** trust the origin. Report as a failure.
+{{/if}}
 - **Asked to deploy unattended** (from `/burndown`, an overnight lane, or a chained skill):
   **refuse.** Report that prod needs an explicit invocation.
