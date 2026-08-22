@@ -1519,7 +1519,12 @@ function cmdEject(args) {
     // the ejected file's sibling tree out from under it.
     const paths = harnessNames(cfg)
         .map((n) => loadHarness(n))
-        .map((h) => join(root, h.root, name, h.skill_file))
+        .map((h) => {
+            const p = join(root, h.root, name, h.skill_file);
+            if (relative(root, p).startsWith('..'))
+                fail(`"${name}" does not name a skill inside this repo's harness trees`);
+            return p;
+        })
         .filter((p) => existsSync(p));
     if (!paths.length) fail(`no rendered skill "${name}" in any configured harness`);
 
