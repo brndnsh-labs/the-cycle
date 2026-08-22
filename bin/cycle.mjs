@@ -323,7 +323,14 @@ export function renderTemplate(src, ctx, opts = {}) {
             const sub = { ...opts, where: `backend verb @${name}`, depth: depth + 1 };
             const rendered = args.map((a) => renderTemplate(a, ctx, sub));
             let cmd = renderTemplate(tmpl, ctx, sub);
-            cmd = cmd.replace(/\$(\d)/g, (_, d) => rendered[Number(d) - 1] ?? '');
+            cmd = cmd.replace(/\$(\d)/g, (_, d) => {
+                const v = rendered[Number(d) - 1];
+                if (v === undefined)
+                    fail(
+                        `backend verb "@${name}" references $${d} but was called with ${rendered.length} argument(s) in ${where}`,
+                    );
+                return v;
+            });
             out += cmd.trim();
             i = after;
             continue;
