@@ -594,6 +594,18 @@ describe('drift detection', () => {
         assert.match(readFileSync(f, 'utf8'), /hand-written/, 'the hand edit must survive');
     });
 
+    test('--dry-run exits non-zero while a conflict and a pending write coexist', () => {
+        rmSync(join(dir, '.claude', 'skills', 'scout', 'SKILL.md'));
+
+        const dry = cycleRaw(dir, ['update', '--dry-run']);
+        assert.match(dry.out, /refusing to overwrite/);
+        assert.match(dry.out, /dry run/);
+        assert.equal(dry.status, 1, 'a dry run must not go green while the update it previews would refuse');
+
+        const applied = cycleRaw(dir, ['update']);
+        assert.equal(applied.status, 1, 'the real update refuses the same conflict');
+    });
+
     test('--force applies the template over a hand edit', () => {
         cycle(dir, ['update', '--force']);
         assert.doesNotMatch(readFileSync(join(dir, '.claude/skills/patch/SKILL.md'), 'utf8'), /hand-written/);
