@@ -412,6 +412,16 @@ describe('multi-harness render', () => {
         assert.doesNotMatch(readFileSync(join(dir, '.claude', 'skills', 'wrap-up', 'SKILL.md'), 'utf8'), /cycle:rendered/);
         assert.doesNotMatch(readFileSync(join(dir, '.agents', 'skills', 'wrap-up', 'SKILL.md'), 'utf8'), /cycle:rendered/);
     });
+
+    test('eject rejects a name that resolves outside the harness trees', () => {
+        const outside = join(dir, '..', 'eject-victim.md');
+        writeFileSync(outside, '<!-- cycle:rendered template=x hash=abc -->\nhello');
+        const refused = cycleRaw(dir, ['eject', '../../../eject-victim.md/SKILL.md']);
+        assert.equal(refused.status, 1);
+        assert.match(refused.out, /does not name a skill inside/);
+        assert.match(readFileSync(outside, 'utf8'), /cycle:rendered/, 'the outside file must be untouched');
+        rmSync(outside);
+    });
 });
 
 describe('dependency metadata contracts', () => {
