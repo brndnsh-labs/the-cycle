@@ -119,6 +119,13 @@ describe('backend verbs', () => {
         assert.throws(() => R('{{@nope}}'), /unknown backend verb/);
     });
 
+    test('a positional past the supplied arity is fatal, not silently empty', () => {
+        assert.throws(
+            () => R('{{@issue_view}}'),
+            /"@issue_view" references \$1 but was called with 0 argument\(s\)/,
+        );
+    });
+
     // Status names differ per backend (Todo vs ready), so call sites pass them from
     // config. That nests a tag inside a tag — the parser must not close on the inner one.
     test('an argument may itself be a lookup', () => {
