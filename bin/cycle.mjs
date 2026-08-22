@@ -826,7 +826,10 @@ export function detect(root) {
 
     const remote = git(['remote', 'get-url', 'origin'], root);
     if (remote) {
-        out.remote = remote;
+        // Remotes configured for CI or convenience routinely embed credentials
+        // (https://x-access-token:ghp_…@host/repo.git); detect()'s output reaches the
+        // --plan stdout an agent reads, so only the credential-free URL travels.
+        out.remote = remote.replace(/\/\/[^/@]*@/, '//');
         const m = /[:/]([^/:]+)\/([^/]+?)(?:\.git)?$/.exec(remote);
         if (m) out.slug = `${m[1]}/${m[2]}`;
     }
