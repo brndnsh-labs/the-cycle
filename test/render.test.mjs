@@ -219,6 +219,17 @@ describe('install --plan', () => {
         assert.equal(existsSync(join(dir, '.claude')), false, '--plan must not write');
     });
 
+    test('a credentialed remote reaches the plan without its userinfo', () => {
+        const dir = scratchRepo('github');
+        dirs.push(dir);
+        execFileSync('git', ['remote', 'set-url', 'origin', 'https://x-access-token:ghp_SECRET123@github.com/brandon/demo.git'], { cwd: dir, stdio: 'pipe' });
+
+        const out = cycle(dir, ['install', '--plan']);
+        assert.doesNotMatch(out, /ghp_SECRET123/, 'the token must not reach plan stdout');
+        assert.equal(JSON.parse(out).detected.remote, 'https://github.com/brandon/demo.git');
+        assert.equal(JSON.parse(out).detected.slug, 'brandon/demo', 'redaction must not cost the slug');
+    });
+
     test('every question carries a reason, not just a default', () => {
         const dir = scratchRepo('github');
         dirs.push(dir);
