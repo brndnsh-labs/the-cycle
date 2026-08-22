@@ -1,5 +1,5 @@
 {
-  "upstream": "e144554-dirty",
+  "upstream": "f36cb2b-dirty",
   "files": {
     ".claude/skills/DOCTRINE.md": "93cd41a26537",
     ".claude/skills/cycle/SKILL.md": "b1189a01a5f2",
@@ -13,7 +13,7 @@
     ".claude/skills/burndown/SKILL.md": "02acecf85f8d",
     ".claude/skills/dep-update/SKILL.md": "b5d36ac6dff1",
     ".claude/skills/deploy-test/SKILL.md": "8a0cf4447165",
-    ".claude/skills/deploy-prod/SKILL.md": "41ad9d2f17db",
+    ".claude/skills/deploy-prod/SKILL.md": "3b1ca02dbbf1",
     ".agents/skills/DOCTRINE.md": "c42be5075c3a",
     ".agents/skills/cycle/SKILL.md": "b941afd3af57",
     ".agents/skills/implement/SKILL.md": "c9ea4d7d4f0f",
@@ -26,6 +26,6 @@
     ".agents/skills/burndown/SKILL.md": "b87b67671d30",
     ".agents/skills/dep-update/SKILL.md": "70677227a33a",
     ".agents/skills/deploy-test/SKILL.md": "8a0cf4447165",
-    ".agents/skills/deploy-prod/SKILL.md": "1d59d46239ff"
+    ".agents/skills/deploy-prod/SKILL.md": "1f4630487811"
   }
 }

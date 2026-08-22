@@ -1,8 +1,8 @@
 ---
 name: deploy-prod
-description: Deploy the-cycle to production — the gated ritual. Preflight (clean pushed main, what's actually shipping, any migration plan), then STOP for Brandon's explicit go, then deploy, then independently verify the public origin. Includes the rollback path. Never runs unattended. Usage `/deploy-prod`.
+description: the-cycle has no configured production deploy — a gated stub that refuses to improvise a command. Usage `/deploy-prod`.
 ---
-<!-- cycle:rendered template=skills/deploy-prod.md.tmpl hash=41ad9d2f17db — managed by the-cycle; edit the template, not this file -->
+<!-- cycle:rendered template=skills/deploy-prod.md.tmpl hash=3b1ca02dbbf1 — managed by the-cycle; edit the template, not this file -->
 
 # /deploy-prod — ship to production
 
@@ -36,24 +36,6 @@ have a go, you don't.
 **`deploy.prod` is not set in `.cycle/config.jsonc`** — stop and say so.
 There is no deploy command to run, and prod is the last place to improvise one.
 
-## 4. Verify independently
-
-Don't trust the deploy script's own success report — check the **public origin** yourself:
-
-- It responds (and with the right status).
-- The served build **is the one you just deployed** — compare the revision, don't assume.
-- Spot-check one surface that actually changed in this deploy.
-
-Report green only if all of those hold. "The script said OK" is not verification.
-
-## 5. Report + rollback
-
-State what shipped, the live revision, and the verification results.
-
-**Rollback = roll forward.** `git revert` → PR → green → deploy again. Reverting the deploy in
-place leaves the repo and the box disagreeing about reality, which is worse than the bug you're
-rolling back.
-
 ## Why this one is gated
 
 Everything else in this pipeline is auto-merged on green because a wrong merge is cheap to walk
@@ -64,8 +46,5 @@ function* changes here, and the person who owns the consequences should be the o
 ## Edge cases
 
 - **Preflight fails:** stop, report which check. Never "deploy anyway."
-- **Deploy fails partway:** say exactly which step, and whether a migration ran. Do not retry
-  blindly — a half-applied migration needs a decision, not a rerun.
-- **Verification disagrees with the deploy script:** trust the origin. Report as a failure.
 - **Asked to deploy unattended** (from `/burndown`, an overnight lane, or a chained skill):
   **refuse.** Report that prod needs an explicit invocation.
