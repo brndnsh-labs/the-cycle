@@ -1118,7 +1118,9 @@ async function cmdInstall(args) {
 
     if (!values.yes) {
         const rl = createInterface({ input: process.stdin, output: process.stdout });
-        const ask = async (q, def) => (await rl.question(`${q} ${dim(`[${def}]`)} `)).trim() || def;
+        const closed = new Promise((_, rej) =>
+            rl.once('close', () => rej(new CycleError('interview aborted: stdin closed before setup completed'))));
+        const ask = async (q, def) => (await Promise.race([rl.question(`${q} ${dim(`[${def}]`)} `), closed])).trim() || def;
         console.log(bold('\nSetting up the-cycle. Enter accepts the detected value.\n'));
         cfg.repo.name = await ask('Repo display name', cfg.repo.name);
         cfg.repo.human = await ask('Who does this pipeline interrupt?', cfg.repo.human);
