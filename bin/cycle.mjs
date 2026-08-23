@@ -1633,6 +1633,14 @@ if (invokedDirectly()) {
             console.error(`${red('✗')} ${e.message}`);
             process.exit(1);
         }
+        // parseArgs (strict mode) throws a bare TypeError with an ERR_PARSE_ARGS code on a
+        // typo'd flag — same class of user mistake as the `default:` arm above, so it gets
+        // the same clean treatment instead of an internal stack trace.
+        if (typeof e?.code === 'string' && e.code.startsWith('ERR_PARSE_ARGS')) {
+            console.error(`${red('✗')} ${e.message}`);
+            console.error(dim('  run `cycle --help` for usage'));
+            process.exit(1);
+        }
         console.error(e.stack ?? String(e));
         process.exit(1);
     });
