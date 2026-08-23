@@ -352,6 +352,18 @@ describe('multi-harness render', () => {
         }
     });
 
+    test('both Scout trees hand broader threads to a separately requested focused pass', () => {
+        for (const root of ['.claude', '.agents']) {
+            const scout = readFileSync(join(dir, root, 'skills', 'scout', 'SKILL.md'), 'utf8');
+            assert.match(scout, /Broader threads are a handoff, not an implicit wider sweep/);
+            assert.match(scout, /distinguish likely surfaces from verified ones/);
+            assert.match(scout, /whether one issue is sufficient or several independent issues are warranted/);
+            assert.match(scout, /focused follow-up `\/scout <lens>` pass/);
+            assert.match(scout, /Do \*\*not\*\* automatically broaden the current sweep/);
+            assert.match(scout, /any credible \*\*broader thread\*\*\s+handoff from above/);
+        }
+    });
+
     test('every codex-tree skill has parseable frontmatter and a provenance stamp', () => {
         for (const s of readdirSync(join(dir, '.agents', 'skills'), { withFileTypes: true })
             .filter((e) => e.isDirectory()).map((e) => e.name)) {
