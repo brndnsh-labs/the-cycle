@@ -141,7 +141,7 @@ templates/
 backends/*.jsonc       verb → command tables
 harnesses/*.jsonc      discovery path, tool names, capability flags per AI harness
 profiles/*.jsonc       which skills each profile installs
-test/                  node --test; renders every profile × backend × harness
+test/                  node --test; renders every profile × backend, plus multi-harness suites
 docs/
   AUTHORING.md         writing a template; the overlay points
   BACKENDS.md          the verb vocabulary; adding a backend

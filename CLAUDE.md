@@ -47,9 +47,9 @@ cycle lint                                  # internal consistency: §N citation
 ```
 
 `cycle lint` and `npm test` catch different things — lint checks that the pieces still refer to each
-other correctly (a renamed `§N`, a verb only one backend binds, a template in no profile); the test
-suite proves every template actually *renders* (every profile × backend × harness combination,
-frontmatter, idempotency). Run both before considering template work done.
+other correctly (a renamed `§N`, a verb no backend binds, a template in no profile); the test
+suite proves every template actually *renders* (every profile × backend combination, plus
+multi-harness suites covering a second harness, frontmatter, idempotency). Run both before considering template work done.
 
 Debug/inspection commands (not part of the normal edit loop, but useful when tracing a render):
 
