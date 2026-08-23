@@ -525,10 +525,9 @@ function buildContext(cfg, backend) {
             .map(([, v]) => v);
     }
     const dependencyManifests = cfg.deps?.manifests ?? [];
-    const knownLockfiles = new Set([
-        'pnpm-lock.yaml', 'yarn.lock', 'package-lock.json', 'Cargo.lock',
-        'go.sum', 'uv.lock', 'poetry.lock', 'Gemfile.lock',
-    ]);
+    // Derived from ECOSYSTEMS rather than hand-listed, so adding an ecosystem can't
+    // silently drop legacy-config lockfile inference for it.
+    const knownLockfiles = new Set(ECOSYSTEMS.flatMap(([key, e]) => [key, e.lockfile]));
     // Configs written before deps.lockfile existed still carry the same fact in
     // deps.manifests. Preserve their meaning on the next `cycle update`.
     const inferredLockfile = dependencyManifests.find((path) => knownLockfiles.has(basename(path))) ?? '';
