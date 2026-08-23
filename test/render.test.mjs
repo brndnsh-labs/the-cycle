@@ -336,6 +336,23 @@ describe('install interview vs stdin EOF (#77)', () => {
     });
 });
 
+// #78: a typo'd flag used to dump parseArgs' internal stack trace instead of getting
+// the same clean ✗ + hint every other user-facing failure gets.
+describe('unknown flag vs error treatment (#78)', () => {
+    test('an unknown option exits 1 with a clean message and no stack trace', () => {
+        const dir = scratchRepo('github');
+        dirs.push(dir);
+
+        const r = spawnSync(process.execPath, [CLI, 'update', '--dr-run'], {
+            cwd: dir, encoding: 'utf8', env: { ...process.env, NO_COLOR: '1' },
+        });
+        assert.equal(r.status, 1, `expected exit 1, got ${r.status}\n${r.stdout}${r.stderr}`);
+        assert.match(r.stderr, /✗.*[Uu]nknown option/);
+        assert.match(r.stderr, /cycle --help/);
+        assert.doesNotMatch(r.stderr, /^\s+at /m, 'no internal stack trace');
+    });
+});
+
 // Multi-harness: one config renders more than one skill tree. The engine-level
 // concern is that the second tree is genuinely independent — its own root, its own
 // {{harness.*}} substitutions — not a copy that happens to share output with Claude
