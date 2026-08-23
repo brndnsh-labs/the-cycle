@@ -10,7 +10,7 @@ import assert from 'node:assert/strict';
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { cpSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { dirname, join } from 'node:path';
+import { dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -1217,5 +1217,69 @@ describe('fast path & verification receipts (#24)', () => {
         const src = doctrine(dir);
         assert.match(src, /still performs tracker status, branch policy, §4's gates, and normal delivery safety/);
         assert.match(src, /compresses \*\*ceremony and duplicate reads\*\*, never the checks themselves/);
+    });
+});
+
+// #75: loadBackend/loadProfile/loadHarness interpolated a registry name straight into a
+// path under CYCLE_HOME. Names come from .cycle/config.jsonc and flags, so a tampered
+// config could aim that path anywhere on disk and feed the renderer an attacker-chosen
+// registry whose root/skills fields direct arbitrary writes. The planted file is invalid
+// JSONC with a marker: reading it AT ALL fails differently than refusing it, so the clean
+// refusal message plus an absent marker is proof of containment.
+describe('registry name containment (#75)', () => {
+    const MARKER = 'cycle-evil-registry-marker-75';
+    const evilBody = `{ "root": "${MARKER}", "skills": ["${MARKER}"],\n`;
+    let evilFile;
+
+    // The containment boundary is this checkout itself — CYCLE_HOME resolves from
+    // bin/cycle.mjs's location — so the name is computed as real relative-path
+    // arithmetic from each registry directory out to the planted file.
+    const evilNameFor = (registry) =>
+        relative(join(HERE, '..', registry), evilFile).replace(/\.jsonc$/, '');
+
+    before(() => {
+        const evilDir = mkdtempSync(join(tmpdir(), 'cycle-evil-registry-'));
+        dirs.push(evilDir);
+        evilFile = join(evilDir, 'pwn.jsonc');
+        writeFileSync(evilFile, evilBody);
+    });
+
+    test('--backend aimed outside the backends registry refuses instead of reading it', () => {
+        const dir = scratchRepo('github');
+        dirs.push(dir);
+        const r = cycleRaw(dir, ['install', '-y', '--backend', evilNameFor('backends')]);
+        assert.equal(r.status, 1);
+        assert.match(r.out, /is not a backend registered in this cycle home/);
+        assert.ok(!r.out.includes(MARKER), 'the planted marker must never surface');
+    });
+
+    test('--profile aimed outside the profiles registry refuses instead of reading it', () => {
+        const dir = scratchRepo('github');
+        dirs.push(dir);
+        const r = cycleRaw(dir, ['install', '-y', '--profile', evilNameFor('profiles')]);
+        assert.equal(r.status, 1);
+        assert.match(r.out, /is not a profile registered in this cycle home/);
+        assert.ok(!r.out.includes(MARKER), 'the planted marker must never surface');
+    });
+
+    test('a tampered config harnesses entry refuses instead of reading it', () => {
+        const dir = scratchRepo('github');
+        dirs.push(dir);
+        cycle(dir, ['install', '-y', '--profile', 'lean', '--backend', 'github']);
+        const cfgPath = join(dir, '.cycle', 'config.jsonc');
+        const cfg = JSON.parse(
+            readFileSync(cfgPath, 'utf8').replace(/^\s*\/\/.*$/gm, '').replace(/,(\s*[}\]])/g, '$1'),
+        );
+        cfg.harnesses = [evilNameFor('harnesses')];
+        writeFileSync(cfgPath, JSON.stringify(cfg, null, 2));
+
+        const r = cycleRaw(dir, ['update']);
+        assert.equal(r.status, 1);
+        assert.match(r.out, /is not a harness registered in this cycle home/);
+        assert.ok(!r.out.includes(MARKER), 'the planted marker must never surface');
+    });
+
+    test('the planted file outside the cycle home is untouched throughout', () => {
+        assert.equal(readFileSync(evilFile, 'utf8'), evilBody);
     });
 });

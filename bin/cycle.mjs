@@ -458,38 +458,25 @@ function loadConfig(root) {
     return readJsonc(p);
 }
 
-function loadBackend(name) {
-    const p = join(CYCLE_HOME, 'backends', `${name}.jsonc`);
+// Registry names arrive from tamperable sources (.cycle/config.jsonc, CLI flags) and are
+// interpolated into a path under CYCLE_HOME, so a name must resolve inside its registry
+// directory before anything is read from it — the same containment cmdEject enforces.
+function loadRegistry(dir, name, label) {
+    const base = join(CYCLE_HOME, dir);
+    const p = join(base, `${name}.jsonc`);
+    if (relative(base, p).startsWith('..')) {
+        fail(`"${name}" is not a ${label} registered in this cycle home`);
+    }
     if (!existsSync(p)) {
-        const have = readdirSync(join(CYCLE_HOME, 'backends'))
-            .filter((f) => f.endsWith('.jsonc'))
-            .map((f) => basename(f, '.jsonc'));
-        fail(`unknown backend "${name}"`, `available: ${have.join(', ')}`);
+        const have = readdirSync(base).filter((f) => f.endsWith('.jsonc')).map((f) => basename(f, '.jsonc'));
+        fail(`unknown ${label} "${name}"`, `available: ${have.join(', ')}`);
     }
     return readJsonc(p);
 }
 
-function loadProfile(name) {
-    const p = join(CYCLE_HOME, 'profiles', `${name}.jsonc`);
-    if (!existsSync(p)) {
-        const have = readdirSync(join(CYCLE_HOME, 'profiles'))
-            .filter((f) => f.endsWith('.jsonc'))
-            .map((f) => basename(f, '.jsonc'));
-        fail(`unknown profile "${name}"`, `available: ${have.join(', ')}`);
-    }
-    return readJsonc(p);
-}
-
-function loadHarness(name) {
-    const p = join(CYCLE_HOME, 'harnesses', `${name}.jsonc`);
-    if (!existsSync(p)) {
-        const have = readdirSync(join(CYCLE_HOME, 'harnesses'))
-            .filter((f) => f.endsWith('.jsonc'))
-            .map((f) => basename(f, '.jsonc'));
-        fail(`unknown harness "${name}"`, `available: ${have.join(', ')}`);
-    }
-    return readJsonc(p);
-}
+const loadBackend = (name) => loadRegistry('backends', name, 'backend');
+const loadProfile = (name) => loadRegistry('profiles', name, 'profile');
+const loadHarness = (name) => loadRegistry('harnesses', name, 'harness');
 
 // Which harness trees a render targets. Absent/empty means "just Claude Code" — every
 // config written before this field existed renders exactly as it always did.
