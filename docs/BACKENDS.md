@@ -155,8 +155,9 @@ is a deliberate change to those two checks first — not something that can happ
 5. **Bind it to commands, not to an executable.** A verb may not name a `scripts/` path — nothing
    installs one. If the tracker's API is too awkward to drive from a verb string, that's a design
    conversation, not a helper you add quietly; see "No installed executables" above.
-6. `npm test` renders every profile against every backend in `backends/` and checks that the render
-   is prose only.
+6. `npm test` renders every profile against every backend listed in `test/render.test.mjs`'s
+   `BACKENDS` array — add yours there (and its remote to `REMOTES`) — and checks that the render is
+   prose only.
 
 ## Migrating off a backend (history)
 
