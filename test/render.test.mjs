@@ -318,6 +318,24 @@ describe('install --plan', () => {
     });
 });
 
+// #77: a stdin EOF mid-interview used to leave rl.question's promise pending forever,
+// so `cycle install < /dev/null` exited 0 having written nothing — a silent success for
+// an aborted setup. EOF must abort loudly instead.
+describe('install interview vs stdin EOF (#77)', () => {
+    test('a closed stdin exits non-zero with the abort error instead of silently succeeding', () => {
+        const dir = scratchRepo('github');
+        dirs.push(dir);
+
+        // input: '' closes the child's stdin immediately — the `< /dev/null` repro.
+        const r = spawnSync(process.execPath, [CLI, 'install'], {
+            cwd: dir, input: '', encoding: 'utf8', env: { ...process.env, NO_COLOR: '1' },
+        });
+        assert.equal(r.status, 1, `expected exit 1, got ${r.status}\n${r.stdout}${r.stderr}`);
+        assert.match(r.stderr, /interview aborted: stdin closed before setup completed/);
+        assert.equal(existsSync(join(dir, '.cycle')), false, 'the aborted install must write nothing');
+    });
+});
+
 // Multi-harness: one config renders more than one skill tree. The engine-level
 // concern is that the second tree is genuinely independent — its own root, its own
 // {{harness.*}} substitutions — not a copy that happens to share output with Claude
