@@ -230,6 +230,33 @@ describe('install --plan', () => {
         assert.equal(JSON.parse(out).detected.slug, 'brandon/demo', 'redaction must not cost the slug');
     });
 
+    test('a credentialed remote whose userinfo contains a slash still redacts', () => {
+        const dir = scratchRepo('github');
+        dirs.push(dir);
+        // WHATWG URL parsing cannot represent a raw "/" inside userinfo — the whole
+        // remote fails to parse — so this exercises the fallback strip, not the URL
+        // branch. A token that only reaches stdout unredacted through that gap.
+        execFileSync('git', ['remote', 'set-url', 'origin', 'https://x-access-token:ghp_SLASH/y9ZTOKEN@github.com/brandon/demo.git'], { cwd: dir, stdio: 'pipe' });
+
+        const out = cycle(dir, ['install', '--plan']);
+        assert.doesNotMatch(out, /ghp_SLASH/, 'the token must not reach plan stdout');
+        assert.doesNotMatch(out, /y9ZTOKEN/, 'neither may its second half');
+        assert.equal(JSON.parse(out).detected.remote, 'https://github.com/brandon/demo.git');
+        assert.equal(JSON.parse(out).detected.slug, 'brandon/demo', 'redaction must not cost the slug');
+    });
+
+    test('a percent-encoded credential rides the URL branch and still redacts', () => {
+        const dir = scratchRepo('github');
+        dirs.push(dir);
+        execFileSync('git', ['remote', 'set-url', 'origin', 'https://x-access-token:ghp_ENC%2Fx9@github.com/brandon/demo.git'], { cwd: dir, stdio: 'pipe' });
+
+        const out = cycle(dir, ['install', '--plan']);
+        assert.doesNotMatch(out, /ghp_ENC/, 'the encoded token must not reach plan stdout');
+        assert.doesNotMatch(out, /%2F/, 'not even encoded');
+        assert.equal(JSON.parse(out).detected.remote, 'https://github.com/brandon/demo.git');
+        assert.equal(JSON.parse(out).detected.slug, 'brandon/demo', 'redaction must not cost the slug');
+    });
+
     test('every question carries a reason, not just a default', () => {
         const dir = scratchRepo('github');
         dirs.push(dir);

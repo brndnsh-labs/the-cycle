@@ -827,8 +827,19 @@ export function detect(root) {
     if (remote) {
         // Remotes configured for CI or convenience routinely embed credentials
         // (https://x-access-token:ghp_…@host/repo.git); detect()'s output reaches the
-        // --plan stdout an agent reads, so only the credential-free URL travels.
-        out.remote = remote.replace(/\/\/[^/@]*@/, '//');
+        // --plan stdout an agent reads, so only the credential-free URL travels. A
+        // parseable URL is blanked field-by-field (lossless for credential-free
+        // remotes, and the only way to catch userinfo a `[^/@]` regex cannot cross);
+        // anything that fails to parse has no working host/authority to protect, so it
+        // gets the aggressive strip rather than a second leak.
+        try {
+            const u = new URL(remote);
+            u.username = '';
+            u.password = '';
+            out.remote = u.toString();
+        } catch {
+            out.remote = remote.replace(/\/\/[^@]+@/, '//');
+        }
         const m = /[:/]([^/:]+)\/([^/]+?)(?:\.git)?$/.exec(remote);
         if (m) out.slug = `${m[1]}/${m[2]}`;
     }
