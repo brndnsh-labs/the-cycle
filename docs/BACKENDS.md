@@ -30,6 +30,7 @@ idea, different axis: this file is about the tracker, that one is about the harn
 | `pr_create` | `$1` branch `$2` title `$3` body | open a PR against `main` |
 | `pr_list` / `pr_view` / `pr_close` | `$1` number | PR surface |
 | `merge_guard` | `$1` pr `$2` issue | **foreground, resumable** poll-then-merge on green (do not background with `&`) |
+| `merge_auto` | `$1` pr | queue server-side auto-merge (`gh pr merge $1 --auto --squash`); only rendered when `auto_merge` is true, so bind it before honestly setting that flag |
 | `set_status` | `$1` number `$2` status label | write the status value |
 | `ci_runs` | — | list CI runs |
 | `ci_log` / `ci_log_failed` | `$1` run | read one run's log / its failed steps |
