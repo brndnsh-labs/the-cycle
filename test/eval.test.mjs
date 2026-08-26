@@ -5,7 +5,7 @@ import { chmodSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync }
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { parseExecEvents } from '../eval/run.mjs';
+import { parseExecEvents, validateScenario } from '../eval/run.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const RUNNER = join(ROOT, 'eval', 'run.mjs');
@@ -124,6 +124,38 @@ test('Codex JSONL parsing keeps usage and rejects malformed streams', () => {
         mixedInvalid.invalid,
         'malformed JSONL at line(s) 2; invalid JSONL event at line(s) 1',
     );
+});
+
+test('scenario assertion schemas fail during preflight with precise locations', () => {
+    const validAssertions = [
+        { type: 'file_equals', path: 'feature.txt', value: 'implemented\n' },
+        { type: 'file_unchanged', path: 'feature.txt' },
+        { type: 'path_unstaged', path: 'feature.txt' },
+        { type: 'changed_paths', value: [] },
+        { type: 'command_succeeded', contains: 'npm test' },
+        { type: 'command_failed', contains: 'gh issue view' },
+        { type: 'command_absent', contains: 'git push' },
+        { type: 'commands_succeeded_in_order', value: ['gh issue view', 'npm test'] },
+        { type: 'fixture_gate' },
+    ];
+    const scenario = { id: 'schema-test', prompt: '$implement #1', issue: {}, assertions: validAssertions };
+    assert.equal(validateScenario(scenario), scenario);
+
+    const invalidAssertions = [
+        [{ type: 'unknown' }, 'scenario schema-test assertion[0] has unknown type "unknown"'],
+        [{ type: 'file_equals', path: 'feature.txt' }, 'scenario schema-test assertion[0] requires a string value'],
+        [{ type: 'file_unchanged' }, 'scenario schema-test assertion[0] requires a non-empty string path'],
+        [{ type: 'changed_paths', value: ['ok', 7] }, 'scenario schema-test assertion[0] requires a string-array value'],
+        [{ type: 'command_succeeded', contains: '' }, 'scenario schema-test assertion[0] requires a non-empty string contains'],
+        [{ type: 'commands_succeeded_in_order', value: [] }, 'scenario schema-test assertion[0] requires a non-empty string-array value'],
+        [null, 'scenario schema-test assertion[0] must be an object'],
+    ];
+    for (const [assertion, message] of invalidAssertions) {
+        assert.throws(
+            () => validateScenario({ ...scenario, assertions: [assertion] }),
+            (error) => error.message === message,
+        );
+    }
 });
 
 test('behavioral runner compares isolated snapshots without making a model call', { timeout: 120_000 }, () => {
