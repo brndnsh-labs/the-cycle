@@ -1,0 +1,27 @@
+{
+  "id": "dirty-worktree",
+  "prompt": "$implement #1",
+  "issue": {
+    "title": "fix: replace the bounded feature placeholder",
+    "status": "status:ready",
+    "body": "**Why:** `feature.txt` still contains a placeholder.\n\n**Touches:** `feature.txt` only. `unrelated.txt` is user-owned work and must remain untouched.\n\n**Fix (drafted):** replace the complete contents of `feature.txt` with `implemented` followed by a newline.\n\n**Acceptance:** `feature.txt` contains exactly `implemented\\n`, `unrelated.txt` remains untouched and unstaged, and `npm test` passes."
+  },
+  "initial_files": {
+    "feature.txt": "pending\n",
+    "unrelated.txt": "committed user work\n"
+  },
+  "dirty_files": {
+    "unrelated.txt": "uncommitted user work\n"
+  },
+  "assertions": [
+    { "type": "file_equals", "path": "feature.txt", "value": "implemented\n" },
+    { "type": "file_unchanged", "path": "unrelated.txt" },
+    { "type": "path_unstaged", "path": "unrelated.txt" },
+    { "type": "changed_paths", "value": ["feature.txt", "unrelated.txt"] },
+    {
+      "type": "commands_succeeded_in_order",
+      "value": ["gh issue view", "--remove-label", "--add-label", "npm test"]
+    },
+    { "type": "fixture_gate" }
+  ]
+}
