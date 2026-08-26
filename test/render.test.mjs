@@ -39,6 +39,18 @@ function scratchRepo() {
         join(dir, 'package.json'),
         JSON.stringify({ name: 'demo', scripts: { typecheck: 'tsc -b', test: 'node --test' } }),
     );
+    // Most render tests exercise the long-standing Claude fixture. Give detection
+    // the same honest signal a real Claude repo has instead of relying on a fallback.
+    mkdirSync(join(dir, '.claude'));
+    return dir;
+}
+
+function emptyGitRepo() {
+    const dir = mkdtempSync(join(tmpdir(), 'cycle-empty-'));
+    const run = (args) => execFileSync('git', args, { cwd: dir, stdio: 'pipe' });
+    run(['init', '-q', '.']);
+    run(['config', 'user.name', 'Brandon Shea']);
+    run(['config', 'user.email', 'b@example.com']);
     return dir;
 }
 
@@ -263,7 +275,57 @@ describe('install --plan', () => {
         assert.deepEqual(plan.detected.gates, { typecheck: 'npm run typecheck', test: 'npm test' });
         assert.equal(plan.existing_config, null);
         assert.equal(existsSync(join(dir, '.cycle')), false, '--plan must not write');
-        assert.equal(existsSync(join(dir, '.claude')), false, '--plan must not write');
+        assert.deepEqual(readdirSync(join(dir, '.claude')), [], '--plan must not write into the detected harness tree');
+    });
+
+    test('an empty repo keeps unknown gates and harnesses empty without a no-origin diagnostic', () => {
+        const dir = emptyGitRepo();
+        dirs.push(dir);
+
+        const result = cycleRaw(dir, ['install', '--plan']);
+        assert.equal(result.status, 0, result.out);
+        assert.doesNotMatch(result.out, /git remote get-url origin failed/);
+        const plan = JSON.parse(result.out);
+        assert.deepEqual(plan.detected.gates, {});
+        assert.deepEqual(plan.draft.gates, {});
+        assert.equal(plan.detected.harnesses, null);
+        assert.deepEqual(plan.draft.harnesses, []);
+    });
+
+    test('non-interactive install requires an explicit harness before writing', () => {
+        const dir = emptyGitRepo();
+        dirs.push(dir);
+
+        const refused = cycleRaw(dir, ['install', '-y']);
+        assert.equal(refused.status, 1, refused.out);
+        assert.match(refused.out, /no harness detected or selected/);
+        assert.match(refused.out, /--set 'harnesses=\["codex"\]'/);
+        assert.equal(existsSync(join(dir, '.cycle')), false, 'refused setup wrote a partial install');
+
+        cycle(dir, ['install', '-y', '--set', 'harnesses=["codex"]']);
+        const cfg = readJsonc(join(dir, '.cycle', 'config.jsonc'));
+        assert.deepEqual(cfg.harnesses, ['codex']);
+        assert.deepEqual(cfg.gates, {});
+        assert.ok(existsSync(join(dir, '.agents', 'skills', 'DOCTRINE.md')));
+
+        const cfgPath = join(dir, '.cycle', 'config.jsonc');
+        writeFileSync(cfgPath, readFileSync(cfgPath, 'utf8').replace(
+            '"harnesses": [\n    "codex"\n  ],',
+            '"harnesses": [],',
+        ));
+        const emptyUpdate = cycleRaw(dir, ['update']);
+        assert.equal(emptyUpdate.status, 1, emptyUpdate.out);
+        assert.match(emptyUpdate.out, /config has no harness selected/);
+    });
+
+    test('a real git repository error remains visible', () => {
+        const dir = mkdtempSync(join(tmpdir(), 'cycle-not-a-repo-'));
+        dirs.push(dir);
+
+        const result = cycleRaw(dir, ['install', '--plan']);
+        assert.equal(result.status, 1, result.out);
+        assert.match(result.out, /git rev-parse --show-toplevel failed/);
+        assert.match(result.out, /not inside a git repository/);
     });
 
     test('a credentialed remote reaches the plan without its userinfo', () => {
@@ -647,7 +709,7 @@ describe('dependency metadata contracts', () => {
         execFileSync('git', ['init', '-q', '.'], { cwd: dir });
         execFileSync('git', ['remote', 'add', 'origin', DEMO_REMOTE], { cwd: dir });
         execFileSync('git', ['config', 'user.name', 'Brandon Shea'], { cwd: dir });
-        cycle(dir, ['install', '--profile', 'standard', '-y']);
+        cycle(dir, ['install', '--profile', 'standard', '--set', 'harnesses=["claude"]', '-y']);
 
         const skill = readFileSync(join(dir, '.claude', 'skills', 'dep-update', 'SKILL.md'), 'utf8');
         assert.match(skill, /## Not configured/);
@@ -1007,20 +1069,21 @@ describe('version stamp — no .git in CYCLE_HOME (an npm/npx install)', () => {
     test('gitless `cycle install` points at the durable clone for cycle update/check and the setup skills', async () => {
         const dir = scratchRepo('github');
         dirs.push(dir);
-        // Exercise the interactive path separately. Every answer is now an accepted
-        // default: with the board gone, github has no binding the interview must ask a
-        // human to supply, so a first install is pure confirmation.
+        // Exercise the interactive path with no harness marker: setup must ask the
+        // human to make that one choice rather than silently guessing Claude.
+        rmSync(join(dir, '.claude'), { recursive: true });
         const child = spawn(process.execPath, [join(gitlessHome, 'bin', 'cycle.mjs'), 'install', '--profile', 'lean'], {
             cwd: dir,
             env: { ...process.env, NO_COLOR: '1' },
         });
         let out = '';
         const waiters = [];
+        const occurrences = (re) => (out.match(new RegExp(re.source, `${re.flags.replace('g', '')}g`)) ?? []).length;
         const pump = (d) => {
             out += d;
             // Re-check every pending waiter against the buffer we have so far.
             for (const w of waiters.slice()) {
-                if (w.re.test(out)) {
+                if (occurrences(w.re) >= w.count) {
                     waiters.splice(waiters.indexOf(w), 1);
                     w.resolve();
                 }
@@ -1028,8 +1091,10 @@ describe('version stamp — no .git in CYCLE_HOME (an npm/npx install)', () => {
         };
         child.stdout.on('data', pump);
         child.stderr.on('data', pump);
-        const awaitPrompt = (re) =>
-            re.test(out) ? Promise.resolve() : new Promise((resolve, reject) => waiters.push({ re, resolve, reject }));
+        const awaitPrompt = (re, count = 1) =>
+            occurrences(re) >= count
+                ? Promise.resolve()
+                : new Promise((resolve, reject) => waiters.push({ re, count, resolve, reject }));
 
         // If the child exits — crash, or finishing before every scripted prompt was
         // seen — nothing will ever satisfy a still-pending waiter, and the `await`
@@ -1051,18 +1116,20 @@ describe('version stamp — no .git in CYCLE_HOME (an npm/npx install)', () => {
             [/Repo display name/, ''],
             [/interrupt\?/, ''],
             [/Profile \(lean/, ''],
-            [/Harnesses \(comma-separated/, ''],
+            [/Harnesses \(comma-separated/, '', 1],
+            [/Harnesses \(comma-separated/, 'claude', 2],
             [/Typecheck gate/, ''],
             [/Test gate/, ''],
             [/Always-brake surfaces/, ''],
         ];
-        for (const [prompt, answer] of script) {
-            await awaitPrompt(prompt);
+        for (const [prompt, answer, count] of script) {
+            await awaitPrompt(prompt, count);
             child.stdin.write(`${answer}\n`);
         }
         child.stdin.end();
         const code = await new Promise((resolve) => child.on('close', resolve));
         assert.equal(code, 0, out);
+        assert.match(out, /setup will not guess/);
         assert.match(out, /npm\/npx install/);
         assert.match(out, /cycle-setup/);
     });

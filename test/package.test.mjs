@@ -117,7 +117,10 @@ test('the packed artifact contains only the supported product surface and can re
         mkdirSync(repo);
         execFileSync('git', ['init', '-q', '.'], { cwd: repo });
         writeFileSync(join(repo, 'package.json'), '{"name":"packed-smoke"}\n');
-        execFileSync(process.execPath, [join(packageRoot, 'bin', 'cycle.mjs'), 'install', '-y'], {
+        execFileSync(process.execPath, [
+            join(packageRoot, 'bin', 'cycle.mjs'),
+            'install', '-y', '--set', 'harnesses=["claude"]',
+        ], {
             cwd: repo, encoding: 'utf8', env: { ...process.env, NO_COLOR: '1' },
         });
         assert.ok(existsSync(join(repo, '.claude', 'skills', 'DOCTRINE.md')));
