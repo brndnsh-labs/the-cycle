@@ -1,9 +1,9 @@
 # Releasing the-cycle
 
-The durable installation is a clone plus `./install.sh`. The README's `npx --yes
-@brndnsh/the-cycle install` command is the bootstrap path for a first render. It fetches the
-published package from npm into npx's ephemeral cache, so follow-up `cycle update` / `cycle check`
-work still need the durable clone.
+The public docs lead with the durable installation: a source clone plus `./install.sh`, followed by
+`/cycle-setup` in the consuming repository. `npx` is a published-package smoke path and a
+deliberate one-off/manual option, not the recommended installation. Keep README and
+`docs/INSTALLING.md` aligned with that distinction.
 
 `@brndnsh/the-cycle` is publicly published. Publishing a new version remains an explicit external
 release gate: making a commit or merging a pull request does not authorize `npm publish`.
@@ -28,5 +28,14 @@ checks the same boundary and exercises the packed artifact.
 
 Before publishing a new version, obtain explicit approval for the exact version and registry.
 Publish using the normal npm authentication flow, then verify the registry package with fresh
-one-off `npx --yes @brndnsh/the-cycle --version` and `npx --yes @brndnsh/the-cycle install`
-invocations.
+one-off commands:
+
+```sh
+npx --yes @brndnsh/the-cycle --version
+npx --yes @brndnsh/the-cycle install --plan   # run inside a deliberately temporary Git repo
+```
+
+The version output must equal the approved release, and the plan must be valid JSON. This verifies
+the one-off surface without presenting it as the durable user path. If a release changes the
+installer's link layout, its release notes must explicitly name the one-time `install.sh` rerun;
+0.2.0 requires that note for users upgrading from 0.1.x.

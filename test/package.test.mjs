@@ -39,6 +39,17 @@ test('the packed artifact contains only the supported product surface and can re
         mkdirSync(unpacked);
         execFileSync('tar', ['-xzf', join(work, metadata.filename), '-C', unpacked]);
         const packageRoot = join(unpacked, 'package');
+        const readme = readFileSync(join(packageRoot, 'README.md'), 'utf8');
+        const installing = readFileSync(join(packageRoot, 'docs', 'INSTALLING.md'), 'utf8');
+        const releasing = readFileSync(join(packageRoot, 'docs', 'RELEASING.md'), 'utf8');
+        assert.match(readme, /Quick start \(recommended\)/);
+        assert.match(readme, /reports \*\*READY\*\*/);
+        assert.match(installing, /git -C ~\/code\/the-cycle pull --ff-only/);
+        assert.match(installing, /One computer runs\s+`cycle update`, verifies, and commits/);
+        assert.match(installing, /Do not rerun it after an\s+ordinary source-clone\s+pull/);
+        assert.match(installing, /One-time 0\.1\.x upgrade note/);
+        assert.match(releasing, /`npx` is a published-package smoke path/);
+        assert.match(releasing, /0\.2\.0 requires that note for users upgrading from 0\.1\.x/);
         const setupSkill = readFileSync(join(packageRoot, 'skills', 'cycle-setup', 'SKILL.md'), 'utf8');
         assert.match(setupSkill, /run every non-empty command/i, 'setup omits configured gate execution');
         assert.match(setupSkill, /gh repo view --json nameWithOwner,url/, 'setup omits repository access proof');
@@ -63,13 +74,15 @@ test('the packed artifact contains only the supported product surface and can re
 
         const home = join(work, 'home');
         mkdirSync(home);
-        execFileSync('bash', [join(packageRoot, 'install.sh')], {
+        const installOutput = execFileSync('bash', [join(packageRoot, 'install.sh')], {
             encoding: 'utf8', env: { ...process.env, HOME: home },
         });
         execFileSync('bash', [join(packageRoot, 'install.sh')], {
             encoding: 'utf8', env: { ...process.env, HOME: home },
         });
         assert.ok(existsSync(join(home, '.local', 'bin', 'cycle')));
+        assert.match(installOutput, /readiness\s+receipt says READY/);
+        assert.match(installOutput, /git pull --ff-only on main updates these symlinks/);
         assert.ok(existsSync(join(home, '.claude', 'skills', 'cycle-setup', 'SKILL.md')));
         assert.ok(existsSync(join(home, '.agents', 'skills', 'cycle-setup', 'SKILL.md')));
         for (const projectOnlyRoot of ['.github', '.opencode', '.pi']) {

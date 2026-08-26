@@ -33,28 +33,21 @@ templates portable:
 - **Drift detection** records provenance in every rendered file. `cycle check` distinguishes a
   locally edited render from a render whose source template has moved upstream.
 
-## Quick start
+## Quick start (recommended)
 
-Run the guided installer from the repository you want to configure:
+Ask the coding agent already working in your repository:
 
-```sh
-npx --yes @brndnsh/the-cycle install
-```
+> Install the-cycle for durable use, then set it up in this repository. Before changing anything
+> under my home directory, show me the exact paths and ask for approval. Use a clean clone at
+> `~/code/the-cycle`, run its `install.sh`, verify `cycle --version`, then run `/cycle-setup` here
+> through its operational readiness receipt. Do not hand-edit rendered harness skill trees.
 
-That command performs a one-off first render without requiring a clone. The rendered skills keep
-working, but `cycle update`, `cycle check`, and the personal `/cycle-setup` skill require a durable
-installation.
+The durable clone keeps the command and personal setup skill available for later checks and
+updates. Setup is complete only when `/cycle-setup` reports **READY** and its exact `.cycle/` and
+configured harness files are committed together. The first everyday command is then `/next`.
 
-After a durable installation, the everyday commands are:
-
-```sh
-/cycle-setup                         # inspect this repository and guide its first setup
-cycle check                          # report local or upstream drift
-cycle update                         # re-render and show the resulting diff
-```
-
-See [Installing the-cycle](docs/INSTALLING.md) for the durable install, the manual setup path, and
-a prompt you can hand to a coding agent.
+See [Installing the-cycle](docs/INSTALLING.md) for the agent handoff, manual alternative, one-off
+`npx` use, and the exact update procedure for one or several computers.
 
 ## Profiles
 
@@ -96,8 +89,8 @@ drift checks work offline.
 
 ## Documentation
 
-- [Installing](docs/INSTALLING.md) — bootstrap, durable installation, agent-assisted setup, and
-  existing-pipeline reconciliation.
+- [Installing](docs/INSTALLING.md) — recommended durable setup, one-off use, updates across
+  computers, and existing-pipeline reconciliation.
 - [Development](docs/DEVELOPMENT.md) — local gates, generated-source rules, and repository layout.
 - [Behavioral evaluation](docs/EVALUATION.md) — compare model behavior against two pipeline
   revisions in isolated fixtures.
