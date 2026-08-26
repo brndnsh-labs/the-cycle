@@ -72,5 +72,10 @@ else
 fi
 
 echo
-echo "Next: run /cycle-setup inside a repo (guided), or 'cycle install' for the"
-echo "      seven-question version."
+echo "Next: restart or reload a running harness, open the repository you want to"
+echo "      configure, and run /cycle-setup. Setup is done when its readiness"
+echo "      receipt says READY and its exact generated paths are committed."
+echo
+echo "Updates: git pull --ff-only on main updates these symlinks; do not"
+echo "         rerun install.sh unless the clone moves, a link breaks, or release"
+echo "         notes say the link layout changed."
