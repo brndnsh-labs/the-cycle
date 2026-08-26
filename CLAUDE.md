@@ -88,8 +88,8 @@ divergence — `cycle lint`'s inlining check exists specifically to catch it.
 body). `cycle check` reports *local drift* (hand-edited after rendering) and *upstream drift* (the
 template moved on since this copy rendered) as independent axes.
 
-Layout reference (what lives where) is in `README.md`'s Layout section — not duplicated here since
-it goes stale independently of this file.
+The source-tree layout is in `docs/DEVELOPMENT.md` — not duplicated here since it goes stale
+independently of this file.
 
 ## Adding or changing a template
 
