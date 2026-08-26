@@ -391,18 +391,30 @@ function evaluateAssertions(scenario, fixture, events) {
 export function parseExecEvents(text) {
     const events = [];
     const malformed = [];
+    const invalidEvents = [];
     for (const [index, line] of text.split('\n').entries()) {
         if (!line.trim()) continue;
-        try { events.push(JSON.parse(line)); }
+        try {
+            const event = JSON.parse(line);
+            if (!event || typeof event !== 'object' || Array.isArray(event) || typeof event.type !== 'string') {
+                invalidEvents.push(index + 1);
+                continue;
+            }
+            events.push(event);
+        }
         catch { malformed.push(index + 1); }
     }
     const completed = events.filter((event) => event.type === 'turn.completed').at(-1);
     const failed = events.find((event) => event.type === 'turn.failed' || event.type === 'error');
+    const validationErrors = [
+        malformed.length ? `malformed JSONL at line(s) ${malformed.join(', ')}` : null,
+        invalidEvents.length ? `invalid JSONL event at line(s) ${invalidEvents.join(', ')}` : null,
+    ].filter(Boolean);
     return {
         events,
         usage: completed?.usage ?? null,
-        invalid: malformed.length
-            ? `malformed JSONL at line(s) ${malformed.join(', ')}`
+        invalid: validationErrors.length
+            ? validationErrors.join('; ')
             : failed
                 ? `Codex emitted ${failed.type}`
                 : completed
