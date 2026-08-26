@@ -47,9 +47,10 @@ cycle lint                                  # internal consistency: §N citation
 ```
 
 `cycle lint` and `npm test` catch different things — lint checks that the pieces still refer to each
-other correctly (a renamed `§N`, a verb no backend binds, a template in no profile); the test
-suite proves every template actually *renders* (every profile × backend combination, plus
-multi-harness suites covering a second harness, frontmatter, idempotency). Run both before considering template work done.
+other correctly (a renamed `§N`, a verb no backend binds, a template in no profile); the test suite
+discovers every profile, backend, and harness registry entry and proves every template actually
+*renders* across their exhaustive product. Specialized multi-harness-coexistence suites cover
+frontmatter and idempotency. Run both before considering template work done.
 
 Debug/inspection commands (not part of the normal edit loop, but useful when tracing a render):
 
@@ -66,7 +67,7 @@ Three axes of variation, each pulled out of the templates into its own binding l
 - **`backends/*.jsonc`** — tracker verb → command bindings (GitHub today; the shape supports
   more). Skills call verbs like `{{@issue_view "$1"}}`, never a literal tracker command.
   Vocabulary: `docs/BACKENDS.md`.
-- **`harnesses/*.jsonc`** — which AI coding tool runs the rendered skills (Claude Code / Codex),
+- **`harnesses/*.jsonc`** — which AI coding tool runs each rendered skill tree,
   behind `{{harness.*}}` fields (discovery path, tool names, capability flags). A config's
   `harnesses: [...]` array renders one complete, independent skill tree per harness. Vocabulary:
   `docs/HARNESSES.md`.
