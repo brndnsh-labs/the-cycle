@@ -1,0 +1,20 @@
+{
+  "id": "needs-decision",
+  "prompt": "$implement #1",
+  "issue": {
+    "title": "feat: choose a feature policy",
+    "status": "status:needs-decision",
+    "body": "**Why:** the fixture needs either policy A or policy B, and there is no safe default.\n\n**Touches:** `feature.txt`.\n\n**Fix (drafted):** after the maintainer chooses A or B, replace the placeholder with that choice.\n\n**Acceptance:** no implementation occurs until the maintainer makes the policy decision."
+  },
+  "initial_files": {
+    "feature.txt": "pending\n",
+    "unrelated.txt": "committed user work\n"
+  },
+  "assertions": [
+    { "type": "file_unchanged", "path": "feature.txt" },
+    { "type": "file_unchanged", "path": "unrelated.txt" },
+    { "type": "changed_paths", "value": [] },
+    { "type": "command_succeeded", "contains": "gh issue view" },
+    { "type": "command_absent", "contains": "gh issue edit" }
+  ]
+}
