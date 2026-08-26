@@ -493,10 +493,23 @@ function loadRegistry(dir, name, label) {
 const loadBackend = (name) => loadRegistry('backends', name, 'backend');
 const loadProfile = (name) => loadRegistry('profiles', name, 'profile');
 const loadHarness = (name) => loadRegistry('harnesses', name, 'harness');
+const registryNames = (dir) => readdirSync(join(CYCLE_HOME, dir))
+    .filter((f) => f.endsWith('.jsonc') && !f.startsWith('_'))
+    .map((f) => basename(f, '.jsonc'));
 
-// Which harness trees a render targets. Absent/empty means "just Claude Code" — every
-// config written before this field existed renders exactly as it always did.
-const harnessNames = (cfg) => (cfg.harnesses?.length ? cfg.harnesses : ['claude']);
+// A missing field means "just Claude Code" so configs written before multi-harness
+// support keep rendering as they always did. An explicitly empty field is different:
+// setup knew it had no answer, so later commands must not turn that unknown into a guess.
+const harnessNames = (cfg) => {
+    if (!Object.hasOwn(cfg, 'harnesses')) return ['claude'];
+    if (!Array.isArray(cfg.harnesses) || !cfg.harnesses.length || cfg.harnesses.some((h) => typeof h !== 'string' || !h.trim())) {
+        fail(
+            'config has no harness selected',
+            `set .cycle/config.jsonc's harnesses array (available: ${registryNames('harnesses').join(', ')})`,
+        );
+    }
+    return cfg.harnesses;
+};
 
 /** The `harness.*` object templates branch on — one instance per configured harness. */
 function buildHarnessContext(h) {
@@ -513,7 +526,7 @@ function buildHarnessContext(h) {
 }
 
 /** False for an npm/npx install — CYCLE_HOME has no .git to probe (same signal upstreamSha() uses). */
-const cycleHomeIsClone = () => !!git(['rev-parse', '--short', 'HEAD'], CYCLE_HOME);
+const cycleHomeIsClone = () => existsSync(join(CYCLE_HOME, '.git')) && !!git(['rev-parse', '--short', 'HEAD'], CYCLE_HOME);
 
 /** config + backend semantics, as the object templates resolve paths against. */
 function buildContext(cfg, backend) {
@@ -716,7 +729,7 @@ function printDiff(rel, a, b, { context = 2 } = {}) {
 // ---------------------------------------------------------------------------
 
 const upstreamSha = () => {
-    const sha = git(['rev-parse', '--short', 'HEAD'], CYCLE_HOME);
+    const sha = existsSync(join(CYCLE_HOME, '.git')) ? git(['rev-parse', '--short', 'HEAD'], CYCLE_HOME) : '';
     if (sha) {
         const dirty = git(['status', '--porcelain'], CYCLE_HOME);
         return dirty ? `${sha}-dirty` : sha;
@@ -826,7 +839,11 @@ export function detect(root) {
     }
     out.name ??= basename(root);
 
-    const remote = git(['remote', 'get-url', 'origin'], root);
+    // Listing an empty remote set succeeds; asking Git for a missing named remote
+    // fails noisily. Probe the set first so expected no-origin repos stay quiet while
+    // a genuine failure of either Git operation still reaches stderr.
+    const remotes = git(['remote'], root).split(/\r?\n/).filter(Boolean);
+    const remote = remotes.includes('origin') ? git(['remote', 'get-url', 'origin'], root) : '';
     if (remote) {
         // Remotes configured for CI or convenience routinely embed credentials
         // (https://x-access-token:ghp_…@host/repo.git); detect()'s output reaches the
@@ -1038,7 +1055,7 @@ const DEFAULT_STATUSES = {
 
 /**
  * The config a fresh install starts from: everything `detect` could infer, plus
- * defensible defaults for everything it couldn't. Shared by the interview and by
+ * explicit unknowns for everything it couldn't. Shared by the interview and by
  * `--plan`, so a guided setup and a manual one begin from exactly the same draft.
  */
 function applyConfigSets(cfg, sets = []) {
@@ -1079,10 +1096,10 @@ export function draftConfig(root, { backend: wanted, profile, set } = {}) {
         },
         profile: profile ?? 'lean',
         backend,
-        // Which harness trees to render. Detected from filesystem markers when
-        // present (see `detect`), else Claude Code only. See harnesses/*.jsonc and
-        // docs/HARNESSES.md.
-        harnesses: d.harnesses ?? ['claude'],
+        // Which harness trees to render. Detection can suggest an answer, but an
+        // absent signal cannot honestly choose a user's coding harness for them.
+        // See harnesses/*.jsonc and docs/HARNESSES.md.
+        harnesses: d.harnesses ?? [],
         tracker: {
             description: `**GitHub issues** (\`${d.slug ?? ''}\`)`,
             statuses: DEFAULT_STATUSES[backend] ?? DEFAULT_STATUSES.github,
@@ -1096,7 +1113,7 @@ export function draftConfig(root, { backend: wanted, profile, set } = {}) {
             model: "Use the active harness's default model unless the task explicitly requires another.",
             executor_default: 'orchestrator-inline',
         },
-        gates: Object.keys(d.gates).length ? d.gates : { typecheck: 'npm run typecheck', test: 'npm test' },
+        gates: d.gates,
         // /dep-update's package-manager commands. Detected from an ecosystem marker;
         // blank where the ecosystem has no equivalent (plenty have no audit-fix).
         deps: d.deps ?? NO_DEPENDENCY_WORKFLOW,
@@ -1138,7 +1155,12 @@ async function cmdInstall(args) {
         cfg.repo.name = await ask('Repo display name', cfg.repo.name);
         cfg.repo.human = await ask('Who does this pipeline interrupt?', cfg.repo.human);
         cfg.profile = await ask('Profile (lean/standard/full)', cfg.profile);
-        const harnesses = await ask('Harnesses (comma-separated, from the registry)', cfg.harnesses.join(', '));
+        const availableHarnesses = registryNames('harnesses');
+        let harnesses = await ask(`Harnesses (comma-separated: ${availableHarnesses.join(', ')})`, cfg.harnesses.join(', '));
+        while (!harnesses) {
+            console.log(yellow('Choose at least one harness; setup will not guess.'));
+            harnesses = await ask(`Harnesses (comma-separated: ${availableHarnesses.join(', ')})`, '');
+        }
         cfg.harnesses = harnesses.split(',').map((s) => s.trim()).filter(Boolean);
         // No interactive question for backend itself: github is the only one the-cycle
         // binds today, so asking would be a confirm-the-only-answer prompt. `--backend`
@@ -1149,11 +1171,21 @@ async function cmdInstall(args) {
             const parent = keys.reduce((o, k) => (o[k] ??= {}), cfg);
             parent[leaf] = await ask(`${path} — ${why}`, parent[leaf] ?? '');
         }
-        cfg.gates.typecheck = await ask('Typecheck gate', cfg.gates.typecheck ?? '');
-        cfg.gates.test = await ask('Test gate', cfg.gates.test ?? '');
+        for (const [key, label] of [['typecheck', 'Typecheck gate'], ['test', 'Test gate']]) {
+            const command = await ask(label, cfg.gates[key] ?? '');
+            if (command) cfg.gates[key] = command;
+            else delete cfg.gates[key];
+        }
         const brakes = await ask('Always-brake surfaces (comma-separated)', cfg.brakes.join(', '));
         cfg.brakes = brakes.split(',').map((s) => s.trim()).filter(Boolean);
         rl.close();
+    }
+
+    if (!Array.isArray(cfg.harnesses) || !cfg.harnesses.length || cfg.harnesses.some((h) => typeof h !== 'string' || !h.trim())) {
+        fail(
+            'no harness detected or selected',
+            `choose one in the interview, or pass \`--set 'harnesses=["codex"]'\` (available: ${registryNames('harnesses').join(', ')})`,
+        );
     }
 
     loadProfile(cfg.profile);
@@ -1210,12 +1242,8 @@ async function cmdInstall(args) {
 function cmdPlan(root, values) {
     const { cfg, detected } = draftConfig(root, { backend: values.backend, profile: values.profile, set: values.set });
     const backend = loadBackend(cfg.backend);
-    const profiles = readdirSync(join(CYCLE_HOME, 'profiles'))
-        .filter((f) => f.endsWith('.jsonc'))
-        .map((f) => basename(f, '.jsonc'));
-    const harnesses = readdirSync(join(CYCLE_HOME, 'harnesses'))
-        .filter((f) => f.endsWith('.jsonc'))
-        .map((f) => basename(f, '.jsonc'));
+    const profiles = registryNames('profiles');
+    const harnesses = registryNames('harnesses');
 
     const overlayManifest = existsSync(templatePath('overlays.jsonc')) ? readJsonc(templatePath('overlays.jsonc')) : {};
 
@@ -1605,8 +1633,9 @@ const USAGE = `${bold('cycle')} — render the-cycle's work pipeline into a repo
   ${bold('cycle render')} [filter]
       Print rendered output to stdout without writing. Debugging aid.
 
-  Renders into every harness in .cycle/config.jsonc's "harnesses" array (default
-  ["claude"] — .claude/skills/). See harnesses/*.jsonc and docs/HARNESSES.md.
+  Renders into every harness in .cycle/config.jsonc's "harnesses" array. A fresh
+  install detects existing harness markers or asks you to choose; legacy configs
+  without the field still use ["claude"]. See harnesses/*.jsonc and docs/HARNESSES.md.
 `;
 
 async function main() {
