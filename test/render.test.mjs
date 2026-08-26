@@ -12,7 +12,8 @@ import { execFileSync, spawn, spawnSync } from 'node:child_process';
 import { cpSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, relative } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import * as nodeUtil from 'node:util';
 import { readJsonc } from '../bin/cycle.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -51,6 +52,24 @@ const cycleRaw = (dir, args) => {
     });
     return { status: r.status, out: `${r.stdout ?? ''}${r.stderr ?? ''}` };
 };
+
+function cycleWithTtys(dir, args, { stdoutTTY, stderrTTY, noColor = false }) {
+    const env = { ...process.env };
+    delete env.NO_COLOR;
+    delete env.NODE_DISABLE_COLORS;
+    delete env.FORCE_COLOR;
+    if (noColor) env.NO_COLOR = '1';
+
+    const launcher = `
+        Object.defineProperty(process.stdout, 'isTTY', { value: ${stdoutTTY} });
+        Object.defineProperty(process.stderr, 'isTTY', { value: ${stderrTTY} });
+        process.argv = [process.execPath, ${JSON.stringify(CLI)}, ...${JSON.stringify(args)}];
+        await import(${JSON.stringify(pathToFileURL(CLI).href)});
+    `;
+    return spawnSync(process.execPath, ['--input-type=module', '--eval', launcher], {
+        cwd: dir, encoding: 'utf8', env,
+    });
+}
 
 const dirs = [];
 after(() => dirs.forEach((d) => rmSync(d, { recursive: true, force: true })));
@@ -405,6 +424,50 @@ describe('unknown flag vs error treatment (#78)', () => {
         assert.match(r.stderr, /✗.*[Uu]nknown option/);
         assert.match(r.stderr, /cycle --help/);
         assert.doesNotMatch(r.stderr, /^\s+at /m, 'no internal stack trace');
+    });
+});
+
+// #107: color support belongs to the stream receiving the text. A stdout-only
+// decision leaked SGR escapes into redirected stderr when stdout was a TTY.
+describe('stream-aware CLI color (#107)', () => {
+    test('redirected stderr stays plain when stdout is a TTY', () => {
+        const dir = scratchRepo('github');
+        dirs.push(dir);
+
+        const r = cycleWithTtys(dir, ['unknown'], { stdoutTTY: true, stderrTTY: false });
+        assert.equal(r.status, 1);
+        assert.doesNotMatch(r.stderr, /\x1b\[/);
+        assert.match(r.stderr, /unknown command/);
+    });
+
+    test('redirected stdout stays plain when stderr is a TTY', () => {
+        const dir = scratchRepo('github');
+        dirs.push(dir);
+
+        const r = cycleWithTtys(dir, ['--help'], { stdoutTTY: false, stderrTTY: true });
+        assert.equal(r.status, 0);
+        assert.doesNotMatch(r.stdout, /\x1b\[/);
+        assert.match(r.stdout, /cycle install/);
+    });
+
+    test('TTY destinations can still be styled', { skip: !nodeUtil.styleText }, () => {
+        const dir = scratchRepo('github');
+        dirs.push(dir);
+
+        const stdout = cycleWithTtys(dir, ['--help'], { stdoutTTY: true, stderrTTY: false });
+        const stderr = cycleWithTtys(dir, ['unknown'], { stdoutTTY: false, stderrTTY: true });
+        assert.match(stdout.stdout, /\x1b\[/);
+        assert.match(stderr.stderr, /\x1b\[/);
+    });
+
+    test('NO_COLOR disables styling on both TTY destinations', () => {
+        const dir = scratchRepo('github');
+        dirs.push(dir);
+
+        const stdout = cycleWithTtys(dir, ['--help'], { stdoutTTY: true, stderrTTY: true, noColor: true });
+        const stderr = cycleWithTtys(dir, ['unknown'], { stdoutTTY: true, stderrTTY: true, noColor: true });
+        assert.doesNotMatch(stdout.stdout, /\x1b\[/);
+        assert.doesNotMatch(stderr.stderr, /\x1b\[/);
     });
 });
 
