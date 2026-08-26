@@ -39,6 +39,21 @@ test('the packed artifact contains only the supported product surface and can re
         mkdirSync(unpacked);
         execFileSync('tar', ['-xzf', join(work, metadata.filename), '-C', unpacked]);
         const packageRoot = join(unpacked, 'package');
+        const setupSkill = readFileSync(join(packageRoot, 'skills', 'cycle-setup', 'SKILL.md'), 'utf8');
+        assert.match(setupSkill, /run every non-empty command/i, 'setup omits configured gate execution');
+        assert.match(setupSkill, /gh repo view --json nameWithOwner,url/, 'setup omits repository access proof');
+        assert.match(setupSkill, /gh issue list --state all --limit 1 --json number/, 'setup omits tracker access proof');
+        assert.match(setupSkill, /gh label list --limit 1000 --json name/, 'setup omits required-label proof');
+        assert.match(
+            setupSkill,
+            /fresh explicit approval[\s\S]*gh label create "<exact name>"/,
+            'setup permits label creation without a fresh exact approval',
+        );
+        assert.doesNotMatch(setupSkill, /gh label create[^\n]*--force/, 'setup can overwrite an existing label');
+        assert.match(setupSkill, /READY is allowed only when every surface is PASS/);
+        assert.match(setupSkill, /Any FAIL or UNVERIFIED makes the headline\s+NOT READY/);
+        assert.match(setupSkill, /git status --short -- \.cycle <each configured harness root>/);
+        assert.match(setupSkill, /First use after that commit: \/next/);
         assert.equal(
             execFileSync(process.execPath, [join(packageRoot, 'bin', 'cycle.mjs'), '--version'], {
                 encoding: 'utf8', env: { ...process.env, NO_COLOR: '1' },

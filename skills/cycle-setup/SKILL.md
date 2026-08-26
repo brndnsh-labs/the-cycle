@@ -1,6 +1,6 @@
 ---
 name: cycle-setup
-description: Install the-cycle's work pipeline into this repo, adapted to it. Reads the codebase to answer the setup questions properly — gates, risk surfaces, tracker vocabulary — instead of accepting generic defaults, then drafts the overlays that carry repo-specific content (reviewer routing, scout lenses, deploy topology). Also reconciles a repo that already has hand-written skills. Use for a first install, or to redo a setup that was rushed. Plan-first; writes nothing until you approve.
+description: Install the-cycle's work pipeline into this repo, adapted to it. Reads the codebase to answer the setup questions properly — gates, risk surfaces, tracker vocabulary — instead of accepting generic defaults, drafts the overlays that carry repo-specific content, then proves the result with an operational readiness receipt. Also reconciles a repo that already has hand-written skills. Use for a first install, or to redo a setup that was rushed. Plan-first; writes nothing until you approve.
 ---
 
 # /cycle-setup
@@ -47,7 +47,9 @@ to prevent.
   crypto material. Name the surfaces this repo actually has. Generic brakes are close to useless —
   they name risks the repo doesn't run and miss the ones it does.
 - **Tracker vocabulary** — read the real labels or board columns, not the defaults. If you can't
-  reach the tracker, say so and use the defaults, flagged as unverified.
+  reach the tracker, say so and use the defaults, flagged as unverified. You may draft and render
+  from that provisional answer, but the final receipt is **NOT READY** until tracker access and
+  every required label are verified.
 - **Backend** — not a question the plan asks: `github` is the only backend the-cycle binds today
   (see `docs/BACKENDS.md`), so there is nothing to confirm. If this repo's issues genuinely live
   somewhere else, there is no backend for that yet — **stop and say so** rather than rendering
@@ -96,11 +98,10 @@ Write the rest only where you found something concrete. `dep-update-landmines` n
 that has actually caused trouble; `deploy` needs a real topology. Skip the ones you'd have to
 invent, and say which you skipped and why.
 
-## 5. Render and verify
+## 5. Render and inspect
 
 ```sh
 cycle update                  # renders every configured harness skill tree
-cycle check                   # must report clean
 ```
 
 Then **read what was produced** — at minimum `DOCTRINE.md`, `/next`, and one overlay-heavy skill.
@@ -108,21 +109,109 @@ A clean render of a skill that says something false about this repo is the outco
 and only reading catches it. Fix by changing config or overlays and re-rendering, never by editing
 the rendered file.
 
+## 6. Prove operational readiness
+
+Setup is not complete because files rendered. Prove that the repository can actually use the
+pipeline, and keep unknown distinct from passing.
+
+### Repository gates
+
+Read `.cycle/config.jsonc`. If `gates.commands` is present, run every non-empty command in that
+array. Otherwise run every non-empty string-valued configured gate. Run the commands exactly as
+configured — do not replace, weaken, or silently skip one. Record one row per command:
+
+- **PASS** — the command ran and exited zero.
+- **FAIL** — it ran and exited non-zero. Preserve the useful diagnostic and stop calling setup
+  ready.
+- **UNVERIFIED** — the environment prevented a real run even after using the harness's supported
+  retry or approval path. Name the constraint; never translate it into PASS.
+
+If no gate is configured, record the gate surface as **UNVERIFIED — no repository gate
+configured**. Do not invent a command, and do not report READY.
+
+### Tracker and required labels
+
+Use read-only GitHub CLI calls first, from the repository root:
+
+```sh
+gh repo view --json nameWithOwner,url
+gh issue list --state all --limit 1 --json number
+gh label list --limit 1000 --json name
+```
+
+The first result must identify the repository configured in `repo.slug`; the issue call must
+succeed even when its result is an empty array. Compare the label names by **exact equality** with
+every `tracker.statuses[].name` in config. A failed read is **UNVERIFIED**, a repository mismatch
+is **FAIL**, and any missing required label is **FAIL**. All three block READY.
+
+If labels are missing, list their exact names, descriptions, and target repository. Creating them
+is an external tracker mutation and an auth surface: get a **fresh explicit approval** for that
+exact list before running any write. A general setup nod is not approval. After approval, create
+only the confirmed missing labels, without `--force`:
+
+```sh
+gh label create "<exact name>" --description "<configured meaning>"
+```
+
+If approval is declined, leave the labels missing and the receipt NOT READY. If it is granted,
+re-run the read-only label list and require every exact name to be present before changing the
+label row to PASS. Never print tokens or credential-bearing remotes while diagnosing access.
+
+### Render consistency and commit boundary
+
+```sh
+cycle check                  # must report clean
+git status --short -- .cycle <each configured harness root>
+```
+
+`cycle check` is **PASS** only when it exits zero and reports clean. Translate the scoped Git
+status into the exact changed paths to commit; do not write a vague `.cycle/` or harness-tree glob,
+and do not include unrelated dirty files. Config, overlays, state, and every rendered harness tree
+belong in the same commit.
+
 ## Report
+
+End with this operational receipt, after the setup-decision summary:
+
+```text
+Setup readiness: READY | NOT READY
+
+Surface                    Result                 Evidence
+configured gate: <command> PASS|FAIL|UNVERIFIED   <exit/result or constraint>
+tracker repository/access PASS|FAIL|UNVERIFIED   <resolved repo or diagnostic>
+required status labels     PASS|FAIL|UNVERIFIED   <verified names or missing names>
+rendered content review    PASS|FAIL               <files read and any correction>
+cycle check                PASS|FAIL               <clean or diagnostic>
+
+Exact files to commit:
+- <one changed path per line, or "none">
+
+First use after that commit: /next
+```
+
+**READY is allowed only when every surface is PASS.** Any FAIL or UNVERIFIED makes the headline
+NOT READY; name the shortest action that would clear each blocker and rerun the affected check.
+Do not offer `/next` as immediately usable until the receipt is READY — it is the first-use
+handoff after the verified setup is committed.
+
+Before the receipt, summarize:
 
 - Profile, backend, and harnesses, with the evidence for each.
 - Every config value that differs from the draft, and why.
 - Overlays written, and overlays deliberately skipped.
 - Anything you couldn't verify — an unreachable tracker, a gate you couldn't run, a guessed brake.
-  Say it plainly; a silent guess here becomes a rule every skill enforces.
-- The suggested next step: commit `.cycle/` and every configured harness tree together, so config
-  and rendered output stay in sync in history.
+  Say it plainly; the receipt must carry the same uncertainty.
 
 ## Rules
 
 - **Never write under a configured harness skill tree.** Config and overlays are yours; skills
   are the renderer's.
 - **Never invent a gate command.** If you can't confirm it runs, leave it out and say so.
+- **Never call setup READY with a failed or unverified gate, tracker read, required label, content
+  review, or `cycle check`.** Rendering is necessary evidence, not operational proof.
+- **Never create or update a tracker label without fresh explicit approval** for the exact
+  repository and labels. Missing-label repair creates only what was approved and never uses
+  `--force`.
 - **A wrong brake is expensive in both directions** — a missing one lets an agent make an
   irreversible change alone; a spurious one stops work that should have proceeded. Argue for each
   from something in the codebase.
