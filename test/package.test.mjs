@@ -69,7 +69,7 @@ test('the packed artifact contains only the supported product surface and can re
             execFileSync(process.execPath, [join(packageRoot, 'bin', 'cycle.mjs'), '--version'], {
                 encoding: 'utf8', env: { ...process.env, NO_COLOR: '1' },
             }).trim(),
-            'v0.1.0',
+            'v0.2.0',
         );
 
         const home = join(work, 'home');
