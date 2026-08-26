@@ -171,7 +171,7 @@ picks one or more; `cycle update` renders a complete, independent skill tree per
 | structured questions | `AskUserQuestion` | direct chat | `ask_user` | `question` | plain chat |
 | parallel subagents | the Agent tool | subagents | task tool | task tool | none by design |
 
-Full vocabulary, the honesty rule around capability flags, and how to add a third harness:
+Full vocabulary, the honesty rule around capability flags, and how to add a harness:
 `docs/HARNESSES.md`.
 
 ## Layout
@@ -191,7 +191,7 @@ templates/
 backends/*.jsonc       verb → command tables
 harnesses/*.jsonc      discovery path, tool names, capability flags per AI harness
 profiles/*.jsonc       which skills each profile installs
-test/                  node --test; renders every profile × backend, plus multi-harness suites
+test/                  node --test; registry-driven profile × backend × harness matrix + coexistence
 docs/
   AUTHORING.md         writing a template; the overlay points
   BACKENDS.md          the verb vocabulary; adding a backend

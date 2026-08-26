@@ -103,9 +103,10 @@ implementation time — these move, and a stale path here is worse than no harne
 5. `cycle lint` — catches a filename/`name` mismatch, a missing required field, and two harnesses
    sharing a `root` (which would let one silently overwrite the other's tree if both were ever
    configured together).
-6. `npm test` renders every profile against every backend **and** a second harness in the
-   multi-harness suite (`test/render.test.mjs`), and checks frontmatter, provenance, idempotency,
-   and that harness-conditional prose actually differs between trees.
+6. `npm test` discovers every JSONC entry in the profile, backend, and harness registries, so adding
+   the harness registry file automatically puts it in the exhaustive profile × backend × harness
+   render baseline. Specialized multi-harness-coexistence suites also check frontmatter,
+   provenance, idempotency, and that harness-conditional prose actually differs between trees.
 7. The acceptance bar is behavioral (`docs/PATTERNS.md`'s spirit): render into a real repo and run
    a session **in that harness** through a full `/cycle` on a live issue, merge guard included,
    before calling the harness supported.
