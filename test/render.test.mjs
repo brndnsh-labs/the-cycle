@@ -57,6 +57,7 @@ after(() => dirs.forEach((d) => rmSync(d, { recursive: true, force: true })));
 
 for (const backend of BACKENDS) {
     for (const profile of PROFILES) {
+        const profileConfig = registryEntry('profiles', profile);
         for (const harness of HARNESSES) {
             describe(`${profile} on ${backend} through ${harness.name}`, () => {
                 let dir;
@@ -82,7 +83,7 @@ for (const backend of BACKENDS) {
                 });
 
                 test('renders every skill in the profile', () => {
-                    const expected = registryEntry('profiles', profile).skills;
+                    const expected = profileConfig.skills;
                     assert.deepEqual(skills.sort(), [...expected].sort());
                     assert.ok(existsSync(join(skillRoot, 'DOCTRINE.md')));
                 });
@@ -98,6 +99,17 @@ for (const backend of BACKENDS) {
                         assert.match(text, /<!-- cycle:rendered /, `${s}: no provenance`);
                     }
                 });
+
+                if (profileConfig.skills.includes('patch')) {
+                    test('patch permits only justified companion files', () => {
+                        const patch = readFileSync(join(skillRoot, 'patch', harness.skill_file), 'utf8');
+                        assert.match(patch, /Never patch an unrelated file/);
+                        assert.match(patch, /may be changed only\s+when it is directly required to resolve a cited finding/);
+                        assert.match(patch, /additional file \+ reason must appear in the patch\s+plan before editing/);
+                        assert.match(patch, /exception never permits opportunistic cleanup or new ideas/);
+                        assert.match(patch, /any directly required companion file and why/);
+                    });
+                }
 
                 // A leftover {{…}} means a template referenced something config doesn't have
                 // and the engine let it through — the exact failure the loud-unresolved rule
