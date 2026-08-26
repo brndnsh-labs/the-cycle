@@ -66,7 +66,7 @@ skill at `/cycle` time, from what the diff actually touches, not at filing time.
 
 - **Model:** {{routing.model}}
 - **Executor:** **`{{routing.executor_default}}` by default** — the main thread builds directly,
-  keeping accumulated context. {{#if harness.has_subagents}}**Spawn parallel agents only for
+  keeping accumulated context.{{#if harness.has_subagents}} **Spawn parallel agents only for
   independent mechanical work** (the same change across several files); keep shared-file edits
   (indexes, schema) and the validation gates on the main thread.{{/if}}{{#unless harness.has_subagents}}
   **This harness has no parallel-subagent tool** — `/fan-out` and `/cover`'s per-unit spawn are

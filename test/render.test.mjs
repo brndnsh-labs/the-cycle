@@ -1,9 +1,10 @@
-// End-to-end render tests: every profile, on every backend, into a throwaway repo.
+// End-to-end render tests: every profile, on every backend, through every harness,
+// into a throwaway repo.
 //
 // The engine tests cover the template language; these cover the thing that actually
-// ships — that all 19 templates resolve, produce valid skill frontmatter, and render
-// identically twice. A non-idempotent render would churn every consuming repo on
-// every update, so that assertion earns its place.
+// ships — that every registered combination resolves, produces valid skill
+// frontmatter, and renders identically twice. A non-idempotent render would churn
+// every consuming repo on every update, so that assertion earns its place.
 
 import { test, describe, before, after } from 'node:test';
 import assert from 'node:assert/strict';
@@ -12,23 +13,25 @@ import { cpSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, stat
 import { tmpdir } from 'node:os';
 import { dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { readJsonc } from '../bin/cycle.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const CLI = join(HERE, '..', 'bin', 'cycle.mjs');
-const PROFILES = readdirSync(join(HERE, '..', 'profiles'))
+const registryNames = (registry) => readdirSync(join(HERE, '..', registry))
     .filter((f) => f.endsWith('.jsonc') && !f.startsWith('_'))
     .map((f) => f.replace('.jsonc', ''));
-const BACKENDS = ['github'];
+const registryEntry = (registry, name) => readJsonc(join(HERE, '..', registry, `${name}.jsonc`));
 
-const REMOTES = {
-    github: 'https://github.com/brandon/demo.git',
-};
+const PROFILES = registryNames('profiles');
+const BACKENDS = registryNames('backends');
+const HARNESSES = registryNames('harnesses').map((name) => registryEntry('harnesses', name));
+const DEMO_REMOTE = 'https://github.com/brandon/demo.git';
 
-function scratchRepo(backend) {
+function scratchRepo() {
     const dir = mkdtempSync(join(tmpdir(), 'cycle-render-'));
     const run = (cmd, args) => execFileSync(cmd, args, { cwd: dir, stdio: 'pipe' });
     run('git', ['init', '-q', '.']);
-    run('git', ['remote', 'add', 'origin', REMOTES[backend]]);
+    run('git', ['remote', 'add', 'origin', DEMO_REMOTE]);
     run('git', ['config', 'user.name', 'Brandon Shea']);
     run('git', ['config', 'user.email', 'b@example.com']);
     writeFileSync(
@@ -54,95 +57,99 @@ after(() => dirs.forEach((d) => rmSync(d, { recursive: true, force: true })));
 
 for (const backend of BACKENDS) {
     for (const profile of PROFILES) {
-        describe(`${profile} on ${backend}`, () => {
-            let dir;
-            let skills;
+        for (const harness of HARNESSES) {
+            describe(`${profile} on ${backend} through ${harness.name}`, () => {
+                let dir;
+                let skillRoot;
+                let skills;
+                let managedFiles;
 
-            before(() => {
-                dir = scratchRepo(backend);
-                dirs.push(dir);
-                cycle(dir, ['install', '--profile', profile, '--backend', backend, '-y']);
-                skills = readdirSync(join(dir, '.claude', 'skills'), { withFileTypes: true })
-                    .filter((e) => e.isDirectory())
-                    .map((e) => e.name);
+                before(() => {
+                    dir = scratchRepo();
+                    dirs.push(dir);
+                    cycle(dir, [
+                        'install', '--profile', profile, '--backend', backend,
+                        '--set', `harnesses=${JSON.stringify([harness.name])}`, '-y',
+                    ]);
+                    skillRoot = join(dir, harness.root);
+                    skills = readdirSync(skillRoot, { withFileTypes: true })
+                        .filter((e) => e.isDirectory())
+                        .map((e) => e.name);
+                    managedFiles = [
+                        ...skills.map((s) => join(skillRoot, s, harness.skill_file)),
+                        join(skillRoot, 'DOCTRINE.md'),
+                    ];
+                });
+
+                test('renders every skill in the profile', () => {
+                    const expected = registryEntry('profiles', profile).skills;
+                    assert.deepEqual(skills.sort(), [...expected].sort());
+                    assert.ok(existsSync(join(skillRoot, 'DOCTRINE.md')));
+                });
+
+                test('every skill has parseable frontmatter and a provenance stamp', () => {
+                    for (const s of skills) {
+                        const text = readFileSync(join(skillRoot, s, harness.skill_file), 'utf8');
+                        const fm = /^---\n([\s\S]*?)\n---\n/.exec(text);
+                        assert.ok(fm, `${s}: no frontmatter`);
+                        assert.match(fm[1], /^name: /m, `${s}: no name`);
+                        assert.match(fm[1], /^description: /m, `${s}: no description`);
+                        assert.equal(new RegExp(`^name: ${s}$`, 'm').test(fm[1]), true, `${s}: name mismatch`);
+                        assert.match(text, /<!-- cycle:rendered /, `${s}: no provenance`);
+                    }
+                });
+
+                // A leftover {{…}} means a template referenced something config doesn't have
+                // and the engine let it through — the exact failure the loud-unresolved rule
+                // exists to prevent.
+                test('no unrendered template syntax survives', () => {
+                    for (const file of managedFiles) {
+                        const text = readFileSync(file, 'utf8');
+                        const leftover = (text.match(/\{\{[^}]*\}\}/g) ?? []).filter(
+                            (m, i, all) => !text.includes(`$${all[i]}`),
+                        );
+                        assert.deepEqual(leftover, [], `${relative(dir, file)}: unrendered ${leftover.join(', ')}`);
+                    }
+                });
+
+                test('managed output contains no trailing whitespace', () => {
+                    for (const file of managedFiles) {
+                        const text = readFileSync(file, 'utf8');
+                        assert.doesNotMatch(text, /[ \t]+$/m, `${relative(dir, file)}: trailing whitespace`);
+                    }
+                });
+
+                // The inverse of the guard that used to live here. An install renders prose
+                // and nothing else: no executable is installed into a consuming repo, so a
+                // rendered command can never point at a script the repo doesn't have. If a
+                // backend ever wants a helper again, this is the test that has to change
+                // first — deliberately, not as a side effect.
+                test('installs prose only — no executable is rendered into the repo', () => {
+                    const backendFile = registryEntry('backends', backend);
+                    assert.ok(!backendFile.shims, `${backend}: declares shims, but the shim mechanism is gone`);
+
+                    for (const cmd of Object.values(backendFile.verbs ?? {})) {
+                        assert.doesNotMatch(
+                            String(cmd),
+                            /\bscripts\//,
+                            `${backend}: a verb calls a scripts/ executable that nothing installs`,
+                        );
+                    }
+                    assert.ok(!existsSync(join(dir, 'scripts')), 'rendered a scripts/ directory');
+                });
+
+                test('check reports clean immediately after install', () => {
+                    assert.match(cycle(dir, ['check']), /clean/);
+                });
+
+                test('re-rendering is a byte-identical no-op', () => {
+                    const before = managedFiles.map((file) => readFileSync(file, 'utf8'));
+                    cycle(dir, ['update']);
+                    const after = managedFiles.map((file) => readFileSync(file, 'utf8'));
+                    assert.deepEqual(after, before);
+                });
             });
-
-            test('renders every skill in the profile', () => {
-                const expected = JSON.parse(
-                    readFileSync(join(HERE, '..', 'profiles', `${profile}.jsonc`), 'utf8')
-                        .replace(/\/\/.*$/gm, '')
-                        .replace(/,(\s*[}\]])/g, '$1'),
-                ).skills;
-                assert.deepEqual(skills.sort(), [...expected].sort());
-                assert.ok(existsSync(join(dir, '.claude', 'skills', 'DOCTRINE.md')));
-            });
-
-            test('every skill has parseable frontmatter and a provenance stamp', () => {
-                for (const s of skills) {
-                    const text = readFileSync(join(dir, '.claude', 'skills', s, 'SKILL.md'), 'utf8');
-                    const fm = /^---\n([\s\S]*?)\n---\n/.exec(text);
-                    assert.ok(fm, `${s}: no frontmatter`);
-                    assert.match(fm[1], /^name: /m, `${s}: no name`);
-                    assert.match(fm[1], /^description: /m, `${s}: no description`);
-                    assert.equal(new RegExp(`^name: ${s}$`, 'm').test(fm[1]), true, `${s}: name mismatch`);
-                    assert.match(text, /<!-- cycle:rendered /, `${s}: no provenance`);
-                }
-            });
-
-            // A leftover {{…}} means a template referenced something config doesn't have
-            // and the engine let it through — the exact failure the loud-unresolved rule
-            // exists to prevent.
-            test('no unrendered template syntax survives', () => {
-                for (const s of [...skills.map((x) => join('.claude/skills', x, 'SKILL.md')), '.claude/skills/DOCTRINE.md']) {
-                    const text = readFileSync(join(dir, s), 'utf8');
-                    const leftover = (text.match(/\{\{[^}]*\}\}/g) ?? []).filter(
-                        (m, i, all) => !text.includes(`$${all[i]}`),
-                    );
-                    assert.deepEqual(leftover, [], `${s}: unrendered ${leftover.join(', ')}`);
-                }
-            });
-
-            test('managed output contains no trailing whitespace', () => {
-                for (const s of [...skills.map((x) => join('.claude/skills', x, 'SKILL.md')), '.claude/skills/DOCTRINE.md']) {
-                    const text = readFileSync(join(dir, s), 'utf8');
-                    assert.doesNotMatch(text, /[ \t]+$/m, `${s}: trailing whitespace`);
-                }
-            });
-
-            // The inverse of the guard that used to live here. An install renders prose
-            // and nothing else: no executable is installed into a consuming repo, so a
-            // rendered command can never point at a script the repo doesn't have. If a
-            // backend ever wants a helper again, this is the test that has to change
-            // first — deliberately, not as a side effect.
-            test('installs prose only — no executable is rendered into the repo', () => {
-                const backendFile = JSON.parse(
-                    readFileSync(join(HERE, '..', 'backends', `${backend}.jsonc`), 'utf8')
-                        .replace(/^\s*\/\/.*$/gm, '')
-                        .replace(/,(\s*[}\]])/g, '$1'),
-                );
-                assert.ok(!backendFile.shims, `${backend}: declares shims, but the shim mechanism is gone`);
-
-                for (const cmd of Object.values(backendFile.verbs ?? {})) {
-                    assert.doesNotMatch(
-                        String(cmd),
-                        /\bscripts\//,
-                        `${backend}: a verb calls a scripts/ executable that nothing installs`,
-                    );
-                }
-                assert.ok(!existsSync(join(dir, 'scripts')), 'rendered a scripts/ directory');
-            });
-
-            test('check reports clean immediately after install', () => {
-                assert.match(cycle(dir, ['check']), /clean/);
-            });
-
-            test('re-rendering is a byte-identical no-op', () => {
-                const before = skills.map((s) => readFileSync(join(dir, '.claude/skills', s, 'SKILL.md'), 'utf8'));
-                cycle(dir, ['update']);
-                const after = skills.map((s) => readFileSync(join(dir, '.claude/skills', s, 'SKILL.md'), 'utf8'));
-                assert.deepEqual(after, before);
-            });
-        });
+        }
     }
 }
 
@@ -554,7 +561,7 @@ describe('dependency metadata contracts', () => {
         const dir = mkdtempSync(join(tmpdir(), 'cycle-no-deps-'));
         dirs.push(dir);
         execFileSync('git', ['init', '-q', '.'], { cwd: dir });
-        execFileSync('git', ['remote', 'add', 'origin', REMOTES.github], { cwd: dir });
+        execFileSync('git', ['remote', 'add', 'origin', DEMO_REMOTE], { cwd: dir });
         execFileSync('git', ['config', 'user.name', 'Brandon Shea'], { cwd: dir });
         cycle(dir, ['install', '--profile', 'standard', '-y']);
 
