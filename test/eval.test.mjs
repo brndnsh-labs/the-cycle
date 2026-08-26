@@ -12,9 +12,9 @@ const RUNNER = join(ROOT, 'eval', 'run.mjs');
 
 function fakeCodexSource() {
     return `#!/usr/bin/env node
-import { spawnSync } from 'node:child_process';
-import { writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+const { spawnSync } = require('node:child_process');
+const { writeFileSync } = require('node:fs');
+const { join } = require('node:path');
 
 const args = process.argv.slice(2);
 if (args[0] === '--version') {

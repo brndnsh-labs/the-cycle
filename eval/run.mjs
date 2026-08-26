@@ -279,7 +279,7 @@ function setupFixture(runDir, scenario, source) {
             version: FIXTURE_VERSION,
             scenario,
             filesHash,
-            fake_gh_sha256: sha256(readFileSync(fakeGh)),
+            fake_gh_sha256: hashTree(fakeBin),
         }),
         observed,
         controlTest,
@@ -414,7 +414,10 @@ export function parseExecEvents(text) {
 function codexVersion(codexBin) {
     const result = spawnSync(codexBin, ['--version'], { encoding: 'utf8' });
     if (result.error) fail(`cannot run ${codexBin} --version: ${result.error.message}`);
-    if (result.status !== 0) fail(`cannot run ${codexBin} --version`);
+    if (result.status !== 0) {
+        const detail = result.stderr?.trim() || result.stdout?.trim();
+        fail(`cannot run ${codexBin} --version${detail ? `: ${detail}` : ''}`);
+    }
     return result.stdout.trim();
 }
 
