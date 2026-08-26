@@ -63,6 +63,20 @@ Don't push to the Forgejo mirror directly — the next sync from GitHub overwrit
 `install.sh` also links `/cycle-setup` into your personal skills directory (`~/.claude/skills`, `~/.agents/skills`, `~/.github/skills`, `~/.opencode/skills`, or `~/.pi/skills`) as a personal
 skill — it has to work in a repo that doesn't have the-cycle yet.
 
+### Ask a coding agent to install it
+
+Give an agent this prompt when you want it to bootstrap the durable install and set up the
+repository it is already working in:
+
+> Install the-cycle for durable use, then set it up in this repository. Verify Node ≥20, git, and
+> bash first; `gh` must be authenticated before tracker operations. Before cloning or changing
+> anything under my home directory, show me the paths and ask for approval. Once approved, clone
+> `https://github.com/brndnsh-labs/the-cycle` to `~/code/the-cycle` (or inspect the existing clone),
+> run `~/code/the-cycle/install.sh`, make sure `~/.local/bin` is on `PATH` as the installer directs,
+> and verify `cycle --version`. Restart or reload the coding harness if it does not discover the
+> newly linked personal skill. Then run `/cycle-setup` in this repository and follow it; do not
+> hand-edit generated harness skill trees.
+
 Then, in a repo:
 
 ```sh
