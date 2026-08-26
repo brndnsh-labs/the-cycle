@@ -31,21 +31,37 @@ const CYCLE_HOME = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 // output
 // ---------------------------------------------------------------------------
 
-const supportsColor = process.stdout.isTTY && process.env.NO_COLOR === undefined;
 // util.styleText arrived after the initial Node 20 release. Keep the declared
 // >=20 floor honest instead of crashing during module evaluation on early 20.x.
-const paint = (style, s) => (supportsColor && nodeUtil.styleText ? nodeUtil.styleText(style, s) : s);
-const bold = (s) => paint('bold', s);
-const dim = (s) => paint('dim', s);
-const red = (s) => paint('red', s);
-const green = (s) => paint('green', s);
-const yellow = (s) => paint('yellow', s);
-const cyan = (s) => paint('cyan', s);
+const stylesFor = (stream) => {
+    const supportsColor = stream.isTTY && process.env.NO_COLOR === undefined;
+    const paint = (style, s) => (
+        supportsColor && nodeUtil.styleText
+            ? nodeUtil.styleText(style, s, { stream })
+            : s
+    );
+    return {
+        bold: (s) => paint('bold', s),
+        dim: (s) => paint('dim', s),
+        red: (s) => paint('red', s),
+        green: (s) => paint('green', s),
+        yellow: (s) => paint('yellow', s),
+        cyan: (s) => paint('cyan', s),
+    };
+};
 
-class CycleError extends Error {}
+const { bold, dim, red, green, yellow, cyan } = stylesFor(process.stdout);
+const { dim: stderrDim, red: stderrRed } = stylesFor(process.stderr);
+
+class CycleError extends Error {
+    constructor(message, hint) {
+        super(message);
+        this.hint = hint;
+    }
+}
 
 const fail = (msg, hint) => {
-    throw new CycleError(hint ? `${msg}\n  ${dim(hint)}` : msg);
+    throw new CycleError(msg, hint);
 };
 
 // ---------------------------------------------------------------------------
@@ -435,7 +451,7 @@ function git(args, cwd = process.cwd()) {
         return execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
     } catch (e) {
         const msg = e.stderr?.toString?.().trim() ?? '';
-        if (msg) console.error(dim(`git ${args.join(' ')} failed: ${msg}`));
+        if (msg) console.error(stderrDim(`git ${args.join(' ')} failed: ${msg}`));
         return '';
     }
 }
@@ -1627,15 +1643,16 @@ function invokedDirectly() {
 if (invokedDirectly()) {
     main().catch((e) => {
         if (e instanceof CycleError) {
-            console.error(`${red('✗')} ${e.message}`);
+            console.error(`${stderrRed('✗')} ${e.message}`);
+            if (e.hint) console.error(stderrDim(`  ${e.hint}`));
             process.exit(1);
         }
         // parseArgs (strict mode) throws a bare TypeError with an ERR_PARSE_ARGS code on a
         // typo'd flag — same class of user mistake as the `default:` arm above, so it gets
         // the same clean treatment instead of an internal stack trace.
         if (typeof e?.code === 'string' && e.code.startsWith('ERR_PARSE_ARGS')) {
-            console.error(`${red('✗')} ${e.message}`);
-            console.error(dim('  run `cycle --help` for usage'));
+            console.error(`${stderrRed('✗')} ${e.message}`);
+            console.error(stderrDim('  run `cycle --help` for usage'));
             process.exit(1);
         }
         console.error(e.stack ?? String(e));
