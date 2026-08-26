@@ -159,6 +159,64 @@ function resolveSource(spec, sourceRoot, name) {
     return materializeRef(spec, join(sourceRoot, name));
 }
 
+const isNonEmptyString = (value) => typeof value === 'string' && Boolean(value.trim());
+const isStringArray = (value, { nonEmpty = false } = {}) =>
+    Array.isArray(value)
+    && (!nonEmpty || value.length > 0)
+    && value.every(isNonEmptyString);
+
+export function validateScenario(scenario) {
+    if (!scenario || typeof scenario !== 'object' || Array.isArray(scenario)) {
+        fail('evaluation scenario must be an object');
+    }
+    if (!isNonEmptyString(scenario.id) || !isNonEmptyString(scenario.prompt)
+        || !scenario.issue || !Array.isArray(scenario.assertions)) {
+        fail(`scenario ${scenario.id ?? '<unknown>'} is missing id, prompt, issue, or assertions`);
+    }
+
+    for (const [index, assertion] of scenario.assertions.entries()) {
+        const where = `scenario ${scenario.id} assertion[${index}]`;
+        if (!assertion || typeof assertion !== 'object' || Array.isArray(assertion)) {
+            fail(`${where} must be an object`);
+        }
+        const requirePath = () => {
+            if (!isNonEmptyString(assertion.path)) fail(`${where} requires a non-empty string path`);
+        };
+        const requireContains = () => {
+            if (!isNonEmptyString(assertion.contains)) fail(`${where} requires a non-empty string contains`);
+        };
+
+        switch (assertion.type) {
+            case 'file_equals':
+                requirePath();
+                if (typeof assertion.value !== 'string') fail(`${where} requires a string value`);
+                break;
+            case 'file_unchanged':
+            case 'path_unstaged':
+                requirePath();
+                break;
+            case 'changed_paths':
+                if (!isStringArray(assertion.value)) fail(`${where} requires a string-array value`);
+                break;
+            case 'command_succeeded':
+            case 'command_failed':
+            case 'command_absent':
+                requireContains();
+                break;
+            case 'commands_succeeded_in_order':
+                if (!isStringArray(assertion.value, { nonEmpty: true })) {
+                    fail(`${where} requires a non-empty string-array value`);
+                }
+                break;
+            case 'fixture_gate':
+                break;
+            default:
+                fail(`${where} has unknown type ${JSON.stringify(assertion.type)}`);
+        }
+    }
+    return scenario;
+}
+
 function loadScenarios(selected = []) {
     const wanted = new Set(selected);
     const scenarios = readdirSync(SCENARIOS)
@@ -169,11 +227,9 @@ function loadScenarios(selected = []) {
     if (!scenarios.length) fail('no evaluation scenarios selected');
     const ids = new Set();
     for (const scenario of scenarios) {
-        if (!scenario.id || ids.has(scenario.id)) fail(`invalid or duplicate scenario id: ${scenario.id}`);
+        validateScenario(scenario);
+        if (ids.has(scenario.id)) fail(`invalid or duplicate scenario id: ${scenario.id}`);
         ids.add(scenario.id);
-        if (!scenario.prompt || !scenario.issue || !Array.isArray(scenario.assertions)) {
-            fail(`scenario ${scenario.id} is missing prompt, issue, or assertions`);
-        }
     }
     if (wanted.size) {
         const missing = [...wanted].filter((id) => !ids.has(id));
