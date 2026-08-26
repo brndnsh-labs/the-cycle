@@ -11,14 +11,39 @@ set -euo pipefail
 
 CYCLE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BIN_DIR="$HOME/.local/bin"
-SKILL_DIRS=("$HOME/.claude/skills" "$HOME/.agents/skills" "$HOME/.github/skills" "$HOME/.opencode/skills" "$HOME/.pi/skills")
+# These two personal roots cover every supported harness: Claude Code uses its
+# native root, while Codex, Copilot CLI, OpenCode, and Pi discover ~/.agents/skills.
+SKILL_DIRS=("$HOME/.claude/skills" "$HOME/.agents/skills")
 PATH_LINE='export PATH="$HOME/.local/bin:$PATH"'
+
+SKILL_SRCS=()
+for src in "$CYCLE"/skills/*/; do
+    [ -d "$src" ] || continue
+    SKILL_SRCS+=("${src%/}")
+done
+
+refuse_collision() {
+    local target="$1"
+    if [ -e "$target" ] && [ ! -L "$target" ]; then
+        echo "error: refusing to replace existing directory or file: $target" >&2
+        exit 1
+    fi
+}
+
+# Check every destination before the first write. A collision must not leave a
+# half-installed CLI or a skill linked into only one harness root.
+refuse_collision "$BIN_DIR/cycle"
+for skill_dir in "${SKILL_DIRS[@]}"; do
+    for src in "${SKILL_SRCS[@]}"; do
+        refuse_collision "$skill_dir/$(basename "$src")"
+    done
+done
 
 mkdir -p "$BIN_DIR" "${SKILL_DIRS[@]}"
 
 # Only cycle.mjs. The other files in bin/ are subcommand modules it imports on
 # demand — on PATH they would look like commands and do nothing when run.
-ln -sf "$CYCLE/bin/cycle.mjs" "$BIN_DIR/cycle"
+ln -sfn "$CYCLE/bin/cycle.mjs" "$BIN_DIR/cycle"
 echo "Linking the CLI into $BIN_DIR:"
 echo "  cycle -> $CYCLE/bin/cycle.mjs"
 
@@ -29,18 +54,10 @@ echo
 echo "Linking setup skills into personal harness skill directories:"
 for skill_dir in "${SKILL_DIRS[@]}"; do
     echo "  $skill_dir"
-    for src in "$CYCLE"/skills/*/; do
-        [ -d "$src" ] || continue
+    for src in "${SKILL_SRCS[@]}"; do
         name="$(basename "$src")"
         target="$skill_dir/$name"
-        # `ln -sfn source existing-directory` nests the link inside that directory
-        # instead of replacing it. Refuse the collision so a stale hand-installed
-        # skill cannot survive behind a misleading success message.
-        if [ -e "$target" ] && [ ! -L "$target" ]; then
-            echo "error: refusing to replace existing directory or file: $target" >&2
-            exit 1
-        fi
-        ln -sfn "${src%/}" "$target"
+        ln -sfn "$src" "$target"
         echo "    /$name"
     done
 done
