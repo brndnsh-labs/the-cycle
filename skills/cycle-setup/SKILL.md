@@ -99,7 +99,7 @@ invent, and say which you skipped and why.
 ## 5. Render and verify
 
 ```sh
-cycle update                  # renders skills + backend shims from the config
+cycle update                  # renders every configured harness skill tree
 cycle check                   # must report clean
 ```
 
