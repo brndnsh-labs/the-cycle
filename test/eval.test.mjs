@@ -102,6 +102,28 @@ test('Codex JSONL parsing keeps usage and rejects malformed streams', () => {
 
     const malformed = parseExecEvents('{"type":"turn.started"}\nnot json\n');
     assert.equal(malformed.invalid, 'malformed JSONL at line(s) 2');
+
+    for (const input of ['null\n', '7\n', '[]\n', '{}\n']) {
+        const invalid = parseExecEvents(input);
+        assert.equal(invalid.invalid, 'invalid JSONL event at line(s) 1');
+        assert.deepEqual(invalid.events, []);
+    }
+
+    const mixed = parseExecEvents([
+        JSON.stringify({ type: 'turn.started' }),
+        'null',
+        JSON.stringify({ type: 'turn.completed', usage: { input_tokens: 7, output_tokens: 3 } }),
+        '',
+    ].join('\n'));
+    assert.equal(mixed.invalid, 'invalid JSONL event at line(s) 2');
+    assert.deepEqual(mixed.usage, { input_tokens: 7, output_tokens: 3 });
+    assert.deepEqual(mixed.events.map((event) => event.type), ['turn.started', 'turn.completed']);
+
+    const mixedInvalid = parseExecEvents('null\nnot json\n');
+    assert.equal(
+        mixedInvalid.invalid,
+        'malformed JSONL at line(s) 2; invalid JSONL event at line(s) 1',
+    );
 });
 
 test('behavioral runner compares isolated snapshots without making a model call', { timeout: 120_000 }, () => {
