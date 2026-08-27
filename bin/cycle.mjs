@@ -15,11 +15,11 @@
 // .cycle/state.json, and "upstream drift" is computed the useful way: by re-rendering
 // and reporting which files would actually change.
 
-import { existsSync, mkdirSync, readdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
+import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { createInterface } from 'node:readline/promises';
 import { execFileSync } from 'node:child_process';
 import { homedir } from 'node:os';
-import { basename, dirname, extname, join, relative, resolve } from 'node:path';
+import { basename, dirname, extname, isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { parseArgs } from 'node:util';
 import * as nodeUtil from 'node:util';
 import { createHash } from 'node:crypto';
@@ -228,7 +228,7 @@ function findBlockEnd(src, from, name) {
 }
 
 export function renderTemplate(src, ctx, opts = {}) {
-    const { where = '<template>', overlays = null, verbs = {}, depth = 0 } = opts;
+    const { where = '<template>', overlays = null, repositoryRoot = null, verbs = {}, depth = 0 } = opts;
     if (depth > 12) fail(`template recursion too deep in ${where}`);
     let out = '';
     let i = 0;
@@ -306,6 +306,7 @@ export function renderTemplate(src, ctx, opts = {}) {
             if (!overlays) fail(`overlay "${name}" requested outside a repo render (${where})`);
             const file = join(overlays, `${name}.md`);
             const resume = span.standalone ? span.lineEnd + 1 : after;
+            if (repositoryRoot) repositoryPath(repositoryRoot, file);
             if (!existsSync(file)) {
                 if (optional) { i = resume; continue; }
                 fail(
@@ -462,12 +463,71 @@ function findRepoRoot(start = process.cwd()) {
     return root;
 }
 
+const pathIsInside = (root, path) => {
+    const rel = relative(root, path);
+    return rel === '' || (rel !== '..' && !rel.startsWith(`..${sep}`) && !isAbsolute(rel));
+};
+
+/**
+ * Fail closed before reading or writing a path controlled by a repository checkout.
+ * Missing leaves are allowed for planned writes, but their nearest existing ancestor
+ * must resolve inside the real repository root. A dangling symlink is never equivalent
+ * to a missing path: it records an intended destination that cannot be validated.
+ */
+function repositoryPath(root, path) {
+    const lexicalRoot = resolve(root);
+    const target = resolve(path);
+    const display = relative(lexicalRoot, target) || '.';
+
+    if (!pathIsInside(lexicalRoot, target)) {
+        fail(`repository path is outside the repository boundary: ${display}`);
+    }
+
+    let realRoot;
+    try {
+        realRoot = realpathSync(lexicalRoot);
+    } catch (error) {
+        fail('cannot resolve the repository boundary', error.message);
+    }
+
+    let probe = target;
+    while (true) {
+        try {
+            const resolved = realpathSync(probe);
+            if (!pathIsInside(realRoot, resolved)) {
+                fail(`repository path escapes through a symlink: ${display}`);
+            }
+            return target;
+        } catch (error) {
+            if (error instanceof CycleError) throw error;
+            if (error?.code !== 'ENOENT') {
+                fail(`cannot safely resolve repository path: ${display}`, error.message);
+            }
+
+            try {
+                if (lstatSync(probe).isSymbolicLink()) {
+                    fail(`dangling repository symlink: ${relative(lexicalRoot, probe) || '.'}`);
+                }
+            } catch (statError) {
+                if (statError instanceof CycleError) throw statError;
+                if (statError?.code !== 'ENOENT') {
+                    fail(`cannot safely inspect repository path: ${display}`, statError.message);
+                }
+            }
+
+            const parent = dirname(probe);
+            if (parent === probe) fail(`cannot find a safe ancestor for repository path: ${display}`);
+            probe = parent;
+        }
+    }
+}
+
 const configPath = (root) => join(root, '.cycle', 'config.jsonc');
 const statePath = (root) => join(root, '.cycle', 'state.json');
 const overlayDir = (root) => join(root, '.cycle', 'overlays');
 
 function loadConfig(root) {
-    const p = configPath(root);
+    const p = repositoryPath(root, configPath(root));
     if (!existsSync(p)) {
         fail('this repo has no .cycle/config.jsonc', 'run `cycle install` first');
     }
@@ -615,7 +675,8 @@ function validateConfig(root, cfg, backend) {
         );
     }
 
-    const absentManifests = (cfg.deps?.manifests ?? []).filter((path) => !existsSync(join(root, path)));
+    const absentManifests = (cfg.deps?.manifests ?? []).filter((path) =>
+        !existsSync(repositoryPath(root, join(root, path))));
     if (absentManifests.length) {
         fail(
             `configured dependency manifest${absentManifests.length === 1 ? '' : 's'} missing: ${absentManifests.join(', ')}`,
@@ -639,6 +700,7 @@ function planRender(root, cfg) {
         const body = renderTemplate(readFileSync(src, 'utf8'), extra ? { ...base, ...extra } : base, {
             where: tmplRel,
             overlays,
+            repositoryRoot: root,
             verbs,
         });
         // An absent optional overlay or a false {{#if}} leaves its blank lines
@@ -646,7 +708,7 @@ function planRender(root, cfg) {
         const tidy = `${body.replace(/\n{3,}/g, '\n\n').trimEnd()}\n`;
         plan.push({
             rel: outRel,
-            path: join(root, outRel),
+            path: repositoryPath(root, join(root, outRel)),
             content: stampProvenance(tidy, tmplRel, outRel),
             template: tmplRel,
         });
@@ -749,11 +811,11 @@ function writeState(root, plan) {
     const files = {};
     for (const f of plan) files[f.rel] = readProvenance(f.content)?.hash ?? '';
     const state = { upstream: upstreamSha(), files };
-    writeFileSync(statePath(root), `${JSON.stringify(state, null, 2)}\n`);
+    writeFileSync(repositoryPath(root, statePath(root)), `${JSON.stringify(state, null, 2)}\n`);
 }
 
 function readState(root) {
-    const p = statePath(root);
+    const p = repositoryPath(root, statePath(root));
     if (!existsSync(p)) return null;
     return readJson(p);
 }
@@ -822,7 +884,9 @@ const NO_DEPENDENCY_WORKFLOW = {
 /** Best-effort defaults so the interview is confirmations, not data entry. */
 export function detect(root) {
     const out = { gates: {} };
-    const pkgPath = join(root, 'package.json');
+    const repoPath = (path) => repositoryPath(root, join(root, path));
+    const repoHas = (path) => existsSync(repoPath(path));
+    const pkgPath = repoPath('package.json');
     if (existsSync(pkgPath)) {
         const pkg = readJson(pkgPath);
         out.name = pkg.name;
@@ -878,20 +942,20 @@ export function detect(root) {
         [join('.github', 'skills'), 'copilot'],
     ];
     const harnesses = [...new Set(
-        harnessSignals.filter(([marker]) => existsSync(join(root, marker))).map(([, h]) => h),
+        harnessSignals.filter(([marker]) => repoHas(marker)).map(([, h]) => h),
     )];
     if (harnesses.length) out.harnesses = harnesses;
 
-    if (existsSync(join(root, 'scripts', 'deploy.sh'))) {
+    if (repoHas(join('scripts', 'deploy.sh'))) {
         out.deploy = { test: './scripts/deploy.sh test', prod: './scripts/deploy.sh prod' };
     }
 
-    const ecosystem = ECOSYSTEMS.find(([marker]) => existsSync(join(root, marker)))?.[1];
+    const ecosystem = ECOSYSTEMS.find(([marker]) => repoHas(marker))?.[1];
     if (ecosystem) {
         out.deps = {
             ...ecosystem,
-            manifests: ecosystem.manifests.filter((path) => existsSync(join(root, path))),
-            lockfile: existsSync(join(root, ecosystem.lockfile)) ? ecosystem.lockfile : '',
+            manifests: ecosystem.manifests.filter(repoHas),
+            lockfile: repoHas(ecosystem.lockfile) ? ecosystem.lockfile : '',
         };
     } else if (existsSync(pkgPath)) {
         out.deps = NPM_WITHOUT_LOCKFILE;
@@ -915,8 +979,8 @@ const PRETTIER_MARKERS = [
     'prettier.config.ts', 'prettier.config.cts', 'prettier.config.mts',
 ];
 function usesPrettier(root) {
-    if (PRETTIER_MARKERS.some((m) => existsSync(join(root, m)))) return true;
-    const packageYamlPath = join(root, 'package.yaml');
+    if (PRETTIER_MARKERS.some((m) => existsSync(repositoryPath(root, join(root, m))))) return true;
+    const packageYamlPath = repositoryPath(root, join(root, 'package.yaml'));
     if (existsSync(packageYamlPath)) {
         // Prettier recognizes a top-level `prettier` key in package.yaml. Keep
         // this deliberately narrow so an unrelated nested key does not make a
@@ -924,14 +988,16 @@ function usesPrettier(root) {
         const packageYaml = readFileSync(packageYamlPath, 'utf8');
         if (/^(?:prettier|["']prettier["'])\s*:/m.test(packageYaml)) return true;
     }
-    const pkgPath = join(root, 'package.json');
+    const pkgPath = repositoryPath(root, join(root, 'package.json'));
     if (!existsSync(pkgPath)) return false;
     const pkg = readJson(pkgPath);
     return Boolean(pkg.prettier ?? pkg.devDependencies?.prettier ?? pkg.dependencies?.prettier);
 }
 
 const DPRINT_CONFIGS = ['dprint.json', 'dprint.jsonc', '.dprint.json', '.dprint.jsonc'];
-const findDprintConfig = (root) => DPRINT_CONFIGS.map((f) => join(root, f)).find((p) => existsSync(p)) ?? null;
+const findDprintConfig = (root) => DPRINT_CONFIGS
+    .map((f) => repositoryPath(root, join(root, f)))
+    .find((p) => existsSync(p)) ?? null;
 
 function negationMayReincludeRoot(entry, root) {
     if (typeof entry !== 'string' || !entry.startsWith('!')) return false;
@@ -978,7 +1044,7 @@ function formatterGuidance(root, cfg) {
     const blocks = [];
 
     if (usesPrettier(root)) {
-        const ignorePath = join(root, '.prettierignore');
+        const ignorePath = repositoryPath(root, join(root, '.prettierignore'));
         const have = existsSync(ignorePath) ? readFileSync(ignorePath, 'utf8').split('\n') : [];
         const missing = roots.filter((r) => !ignorePatternsCoverRoot(have, r));
         if (missing.length) {
@@ -1140,7 +1206,8 @@ async function cmdInstall(args) {
 
     if (values.plan) return cmdPlan(root, values);
 
-    if (existsSync(configPath(root)) && !values.yes) {
+    const config = repositoryPath(root, configPath(root));
+    if (existsSync(config) && !values.yes) {
         fail('this repo already has .cycle/config.jsonc', 'use `cycle update` to re-render, or pass --yes to overwrite');
     }
 
@@ -1192,12 +1259,18 @@ async function cmdInstall(args) {
     loadBackend(cfg.backend);
     for (const h of harnessNames(cfg)) loadHarness(h);
 
-    mkdirSync(join(root, '.cycle'), { recursive: true });
-    mkdirSync(overlayDir(root), { recursive: true });
-    writeFileSync(configPath(root), renderConfig(cfg));
-
+    // Validate every destination before the first write so an escaping path cannot
+    // leave a half-installed repository behind.
+    const cycleDir = repositoryPath(root, join(root, '.cycle'));
+    const overlays = repositoryPath(root, overlayDir(root));
     const plan = planRender(root, cfg);
+    repositoryPath(root, statePath(root));
+
+    mkdirSync(cycleDir, { recursive: true });
+    mkdirSync(overlays, { recursive: true });
+    writeFileSync(repositoryPath(root, config), renderConfig(cfg));
     for (const f of plan) {
+        repositoryPath(root, f.path);
         mkdirSync(dirname(f.path), { recursive: true });
         writeFileSync(f.path, f.content);
     }
@@ -1246,10 +1319,20 @@ function cmdPlan(root, values) {
     const harnesses = registryNames('harnesses');
 
     const overlayManifest = existsSync(templatePath('overlays.jsonc')) ? readJsonc(templatePath('overlays.jsonc')) : {};
+    const existingConfig = repositoryPath(root, configPath(root));
+    const overlays = Object.entries(overlayManifest).map(([name, o]) => {
+        const path = repositoryPath(root, join(overlayDir(root), `${name}.md`));
+        return {
+            name,
+            path: relative(root, path),
+            exists: existsSync(path),
+            ...o,
+        };
+    });
 
     console.log(JSON.stringify({
         root,
-        existing_config: existsSync(configPath(root)) ? relative(root, configPath(root)) : null,
+        existing_config: existsSync(existingConfig) ? relative(root, existingConfig) : null,
         // What the filesystem and git could tell us. Everything here is a guess worth
         // confirming, not a fact — `name` comes from package.json, which is often the
         // npm slug rather than what a person calls the project.
@@ -1312,12 +1395,7 @@ function cmdPlan(root, values) {
         ],
         // Optional by design: an install with no overlays renders a complete pipeline.
         // These are where a repo says the things only it can say.
-        overlays: Object.entries(overlayManifest).map(([name, o]) => ({
-            name,
-            path: relative(root, join(overlayDir(root), `${name}.md`)),
-            exists: existsSync(join(overlayDir(root), `${name}.md`)),
-            ...o,
-        })),
+        overlays,
         write: {
             config: relative(root, configPath(root)),
             overlays_dir: relative(root, overlayDir(root)),
@@ -1429,6 +1507,7 @@ function cmdCheck(args) {
     const missing = [];
 
     for (const f of plan) {
+        repositoryPath(root, f.path);
         if (!existsSync(f.path)) { missing.push(f); continue; }
         const current = readFileSync(f.path, 'utf8');
         const prov = readProvenance(current);
@@ -1507,6 +1586,7 @@ function cmdUpdate(args) {
     const conflicts = [];
 
     for (const f of plan) {
+        repositoryPath(root, f.path);
         const exists = existsSync(f.path);
         const current = exists ? readFileSync(f.path, 'utf8') : null;
         if (exists && stripProvenance(current) === stripProvenance(f.content)) continue; // idempotent no-op
@@ -1546,6 +1626,7 @@ function cmdUpdate(args) {
     }
 
     for (const f of writes) {
+        repositoryPath(root, f.path);
         mkdirSync(dirname(f.path), { recursive: true });
         writeFileSync(f.path, f.content);
     }
@@ -1569,7 +1650,7 @@ function cmdEject(args) {
             const p = join(root, h.root, name, h.skill_file);
             if (relative(root, p).startsWith('..'))
                 fail(`"${name}" does not name a skill inside this repo's harness trees`);
-            return p;
+            return repositoryPath(root, p);
         })
         .filter((p) => existsSync(p));
     if (!paths.length) fail(`no rendered skill "${name}" in any configured harness`);
@@ -1577,6 +1658,7 @@ function cmdEject(args) {
     const state = readState(root) ?? { files: {} };
     let ejected = 0;
     for (const path of paths) {
+        repositoryPath(root, path);
         const text = readFileSync(path, 'utf8');
         if (!readProvenance(text)) continue; // already unmanaged in this tree
         writeFileSync(path, stripProvenance(text).replace(/^\n+/, ''));
@@ -1585,7 +1667,7 @@ function cmdEject(args) {
         console.log(`${green('✓')} ejected ${dim(relative(root, path))}`);
     }
     if (!ejected) fail(`${name} is already unmanaged in every configured harness`);
-    writeFileSync(statePath(root), `${JSON.stringify(state, null, 2)}\n`);
+    writeFileSync(repositoryPath(root, statePath(root)), `${JSON.stringify(state, null, 2)}\n`);
 
     console.log(`${bold(name)} is now yours to maintain in this repo`);
     console.log(dim(`  remove it from the "${cfg.profile}" profile, or it will be re-rendered by \`cycle update\``));
