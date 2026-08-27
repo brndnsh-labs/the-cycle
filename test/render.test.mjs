@@ -9,7 +9,19 @@
 import { test, describe, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync, spawn, spawnSync } from 'node:child_process';
-import { cpSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync, existsSync } from 'node:fs';
+import {
+    cpSync,
+    existsSync,
+    lstatSync,
+    mkdirSync,
+    mkdtempSync,
+    readFileSync,
+    readdirSync,
+    rmSync,
+    statSync,
+    symlinkSync,
+    writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, relative } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -1439,5 +1451,167 @@ describe('registry name containment (#75)', () => {
 
     test('the planted file outside the cycle home is untouched throughout', () => {
         assert.equal(readFileSync(evilFile, 'utf8'), evilBody);
+    });
+});
+
+describe('repository symlink containment (#101)', () => {
+    const MARKER = 'cycle-repository-boundary-secret-101';
+
+    const installedRepo = () => {
+        const dir = scratchRepo();
+        dirs.push(dir);
+        cycle(dir, ['install', '--profile', 'lean', '--set', 'harnesses=["codex"]', '-y']);
+        return dir;
+    };
+
+    const victim = (name = 'victim.md', content = MARKER) => {
+        const dir = mkdtempSync(join(tmpdir(), 'cycle-boundary-victim-'));
+        dirs.push(dir);
+        const path = join(dir, name);
+        writeFileSync(path, content);
+        return { dir, path, content };
+    };
+
+    test('render, check, and update reject an escaping overlay without disclosing it', () => {
+        const dir = installedRepo();
+        const outside = victim();
+        symlinkSync(outside.path, join(dir, '.cycle', 'overlays', 'doctrine-preamble.md'));
+
+        for (const args of [['render'], ['check'], ['update'], ['install', '--plan']]) {
+            const result = cycleRaw(dir, args);
+            assert.equal(result.status, 1, args[0]);
+            assert.match(result.out, /repository path escapes through a symlink/);
+            assert.ok(!result.out.includes(MARKER), `${args[0]} disclosed the outside marker`);
+        }
+        assert.equal(readFileSync(outside.path, 'utf8'), outside.content);
+    });
+
+    test('check rejects escaping config and state files before reading them', () => {
+        for (const rel of ['config.jsonc', 'state.json']) {
+            const dir = installedRepo();
+            const outside = victim(rel, `{ "marker": "${MARKER}" }\n`);
+            const path = join(dir, '.cycle', rel);
+            rmSync(path);
+            symlinkSync(outside.path, path);
+
+            const result = cycleRaw(dir, ['check']);
+            assert.equal(result.status, 1, rel);
+            assert.match(result.out, /repository path escapes through a symlink/);
+            assert.ok(!result.out.includes(MARKER), `${rel} disclosed the outside marker`);
+            assert.equal(readFileSync(outside.path, 'utf8'), outside.content);
+        }
+    });
+
+    test('tampered config cannot name a lexical path outside the repository', () => {
+        const dir = installedRepo();
+        const outside = victim('package.json', `{ "marker": "${MARKER}" }\n`);
+        const config = join(dir, '.cycle', 'config.jsonc');
+        const cfg = readJsonc(config);
+        cfg.deps.manifests = [relative(dir, outside.path)];
+        writeFileSync(config, JSON.stringify(cfg, null, 2));
+
+        const result = cycleRaw(dir, ['check']);
+        assert.equal(result.status, 1);
+        assert.match(result.out, /repository path is outside the repository boundary/);
+        assert.ok(!result.out.includes(MARKER));
+        assert.equal(readFileSync(outside.path, 'utf8'), outside.content);
+    });
+
+    test('install planning rejects escaping package metadata before reading it', () => {
+        const dir = scratchRepo();
+        dirs.push(dir);
+        const outside = victim('package.json', `{ "name": "${MARKER}" }\n`);
+        const packageJson = join(dir, 'package.json');
+        rmSync(packageJson);
+        symlinkSync(outside.path, packageJson);
+
+        const result = cycleRaw(dir, ['install', '--plan']);
+        assert.equal(result.status, 1);
+        assert.match(result.out, /repository path escapes through a symlink/);
+        assert.ok(!result.out.includes(MARKER));
+        assert.equal(readFileSync(outside.path, 'utf8'), outside.content);
+    });
+
+    test('update rejects escaping formatter metadata before reading it', () => {
+        for (const kind of ['prettier', 'dprint']) {
+            const dir = installedRepo();
+            const name = kind === 'prettier' ? '.prettierignore' : 'dprint.json';
+            const content = kind === 'prettier'
+                ? `${MARKER}\n`
+                : `{ "excludes": ["${MARKER}"] }\n`;
+            const outside = victim(name, content);
+            if (kind === 'prettier') writeFileSync(join(dir, '.prettierrc'), '{}\n');
+            symlinkSync(outside.path, join(dir, name));
+
+            const result = cycleRaw(dir, ['update']);
+            assert.equal(result.status, 1, kind);
+            assert.match(result.out, /repository path escapes through a symlink/);
+            assert.ok(!result.out.includes(MARKER), `${kind} disclosed the outside marker`);
+            assert.equal(readFileSync(outside.path, 'utf8'), outside.content);
+        }
+    });
+
+    test('install rejects escaping .cycle and harness roots before any partial write', () => {
+        for (const rel of ['.cycle', '.agents']) {
+            const dir = scratchRepo();
+            dirs.push(dir);
+            const outside = victim('sentinel.txt');
+            symlinkSync(outside.dir, join(dir, rel), 'dir');
+
+            const result = cycleRaw(dir, [
+                'install', '--profile', 'lean', '--set', 'harnesses=["codex"]', '-y',
+            ]);
+            assert.equal(result.status, 1, rel);
+            assert.match(result.out, /repository path escapes through a symlink/);
+            assert.deepEqual(readdirSync(outside.dir), ['sentinel.txt']);
+            assert.equal(readFileSync(outside.path, 'utf8'), outside.content);
+            if (rel === '.agents') assert.ok(!existsSync(join(dir, '.cycle')));
+        }
+    });
+
+    test('update and eject reject escaping managed files without changing the victim', () => {
+        for (const args of [['update', '--force'], ['eject', 'cycle']]) {
+            const dir = installedRepo();
+            const outside = victim('SKILL.md', `<!-- cycle:rendered template=x hash=abc -->\n${MARKER}\n`);
+            const managed = join(dir, '.agents', 'skills', 'cycle', 'SKILL.md');
+            rmSync(managed);
+            symlinkSync(outside.path, managed);
+
+            const result = cycleRaw(dir, args);
+            assert.equal(result.status, 1, args[0]);
+            assert.match(result.out, /repository path escapes through a symlink/);
+            assert.ok(!result.out.includes(MARKER), `${args[0]} disclosed the outside marker`);
+            assert.equal(readFileSync(outside.path, 'utf8'), outside.content);
+        }
+    });
+
+    test('dangling repository symlinks fail closed instead of looking absent', () => {
+        const dir = installedRepo();
+        const missing = join(dir, 'missing-overlay.md');
+        symlinkSync(missing, join(dir, '.cycle', 'overlays', 'doctrine-preamble.md'));
+
+        const result = cycleRaw(dir, ['render']);
+        assert.equal(result.status, 1);
+        assert.match(result.out, /dangling repository symlink/);
+    });
+
+    test('internal overlay and managed-file symlinks remain functional', () => {
+        const dir = installedRepo();
+        const overlay = join(dir, 'internal-overlay.md');
+        writeFileSync(overlay, 'internal-overlay-101\n');
+        symlinkSync(overlay, join(dir, '.cycle', 'overlays', 'doctrine-preamble.md'));
+        assert.match(cycle(dir, ['render', 'DOCTRINE']), /internal-overlay-101/);
+
+        const managed = join(dir, '.agents', 'skills', 'cycle', 'SKILL.md');
+        const target = join(dir, 'internal-cycle.md');
+        writeFileSync(target, `${readFileSync(managed, 'utf8')}local edit\n`);
+        rmSync(managed);
+        symlinkSync(target, managed);
+
+        const result = cycleRaw(dir, ['update', '--force']);
+        assert.equal(result.status, 0);
+        assert.ok(lstatSync(managed).isSymbolicLink(), 'update replaced the internal symlink');
+        assert.doesNotMatch(readFileSync(target, 'utf8'), /local edit/);
+        assert.match(readFileSync(target, 'utf8'), /cycle:rendered/);
     });
 });
