@@ -4,6 +4,7 @@ import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import {
     existsSync,
+    lstatSync,
     mkdirSync,
     mkdtempSync,
     readFileSync,
@@ -17,11 +18,14 @@ import { homedir, tmpdir } from 'node:os';
 import { dirname, join, relative, resolve, sep } from 'node:path';
 import { parseArgs } from 'node:util';
 import { fileURLToPath } from 'node:url';
+import { readJsonc } from '../bin/cycle.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, '..');
 const SCENARIOS = join(HERE, 'scenarios');
 const SOURCE_PATHS = ['package.json', 'bin', 'templates', 'backends', 'harnesses', 'profiles'];
+const SNAPSHOT_DATA_PATHS = ['templates', 'backends', 'harnesses', 'profiles'];
+const TRUSTED_RENDERER = join(ROOT, 'bin', 'cycle.mjs');
 const FIXTURE_VERSION = 1;
 
 class EvalError extends Error {}
@@ -74,6 +78,7 @@ function walkFiles(root, current = root) {
         const path = join(current, entry.name);
         if (entry.isDirectory()) files.push(...walkFiles(root, path));
         else if (entry.isFile()) files.push(path);
+        else fail(`unsupported file type in evaluation tree: ${relative(root, path)}`);
     }
     return files;
 }
@@ -94,7 +99,10 @@ function hashSourceTree(root) {
     for (const rel of SOURCE_PATHS) {
         const path = join(root, rel);
         if (!existsSync(path)) continue;
-        const files = statSync(path).isDirectory() ? walkFiles(path) : [path];
+        const entry = lstatSync(path);
+        if (entry.isSymbolicLink()) fail(`symbolic links are not allowed in evaluation sources: ${rel}`);
+        if (!entry.isDirectory() && !entry.isFile()) fail(`unsupported evaluation source path: ${rel}`);
+        const files = entry.isDirectory() ? walkFiles(path) : [path];
         for (const file of files) {
             hash.update(relative(root, file));
             hash.update('\0');
@@ -112,10 +120,10 @@ function ensureInside(root, path) {
     }
 }
 
-function sourceMetadata(path, spec, resolvedRef = null) {
+function sourceMetadata(path, spec, resolvedRef = null, { inspectGit = false } = {}) {
     let commit = resolvedRef;
     let dirty = null;
-    if (!commit) {
+    if (!commit && inspectGit) {
         const commitResult = spawnSync('git', ['-C', path, 'rev-parse', 'HEAD'], { encoding: 'utf8' });
         if (commitResult.status === 0) {
             commit = commitResult.stdout.trim();
@@ -154,9 +162,71 @@ function resolveSource(spec, sourceRoot, name) {
     if (existsSync(path)) {
         const real = realpathSync(path);
         if (!existsSync(join(real, 'bin', 'cycle.mjs'))) fail(`${spec} is not a the-cycle checkout`);
-        return sourceMetadata(real, spec);
+        return sourceMetadata(real, spec, null, { inspectGit: real === realpathSync(ROOT) });
     }
     return materializeRef(spec, join(sourceRoot, name));
+}
+
+function copySnapshotData(source, destination, root = source) {
+    const entry = lstatSync(source);
+    const rel = relative(root, source) || '.';
+    if (entry.isSymbolicLink()) fail(`symbolic links are not allowed in snapshot data: ${rel}`);
+    if (entry.isDirectory()) {
+        mkdirSync(destination, { recursive: true });
+        for (const child of readdirSync(source, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
+            copySnapshotData(join(source, child.name), join(destination, child.name), root);
+        }
+        return;
+    }
+    if (!entry.isFile()) fail(`unsupported file type in snapshot data: ${rel}`);
+    mkdirSync(dirname(destination), { recursive: true });
+    writeFileSync(destination, readFileSync(source));
+}
+
+function validateSnapshotData(rendererRoot) {
+    const profilePath = join(rendererRoot, 'profiles', 'lean.jsonc');
+    let profile;
+    try { profile = readJsonc(profilePath); }
+    catch (error) { fail(`invalid snapshot profile ${profilePath}: ${error.message}`); }
+    if (!Array.isArray(profile.skills) || !profile.skills.length) {
+        fail('snapshot profile lean must contain a non-empty skills array');
+    }
+    for (const skill of profile.skills) {
+        if (typeof skill !== 'string' || !/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/.test(skill)) {
+            fail(`unsafe skill name in snapshot profile lean: ${JSON.stringify(skill)}`);
+        }
+        const template = join(rendererRoot, 'templates', 'skills', `${skill}.md.tmpl`);
+        if (!existsSync(template) || !lstatSync(template).isFile()) {
+            fail(`snapshot profile lean references missing template: ${skill}`);
+        }
+    }
+
+    const harnessPath = join(rendererRoot, 'harnesses', 'codex.jsonc');
+    let harness;
+    try { harness = readJsonc(harnessPath); }
+    catch (error) { fail(`invalid snapshot harness ${harnessPath}: ${error.message}`); }
+    // Why: these data fields otherwise let a snapshot route rendered JavaScript onto a
+    // fixture test that later runs outside the Codex sandbox.
+    if (harness.root !== '.agents/skills' || harness.skill_file !== 'SKILL.md') {
+        fail('snapshot harness codex must use root .agents/skills and skill_file SKILL.md');
+    }
+}
+
+function stageTrustedRenderer(source, destination) {
+    const renderer = readFileSync(TRUSTED_RENDERER);
+    mkdirSync(join(destination, 'bin'), { recursive: true });
+    writeFileSync(join(destination, 'bin', 'cycle.mjs'), renderer);
+    writeFileSync(join(destination, 'package.json'), readFileSync(join(ROOT, 'package.json')));
+    for (const rel of SNAPSHOT_DATA_PATHS) {
+        const path = join(source.path, rel);
+        if (!existsSync(path)) fail(`snapshot ${source.spec} is missing ${rel}`);
+        copySnapshotData(path, join(destination, rel), path);
+    }
+    validateSnapshotData(destination);
+    return {
+        cli: join(destination, 'bin', 'cycle.mjs'),
+        sha256: sha256(renderer),
+    };
 }
 
 const isNonEmptyString = (value) => typeof value === 'string' && Boolean(value.trim());
@@ -270,8 +340,18 @@ function writeFixtureFiles(workspace, scenario) {
     return { tracked: Object.keys(files), filesHash: hashObject(files) };
 }
 
-function renderSkills(workspace, source) {
-    const cli = join(source.path, 'bin', 'cycle.mjs');
+export function rendererEnvironment(control, ambient = process.env) {
+    const env = {};
+    for (const name of ['PATH', 'LANG', 'LC_ALL', 'LC_CTYPE']) {
+        if (ambient[name] !== undefined) env[name] = ambient[name];
+    }
+    env.HOME = join(control, 'home');
+    env.TMPDIR = join(control, 'tmp');
+    env.NO_COLOR = '1';
+    return env;
+}
+
+function renderSkills(workspace, renderer, control) {
     const sets = [
         ['harnesses', ['codex']],
         ['repo.name', 'cycle-eval-fixture'],
@@ -280,21 +360,29 @@ function renderSkills(workspace, source) {
         ['gates.test', 'npm test'],
         ['branch.minor_edits_direct', false],
     ];
-    const args = [cli, 'install', '--profile', 'lean', '--backend', 'github'];
+    const args = [renderer.cli, 'install', '--profile', 'lean', '--backend', 'github'];
     for (const [path, value] of sets) args.push('--set', `${path}=${JSON.stringify(value)}`);
     args.push('-y');
-    run(process.execPath, args, { cwd: workspace, env: { ...process.env, NO_COLOR: '1' } });
+    const env = rendererEnvironment(control);
+    mkdirSync(env.HOME, { recursive: true });
+    mkdirSync(env.TMPDIR, { recursive: true });
+    run(process.execPath, args, { cwd: workspace, env });
     return hashTree(join(workspace, '.agents', 'skills'));
 }
 
-function setupFixture(runDir, scenario, source) {
+function setupFixture(runDir, scenario, renderer) {
     const workspace = join(runDir, 'workspace');
     mkdirSync(workspace, { recursive: true });
     git(['init', '-q', '-b', 'main'], workspace);
     git(['config', 'user.name', 'Cycle Evaluator'], workspace);
     git(['config', 'user.email', 'cycle-eval@example.invalid'], workspace);
     const { tracked, filesHash } = writeFixtureFiles(workspace, scenario);
-    const skillHash = renderSkills(workspace, source);
+    const controlTest = join(workspace, 'test', 'feature.test.mjs');
+    const controlTestHash = sha256(readFileSync(controlTest));
+    const skillHash = renderSkills(workspace, renderer, join(runDir, 'renderer-control'));
+    if (!existsSync(controlTest) || sha256(readFileSync(controlTest)) !== controlTestHash) {
+        fail('snapshot rendering changed the fixture control test');
+    }
     rmSync(join(workspace, '.cycle', 'state.json'), { force: true });
 
     const exclude = join(workspace, '.git', 'info', 'exclude');
@@ -325,7 +413,6 @@ function setupFixture(runDir, scenario, source) {
         const path = resolve(workspace, assertion.path);
         observed.set(assertion.path, existsSync(path) ? sha256(readFileSync(path)) : null);
     }
-    const controlTest = join(workspace, 'test', 'feature.test.mjs');
     return {
         runDir,
         workspace,
@@ -339,7 +426,7 @@ function setupFixture(runDir, scenario, source) {
         }),
         observed,
         controlTest,
-        controlTestHash: sha256(readFileSync(controlTest)),
+        controlTestHash,
     };
 }
 
@@ -522,11 +609,11 @@ function codexEnvironment(fixture, scenario) {
     return env;
 }
 
-function runOne({ arm, repetition, scenario, source, codexBin, codexVersionValue, model, effort, timeoutMs, output }) {
+function runOne({ arm, repetition, scenario, source, renderer, codexBin, codexVersionValue, model, effort, timeoutMs, output }) {
     const name = `${scenario.id}-${String(repetition).padStart(2, '0')}-${arm}`;
     const runDir = join(output, 'runs', name);
     mkdirSync(runDir, { recursive: true });
-    const fixture = setupFixture(runDir, scenario, source);
+    const fixture = setupFixture(runDir, scenario, renderer);
     const eventsPath = join(runDir, 'events.jsonl');
     const stderrPath = join(runDir, 'stderr.log');
     const diffPath = join(runDir, 'final.diff');
@@ -586,6 +673,7 @@ function runOne({ arm, repetition, scenario, source, codexBin, codexVersionValue
             source_sha256: source.source_sha256,
             rendered_skill_sha256: fixture.skillHash,
         },
+        trusted_renderer_sha256: renderer.sha256,
         fixture_sha256: fixture.fixtureHash,
         requested_model: model,
         requested_effort: effort,
@@ -683,6 +771,13 @@ export function main(argv = process.argv.slice(2)) {
             baseline: resolveSource(values.baseline, sourceRoot, 'baseline'),
             candidate: resolveSource(values.candidate, sourceRoot, 'candidate'),
         };
+        const renderers = {
+            baseline: stageTrustedRenderer(sources.baseline, join(sourceRoot, 'renderers', 'baseline')),
+            candidate: stageTrustedRenderer(sources.candidate, join(sourceRoot, 'renderers', 'candidate')),
+        };
+        if (renderers.baseline.sha256 !== renderers.candidate.sha256) {
+            fail('trusted renderer hash changed between evaluation arms');
+        }
         const scenarios = loadScenarios(values.scenario ?? []);
         const version = codexVersion(values['codex-bin']);
         const publicSource = ({ spec, commit, dirty, source_sha256 }) => ({
@@ -701,6 +796,7 @@ export function main(argv = process.argv.slice(2)) {
             repeat,
             scenarios: scenarios.map((scenario) => scenario.id),
             codex_version: version,
+            trusted_renderer_sha256: renderers.baseline.sha256,
         };
         writeFileSync(join(output, 'experiment.json'), `${JSON.stringify(experiment, null, 2)}\n`);
 
@@ -715,6 +811,7 @@ export function main(argv = process.argv.slice(2)) {
                         repetition,
                         scenario,
                         source: sources[arm],
+                        renderer: renderers[arm],
                         codexBin: values['codex-bin'],
                         codexVersionValue: version,
                         model: values.model,
