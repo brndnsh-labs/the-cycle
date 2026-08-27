@@ -93,7 +93,7 @@ drift checks work offline.
   computers, and existing-pipeline reconciliation.
 - [Development](docs/DEVELOPMENT.md) — local gates, generated-source rules, and repository layout.
 - [Behavioral evaluation](docs/EVALUATION.md) — compare model behavior against two pipeline
-  revisions in isolated fixtures.
+  revisions in isolated fixtures using a runner-owned renderer and data-only snapshots.
 - [Authoring](docs/AUTHORING.md) — write templates and overlays and propagate their changes.
 - [Backends](docs/BACKENDS.md) — tracker verbs and backend semantics.
 - [Harnesses](docs/HARNESSES.md) — harness fields, capabilities, and discovery paths.

@@ -1,14 +1,32 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { chmodSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import {
+    chmodSync,
+    cpSync,
+    existsSync,
+    mkdirSync,
+    mkdtempSync,
+    readFileSync,
+    rmSync,
+    statSync,
+    writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { parseExecEvents, validateScenario } from '../eval/run.mjs';
+import { parseExecEvents, rendererEnvironment, validateScenario } from '../eval/run.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const RUNNER = join(ROOT, 'eval', 'run.mjs');
+const SNAPSHOT_PATHS = ['package.json', 'bin', 'templates', 'backends', 'harnesses', 'profiles'];
+
+function copySnapshot(destination) {
+    mkdirSync(destination, { recursive: true });
+    for (const rel of SNAPSHOT_PATHS) {
+        cpSync(join(ROOT, rel), join(destination, rel), { recursive: true });
+    }
+}
 
 function fakeCodexSource() {
     return `#!/usr/bin/env node
@@ -158,6 +176,138 @@ test('scenario assertion schemas fail during preflight with precise locations', 
     }
 });
 
+test('snapshot executables stay inert while snapshot template data still changes the result', { timeout: 120_000 }, () => {
+    const scratch = mkdtempSync(join(tmpdir(), 'cycle-eval-untrusted-snapshot-'));
+    try {
+        const candidate = join(scratch, 'candidate');
+        const fakeCodex = join(scratch, 'codex');
+        const output = join(scratch, 'results');
+        const secretCopy = join(scratch, 'copied-secret.txt');
+        const outsideWrite = join(scratch, 'outside-fixture.txt');
+        const networkMarker = join(scratch, 'network-attempted.txt');
+        copySnapshot(candidate);
+        writeFileSync(fakeCodex, fakeCodexSource());
+        chmodSync(fakeCodex, 0o755);
+
+        writeFileSync(join(candidate, 'bin', 'cycle.mjs'), [
+            "import { writeFileSync } from 'node:fs';",
+            `writeFileSync(${JSON.stringify(secretCopy)}, process.env.CYCLE_EVAL_TEST_SECRET ?? 'missing');`,
+            `writeFileSync(${JSON.stringify(outsideWrite)}, 'candidate renderer executed\\n');`,
+            `writeFileSync(${JSON.stringify(networkMarker)}, 'candidate attempted network\\n');`,
+            "await fetch('http://127.0.0.1:9/evaluator-probe');",
+            '',
+        ].join('\n'));
+        const candidateTemplate = join(candidate, 'templates', 'skills', 'implement.md.tmpl');
+        writeFileSync(candidateTemplate, `${readFileSync(candidateTemplate, 'utf8').trimEnd()}\n\nCandidate data marker.\n`);
+
+        const rendererEnv = rendererEnvironment(join(scratch, 'renderer-control'), {
+            PATH: process.env.PATH ?? '',
+            LANG: 'C',
+            CYCLE_EVAL_TEST_SECRET: 'must-not-be-forwarded',
+            NODE_OPTIONS: '--inspect',
+        });
+        assert.equal(rendererEnv.CYCLE_EVAL_TEST_SECRET, undefined);
+        assert.equal(rendererEnv.NODE_OPTIONS, undefined);
+
+        execFileSync(process.execPath, [
+            RUNNER,
+            '--baseline', ROOT,
+            '--candidate', candidate,
+            '--model', 'fake-model',
+            '--output', output,
+            '--codex-bin', fakeCodex,
+            '--scenario', 'safe-bounded',
+            '--timeout-ms', '30000',
+        ], {
+            cwd: ROOT,
+            encoding: 'utf8',
+            stdio: 'pipe',
+            env: { ...process.env, CYCLE_EVAL_TEST_SECRET: 'must-not-be-forwarded' },
+        });
+
+        assert.equal(existsSync(secretCopy), false);
+        assert.equal(existsSync(outsideWrite), false);
+        assert.equal(existsSync(networkMarker), false);
+        const results = readFileSync(join(output, 'results.jsonl'), 'utf8')
+            .trim()
+            .split('\n')
+            .map((line) => JSON.parse(line));
+        assert.equal(results.length, 2);
+        const baseline = results.find((result) => result.arm === 'baseline');
+        const changed = results.find((result) => result.arm === 'candidate');
+        assert.ok(baseline.passed);
+        assert.ok(changed.passed);
+        assert.notEqual(baseline.snapshot.source_sha256, changed.snapshot.source_sha256);
+        assert.notEqual(baseline.snapshot.rendered_skill_sha256, changed.snapshot.rendered_skill_sha256);
+        assert.equal(baseline.trusted_renderer_sha256, changed.trusted_renderer_sha256);
+
+        for (const result of results) {
+            const codexEnv = JSON.parse(readFileSync(join(
+                output,
+                result.artifacts.workspace,
+                '.cycle-eval',
+                'codex-env.json',
+            ), 'utf8'));
+            assert.equal(codexEnv.forwarded_sentinel, false);
+        }
+    } finally {
+        rmSync(scratch, { recursive: true, force: true });
+    }
+});
+
+test('snapshot harness data cannot route executable content onto the fixture control test', { timeout: 120_000 }, () => {
+    const scratch = mkdtempSync(join(tmpdir(), 'cycle-eval-hostile-harness-'));
+    try {
+        const candidate = join(scratch, 'candidate');
+        const fakeCodex = join(scratch, 'codex');
+        const output = join(scratch, 'results');
+        const executionMarker = join(scratch, 'snapshot-code-executed.txt');
+        copySnapshot(candidate);
+        writeFileSync(fakeCodex, fakeCodexSource());
+        chmodSync(fakeCodex, 0o755);
+        writeFileSync(join(candidate, 'profiles', 'lean.jsonc'), `${JSON.stringify({
+            name: 'lean',
+            skills: ['implement'],
+        }, null, 2)}\n`);
+        writeFileSync(join(candidate, 'harnesses', 'codex.jsonc'), `${JSON.stringify({
+            name: 'codex',
+            display: 'Codex CLI',
+            root: 'test',
+            skill_file: '../feature.test.mjs',
+            capabilities: { has_menus: false, has_subagents: true },
+            notes: { attribution: 'hostile snapshot', ask: 'plain chat' },
+        }, null, 2)}\n`);
+        writeFileSync(join(candidate, 'templates', 'skills', 'implement.md.tmpl'), [
+            "import { test } from 'node:test';",
+            "import assert from 'node:assert/strict';",
+            "import { writeFileSync } from 'node:fs';",
+            `writeFileSync(${JSON.stringify(executionMarker)}, 'executed outside Codex sandbox\\n');`,
+            "test('hostile replacement', () => assert.ok(true));",
+            '',
+        ].join('\n'));
+
+        const result = spawnSync(process.execPath, [
+            RUNNER,
+            '--baseline', ROOT,
+            '--candidate', candidate,
+            '--model', 'fake-model',
+            '--output', output,
+            '--codex-bin', fakeCodex,
+            '--scenario', 'safe-bounded',
+            '--timeout-ms', '30000',
+        ], {
+            cwd: ROOT,
+            encoding: 'utf8',
+            env: { ...process.env, CYCLE_EVAL_TEST_SECRET: 'must-not-be-forwarded' },
+        });
+        assert.equal(result.status, 2);
+        assert.match(result.stderr, /snapshot harness codex must use root \.agents\/skills and skill_file SKILL\.md/);
+        assert.equal(existsSync(executionMarker), false);
+    } finally {
+        rmSync(scratch, { recursive: true, force: true });
+    }
+});
+
 test('behavioral runner compares isolated snapshots without making a model call', { timeout: 120_000 }, () => {
     const scratch = mkdtempSync(join(tmpdir(), 'cycle-eval-test-'));
     try {
@@ -198,6 +348,8 @@ test('behavioral runner compares isolated snapshots without making a model call'
         assert.ok(results.every((result) => result.codex_version === 'fake-codex 1.0'));
         assert.ok(results.every((result) => result.usage.input_tokens === 100));
         assert.ok(results.every((result) => /^[a-f0-9]{64}$/.test(result.snapshot.source_sha256)));
+        assert.ok(results.every((result) => /^[a-f0-9]{64}$/.test(result.trusted_renderer_sha256)));
+        assert.equal(new Set(results.map((result) => result.trusted_renderer_sha256)).size, 1);
 
         for (const scenario of new Set(results.map((result) => result.scenario))) {
             const pair = results.filter((result) => result.scenario === scenario);
@@ -215,6 +367,7 @@ test('behavioral runner compares isolated snapshots without making a model call'
         assert.equal(experiment.codex_version, 'fake-codex 1.0');
         assert.match(experiment.baseline.source_sha256, /^[a-f0-9]{64}$/);
         assert.match(experiment.candidate.source_sha256, /^[a-f0-9]{64}$/);
+        assert.equal(experiment.trusted_renderer_sha256, results[0].trusted_renderer_sha256);
 
         const invocation = JSON.parse(readFileSync(join(
             output,
