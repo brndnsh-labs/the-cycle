@@ -45,6 +45,7 @@ skills/
   cycle-setup/              guided setup skill linked by install.sh
 templates/
   DOCTRINE.md.tmpl          shared rule spine
+  references/*.md.tmpl      narrowly-loaded shared delivery and filing procedure
   skills/*.md.tmpl          one source template per generated skill
   overlays.jsonc            overlay registry and contracts
 backends/*.jsonc            tracker verb bindings

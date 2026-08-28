@@ -22,12 +22,15 @@ same procedure, same overlays, only the output root and the harness-conditional 
 
 ```
 .claude/skills/DOCTRINE.md        .agents/skills/DOCTRINE.md
+.claude/skills/DELIVERY.md        .agents/skills/DELIVERY.md
+.claude/skills/FILING.md          .agents/skills/FILING.md
 .claude/skills/cycle/SKILL.md     .agents/skills/cycle/SKILL.md
 ...                                ...
 ```
 
-Nothing else is rendered alongside them: a render is prose only, so there are no per-harness
-executables to keep in sync.
+The two root-level references are progressive disclosure for shared procedure: skills load them
+only when they actually deliver or file. They are managed prose, not discoverable skills (no
+frontmatter and no `SKILL.md`). Nothing executable is rendered alongside the tree.
 
 ## The `harness.*` field vocabulary
 

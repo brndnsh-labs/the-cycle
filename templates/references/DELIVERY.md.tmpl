@@ -1,0 +1,79 @@
+# Delivery mechanics (shared)
+
+This file is the procedural expansion of DOCTRINE §6 and §8. **DOCTRINE remains the authority:**
+if this file ever conflicts with its safety invariants, stop and follow DOCTRINE. Read this
+reference only when a workflow is actually committing, opening a PR, or landing one.
+
+## Merge procedure
+
+The pipeline pushes + opens PRs. A safe story uses the configured merge guard only after local
+gates pass; a judgment-call story stays open for {{repo.human}}'s manual merge (§5).
+
+{{#unless backend.auto_merge}}
+**This repo has no server-side enforcement**, so the **poll-then-merge guard IS the enforcement**.
+Never use a fire-and-forget auto-merge flag here — `--auto` merges when the repo's merge
+*requirements* are met, and with no branch protection there are none, so it fires immediately with
+nothing to wait on. Run the guard as **one foreground, resumable command**. If the command tool
+yields while CI is pending, resume that same command/session; do not append `&`, launch a detached
+watcher, or treat the yielded call as completion:
+
+```bash
+{{@merge_guard "<pr>" "<n>"}}
+```
+
+The guard is a client-side *simulation* of branch protection, with a simulation's weaknesses: the
+calling session must stay alive, it costs polling quota, and the harness can refuse to run it. If
+the session cannot retain a foreground command, leave the PR open and report that delivery is not
+complete — never detach the guard and claim success. If this repo gains protection, set
+`backend_overrides.auto_merge` and delete the guard.
+{{/unless}}
+{{#if backend.auto_merge}}
+**Server-side auto-merge is enabled here**, and the forge enforces the required checks — so queue
+the merge and let it do the waiting:
+
+```bash
+{{@merge_auto "<pr>"}}
+```
+
+It cannot merge early: `--auto` waits until the repo's merge requirements are satisfied, and with
+required status checks configured those requirements *are* the checks. Prefer this to a
+client-side poll — enforcement survives a killed session, a crashed harness, or a denied
+background command, and it costs no polling quota.
+
+If it errors `Auto merge is not allowed for this repository`, the forge setting was turned off:
+the declaration in `.cycle/config.jsonc` is now a lie. Re-enable it, or drop
+`backend_overrides.auto_merge` and fall back to the poll guard. `cycle check --verify-forge`
+catches that drift before it bites.
+{{/if}}
+
+**Reading a red gate.** Logs come from `{{@ci_log "<run>"}}`.
+`{{@ci_log_failed "<run>"}}` narrows one run to its failed steps, but it does **not** search
+backwards: list the runs first (`{{@ci_runs}}`) and pass the id of the one that actually failed. A
+red CI is diagnosable, so **"retry and see" is not an acceptable first move** — read the log, then
+decide transient-vs-real. DOCTRINE §5 still makes an unexplained red a hard stop.
+
+After a safe merge, sync local main (`git checkout main && git fetch origin && git reset --hard
+origin/main`) and prune the branch.
+
+The harness's own auto-mode classifier can independently deny the merge command. No workflow text
+can route around that environment-level permission gate: report the open, CI-pending PR and ask
+{{repo.human}} for a one-turn approval to re-run the merge (or to merge it). Never retry with
+`--no-verify` or another workaround.
+
+## Commit and PR procedure
+
+- Use a **Conventional Commit** (`feat(scope)` / `fix` / `docs` / `chore` / `test`) scoped to the
+  area; the body names the story. Include `Co-Authored-By` only when the active runtime explicitly
+  supplies a truthful identity. Otherwise omit it; never infer one from repo config, harness or
+  model names, or history.
+- Stage explicit paths with `git add <paths>` — never `-A` / `.`. Never `--no-verify`; never amend;
+  never force-push.
+- Open the PR against `main`; title it with the Conventional-Commit subject. Its body narrates what
+  shipped and which findings were actioned, includes **`Closes #<n>`**, and ends with:
+  ```
+  {{harness.attribution}}
+  ```
+- `Closes/Fixes/Resolves #N` fires **anywhere** in a PR body except inside a code span or code
+  block. Never backtick a wanted close token, and never leave one bare next to an issue that should
+  stay open. For an umbrella, write `part of #N` instead of denying a close token in prose.
+- Post a one-line issue comment linking the PR; the narrative belongs in the PR body.

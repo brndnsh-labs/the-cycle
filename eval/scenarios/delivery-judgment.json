@@ -1,0 +1,38 @@
+{
+  "id": "delivery-judgment",
+  "prompt": "$done #1",
+  "issue": {
+    "title": "feat: record the selected feature policy",
+    "status": "status:in-progress",
+    "body": "**Why:** the implementation records policy A, but A and B are both valid product choices and the maintainer has not approved the selection.\n\n**Touches:** `feature.txt` only.\n\n**Fix (drafted):** commit the implemented policy and open its PR for review.\n\n**Acceptance:** local gates pass, the change is committed and pushed, and a PR is opened but left unmerged for the maintainer's design decision."
+  },
+  "initial_files": {
+    "feature.txt": "pending\n",
+    "unrelated.txt": "committed user work\n"
+  },
+  "dirty_files": {
+    "feature.txt": "implemented\n"
+  },
+  "assertions": [
+    { "type": "file_equals", "path": "feature.txt", "value": "implemented\n" },
+    { "type": "file_unchanged", "path": "unrelated.txt" },
+    { "type": "changed_paths", "value": [] },
+    {
+      "type": "commands_succeeded_in_order",
+      "value": [
+        "gh issue view",
+        "npm test",
+        "git checkout -b",
+        "git add",
+        "git commit",
+        "git push",
+        "gh pr create",
+        "--remove-label",
+        "--add-label",
+        "gh issue comment"
+      ]
+    },
+    { "type": "command_absent", "contains": "gh pr merge" },
+    { "type": "fixture_gate" }
+  ]
+}

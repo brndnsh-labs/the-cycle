@@ -30,6 +30,8 @@ templates portable:
   [Harnesses](docs/HARNESSES.md).
 - **Overlays** hold the irreducibly repository-specific guidance a template cannot generalize,
   such as reviewer routing and scout lenses. See [Authoring](docs/AUTHORING.md).
+- **DOCTRINE and references** keep one compact authoritative invariant spine in every session,
+  while delivery and filing mechanics load only for skills that use them.
 - **Drift detection** records provenance in every rendered file. `cycle check` distinguishes a
   locally edited render from a render whose source template has moved upstream.
 

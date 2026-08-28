@@ -41,6 +41,7 @@ This is the whole design decision, so it's worth being explicit.
 | A tool name or capability that varies per *AI harness* | **a `harness.*` field** (`docs/HARNESSES.md`) |
 | A table or list only this repo could write | **an overlay** |
 | A rule every skill in the repo shares | **DOCTRINE**, cited as `§N` |
+| Detailed shared procedure used only by a narrow skill subset | A root-level **reference template**, with its authority invariant retained in DOCTRINE |
 
 **The failure mode to avoid is inlining a repo fact into prose.** That is exactly how the three
 original copies drifted: every skill restated `npm run typecheck`, and so every skill had to be
