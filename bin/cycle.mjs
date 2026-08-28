@@ -693,6 +693,13 @@ function planRender(root, cfg) {
     const verbs = backend.verbs ?? {};
     const overlays = overlayDir(root);
     const plan = [];
+    const sharedReferences = ['DELIVERY', 'FILING'];
+    const availableReferences = sharedReferences.filter((name) =>
+        existsSync(templatePath(join('references', `${name}.md.tmpl`))));
+    if (availableReferences.length && availableReferences.length !== sharedReferences.length) {
+        const missing = sharedReferences.filter((name) => !availableReferences.includes(name));
+        fail(`incomplete shared reference set: missing ${missing.join(', ')}`);
+    }
 
     const render = (tmplRel, outRel, extra, base = ctx) => {
         const src = templatePath(tmplRel);
@@ -715,12 +722,24 @@ function planRender(root, cfg) {
     };
 
     // One full skill tree per configured harness (default: just Claude Code). The
-    // doctrine spine and every skill are identical prose across harnesses — only the
-    // output root and the {{harness.*}} branches inside the templates differ.
+    // doctrine spine, narrowly-loaded shared references, and every skill are identical
+    // prose across harnesses — only the output root and the {{harness.*}} branches
+    // inside the templates differ.
     for (const name of harnessNames(cfg)) {
         const harness = loadHarness(name);
         const harnessCtx = { ...ctx, harness: buildHarnessContext(harness) };
         render('DOCTRINE.md.tmpl', join(harness.root, 'DOCTRINE.md'), undefined, harnessCtx);
+        // An older evaluator baseline has no reference templates and therefore renders its
+        // original monolith. Once a snapshot adopts references the set is atomic: partial
+        // progressive disclosure would leave a skill pointing at a missing managed file.
+        for (const reference of availableReferences) {
+            render(
+                join('references', `${reference}.md.tmpl`),
+                join(harness.root, `${reference}.md`),
+                undefined,
+                harnessCtx,
+            );
+        }
         for (const skill of profile.skills ?? []) {
             render(join('skills', `${skill}.md.tmpl`), join(harness.root, skill, harness.skill_file), undefined, harnessCtx);
         }

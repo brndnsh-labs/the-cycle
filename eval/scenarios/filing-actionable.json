@@ -1,0 +1,23 @@
+{
+  "id": "filing-actionable",
+  "prompt": "$intake Add a contributor note explaining that generated files must be changed through their source templates. The scope is `CONTRIBUTING.md` only; done means the note names the template-first workflow. This deterministic draft is approved in advance: show it, then file it without waiting for another confirmation.",
+  "issue": {
+    "title": "unrelated existing work",
+    "status": "status:ready",
+    "body": "**Why:** an unrelated fixture issue already exists.\n\n**Touches:** `unrelated.txt`.\n\n**Acceptance:** it remains unrelated to the contributor-note idea."
+  },
+  "initial_files": {
+    "feature.txt": "implemented\n",
+    "unrelated.txt": "committed user work\n"
+  },
+  "assertions": [
+    { "type": "file_unchanged", "path": "feature.txt" },
+    { "type": "file_unchanged", "path": "unrelated.txt" },
+    { "type": "changed_paths", "value": [] },
+    {
+      "type": "commands_succeeded_in_order",
+      "value": ["gh issue list", "gh issue create", "--remove-label", "--add-label"]
+    },
+    { "type": "command_absent", "contains": "git checkout" }
+  ]
+}

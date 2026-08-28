@@ -60,6 +60,13 @@ describe('lint', () => {
         assert.ok(checksHit(dir).has('citations'));
     });
 
+    test('lints shared references alongside skills', () => {
+        const dir = sandbox();
+        edit(dir, 'templates/references/DELIVERY.md.tmpl', (t) => `${t}\n\nSee DOCTRINE §42.\n`);
+        const hit = errors(dir).find((finding) => finding.where?.startsWith('references/DELIVERY.md.tmpl:'));
+        assert.equal(hit?.check, 'citations');
+    });
+
     test('catches a renumbered DOCTRINE section that skills still cite', () => {
         const dir = sandbox();
         edit(dir, 'templates/DOCTRINE.md.tmpl', (t) => t.replace('## §5 ', '## §55 '));

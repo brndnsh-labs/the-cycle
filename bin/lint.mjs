@@ -88,8 +88,12 @@ export function lint({ CYCLE_HOME }) {
 
     const tmplDir = join(CYCLE_HOME, 'templates');
     const skillDir = join(tmplDir, 'skills');
+    const referenceDir = join(tmplDir, 'references');
     const templates = new Map(); // rel → text
     templates.set('DOCTRINE.md.tmpl', readFileSync(join(tmplDir, 'DOCTRINE.md.tmpl'), 'utf8'));
+    for (const f of readdirSync(referenceDir).filter((x) => x.endsWith('.md.tmpl')).sort()) {
+        templates.set(join('references', f), readFileSync(join(referenceDir, f), 'utf8'));
+    }
     for (const f of readdirSync(skillDir).filter((x) => x.endsWith('.md.tmpl')).sort()) {
         templates.set(join('skills', f), readFileSync(join(skillDir, f), 'utf8'));
     }
@@ -131,7 +135,7 @@ export function lint({ CYCLE_HOME }) {
         [...templates].flatMap(([rel, t]) => (rel === 'DOCTRINE.md.tmpl' ? [] : [...t.matchAll(/§(\d+)/g)].map((m) => m[1]))),
     );
     for (const s of [...sections].sort((a, b) => a - b)) {
-        if (!cited.has(s)) add(WARN, 'citations', `DOCTRINE §${s} is cited by no skill`, 'DOCTRINE.md.tmpl');
+        if (!cited.has(s)) add(WARN, 'citations', `DOCTRINE §${s} is cited by no skill or reference`, 'DOCTRINE.md.tmpl');
     }
 
     // --- verbs -------------------------------------------------------------

@@ -448,9 +448,19 @@ function completedCommands(events) {
         .map((event) => event.item);
 }
 
+function recordedTrackerCommands(workspace) {
+    const path = join(workspace, '.cycle-eval', 'gh-commands.jsonl');
+    if (!existsSync(path)) return [];
+    return readFileSync(path, 'utf8')
+        .split('\n')
+        .filter(Boolean)
+        .map((line) => JSON.parse(line));
+}
+
 function evaluateAssertions(scenario, fixture, events) {
     const assertions = [];
     const commands = completedCommands(events);
+    const trackerCommands = recordedTrackerCommands(fixture.workspace);
     for (const assertion of scenario.assertions) {
         let actual;
         let expected;
@@ -472,22 +482,36 @@ function evaluateAssertions(scenario, fixture, events) {
             actual = commands.some((command) =>
                 command.command.includes(assertion.contains)
                 && command.status === 'completed'
-                && command.exit_code === 0);
+                && command.exit_code === 0)
+                || trackerCommands.some((command) =>
+                    command.command.includes(assertion.contains) && command.exit_code === 0);
             expected = true;
         } else if (assertion.type === 'command_failed') {
             actual = commands.some((command) =>
                 command.command.includes(assertion.contains)
-                && (command.status === 'failed' || (command.exit_code !== null && command.exit_code !== 0)));
+                && (command.status === 'failed' || (command.exit_code !== null && command.exit_code !== 0)))
+                || trackerCommands.some((command) =>
+                    command.command.includes(assertion.contains) && command.exit_code !== 0);
             expected = true;
         } else if (assertion.type === 'command_absent') {
-            actual = commands.some((command) => command.command.includes(assertion.contains));
+            actual = commands.some((command) => command.command.includes(assertion.contains))
+                || trackerCommands.some((command) => command.command.includes(assertion.contains));
             expected = false;
         } else if (assertion.type === 'commands_succeeded_in_order') {
             let next = 0;
             for (const command of commands) {
-                if (next >= assertion.value.length || !command.command.includes(assertion.value[next])) continue;
-                if (command.status !== 'completed' || command.exit_code !== 0) break;
-                next++;
+                if (next >= assertion.value.length) break;
+                if (command.status !== 'completed' || command.exit_code !== 0) {
+                    if (command.command.includes(assertion.value[next])) break;
+                    continue;
+                }
+                let offset = 0;
+                while (next < assertion.value.length) {
+                    const found = command.command.indexOf(assertion.value[next], offset);
+                    if (found < 0) break;
+                    offset = found + assertion.value[next].length;
+                    next++;
+                }
             }
             actual = next;
             expected = assertion.value.length;
@@ -634,6 +658,10 @@ function runOne({ arm, repetition, scenario, source, renderer, codexBin, codexVe
         '--config', 'sandbox_workspace_write.exclude_tmpdir_env_var=true',
         '--config', 'sandbox_workspace_write.exclude_slash_tmp=true',
         '--config', 'shell_environment_policy.inherit="core"',
+        // workspace-write protects Git metadata by default. This is an isolated fixture repo;
+        // expose only its .git so delivery scenarios can branch and commit without widening the
+        // filesystem sandbox or enabling network access.
+        '--add-dir', join(fixture.workspace, '.git'),
         '--cd', fixture.workspace,
         scenario.prompt,
     ];

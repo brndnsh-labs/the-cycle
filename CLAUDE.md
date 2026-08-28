@@ -24,14 +24,14 @@ the live proof that the `github` backend works.
 Every file under either harness skill tree carries a provenance comment and must never be hand-edited
 — `cycle check` will flag it as drifted.
 
-- To change pipeline **behavior/procedure**: edit `templates/DOCTRINE.md.tmpl` or
-  `templates/skills/<name>.md.tmpl`, then `cycle update` to re-render this repo's own copy (and
-  eventually every other consuming repo).
+- To change pipeline **behavior/procedure**: edit `templates/DOCTRINE.md.tmpl`,
+  `templates/references/<name>.md.tmpl`, or `templates/skills/<name>.md.tmpl`, then `cycle update`
+  to re-render this repo's own copy (and eventually every other consuming repo).
 - To change **this repo's bindings** (gates, brakes, tracker fields): edit `.cycle/config.jsonc`,
   then `cycle update`.
-- Read the `DOCTRINE.md` in your harness tree once per session — it's the shared rule spine every skill here
-  cites as `§N` (tracker/labels/routing/gates/autonomy/merge/commit conventions). Don't restate its
-  rules; skills and this file both just point at it.
+- Read the `DOCTRINE.md` in your harness tree once per session — it is the compact shared rule spine
+  every skill cites as `§N`. Load `DELIVERY.md` or `FILING.md` only when the active skill directs
+  you there; they expand procedure without displacing DOCTRINE's authority.
 
 ## Commands
 

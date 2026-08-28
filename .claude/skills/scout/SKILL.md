@@ -2,7 +2,7 @@
 name: scout
 description: Discovery-driven finder for the-cycle — fans out read-only agents across security · performance · hygiene · context · a11y lenses, verifies each finding against the real code, dedupes against open issues, and files the worth-keeping candidates as actionable issues. Read-only over code: it FINDS and FILES, it never fixes, branches, or merges. Usage `/scout` (all lenses, tightly capped) or `/scout <lens>` (one focused lens, higher cap).
 ---
-<!-- cycle:rendered template=skills/scout.md.tmpl hash=cde8833eeb0b — managed by the-cycle; edit the template, not this file -->
+<!-- cycle:rendered template=skills/scout.md.tmpl hash=ad947fd45134 — managed by the-cycle; edit the template, not this file -->
 
 # /scout — find the-cycle's next work, on demand
 
@@ -16,6 +16,10 @@ issues, so the filing mechanics are **§10** — dedup, the actionable bar, the 
 budget. Don't restate them; apply them. Also leans on §1 (Status), §2 (the `scout` provenance
 stamp), §5 (a finding that touches an always-brake surface still gets filed, just clearly flagged),
 and §7 (the batch-write rule).
+
+**If `.claude/skills/FILING.md` is not already in context, read it before presenting or filing
+the slate.** It expands §10's filing procedure without displacing DOCTRINE's certainty and safety
+authority.
 
 ## The cardinal rule: scout finds and files. It never fixes, branches, or merges.
 

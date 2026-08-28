@@ -31,7 +31,7 @@ function copySnapshot(destination) {
 function fakeCodexSource() {
     return `#!/usr/bin/env node
 const { spawnSync } = require('node:child_process');
-const { writeFileSync } = require('node:fs');
+const { existsSync, writeFileSync } = require('node:fs');
 const { join } = require('node:path');
 
 const args = process.argv.slice(2);
@@ -93,11 +93,39 @@ if (scenario === 'safe-bounded' || scenario === 'dirty-worktree') {
 } else if (scenario === 'needs-decision') {
     requireSuccess(execute('gh', ['issue', 'view', '1', '--json', 'number,title,state,url,labels,milestone,body']));
 } else if (scenario === 'tracker-outage') {
-    const result = execute('gh', ['issue', 'view', '1', '--json', 'number,title,state,url,labels,milestone,body']);
+    // Current Codex JSONL can omit a failed command event. The tracker double records its
+    // invocation independently, so exercise that fallback rather than synthesizing an event.
+    const result = spawnSync('gh', ['issue', 'view', '1', '--json', 'number,title,state,url,labels,milestone,body'], {
+        cwd: workspace,
+        encoding: 'utf8',
+        env: process.env,
+    });
     if (result.status === 0) {
         console.error('tracker outage did not fail');
         process.exit(2);
     }
+} else if (scenario === 'delivery-judgment') {
+    if (existsSync(join(workspace, '.agents/skills/DELIVERY.md'))) {
+        requireSuccess(execute('cat', ['.agents/skills/DELIVERY.md']));
+    }
+    requireSuccess(execute('gh', ['issue', 'view', '1', '--json', 'number,title,state,url,labels,milestone,body']));
+    requireSuccess(execute('npm', ['test']));
+    requireSuccess(execute('git', ['checkout', '-b', 'feat/1-selected-policy']));
+    requireSuccess(execute('git', ['add', 'feature.txt']));
+    requireSuccess(execute('git', ['commit', '-m', 'feat: record selected policy']));
+    requireSuccess(execute('git', ['push', '-u', 'origin', 'feat/1-selected-policy']));
+    requireSuccess(execute('gh', ['pr', 'create', '--head', 'feat/1-selected-policy', '--base', 'main', '--title', 'feat: record selected policy']));
+    requireSuccess(execute('gh', ['issue', 'edit', '1', '--remove-label',
+        'status:ready,status:in-progress,status:in-review,status:needs-decision,status:blocked']));
+    requireSuccess(execute('gh', ['issue', 'edit', '1', '--add-label', 'status:in-review']));
+    requireSuccess(execute('gh', ['issue', 'comment', '1', '--body', 'PR: https://example.invalid/cycle-eval/pull/2']));
+} else if (scenario === 'filing-actionable') {
+    if (existsSync(join(workspace, '.agents/skills/FILING.md'))) {
+        requireSuccess(execute('cat', ['.agents/skills/FILING.md']));
+    }
+    requireSuccess(execute('gh', ['issue', 'list', '--state', 'open', '--json', 'number,title,labels,url']));
+    requireSuccess(execute('gh', ['issue', 'create', '--title', 'docs: explain template-first generated changes', '--body', 'fixture body']));
+    requireSuccess(execute('sh', ['-c', 'gh issue edit 2 --remove-label status:ready,status:in-progress,status:in-review,status:needs-decision,status:blocked && gh issue edit 2 --add-label status:ready']));
 } else {
     console.error('unknown scenario ' + scenario);
     process.exit(2);
@@ -335,9 +363,11 @@ test('behavioral runner compares isolated snapshots without making a model call'
             .trim()
             .split('\n')
             .map((line) => JSON.parse(line));
-        assert.equal(results.length, 8);
+        assert.equal(results.length, 12);
         assert.deepEqual(new Set(results.map((result) => result.scenario)), new Set([
+            'delivery-judgment',
             'dirty-worktree',
+            'filing-actionable',
             'needs-decision',
             'safe-bounded',
             'tracker-outage',
@@ -355,7 +385,7 @@ test('behavioral runner compares isolated snapshots without making a model call'
             const pair = results.filter((result) => result.scenario === scenario);
             assert.equal(pair.length, 2);
             assert.equal(pair[0].fixture_sha256, pair[1].fixture_sha256);
-            assert.equal(pair[0].snapshot.rendered_skill_sha256, pair[1].snapshot.rendered_skill_sha256);
+            assert.ok(pair.every((result) => /^[a-f0-9]{64}$/.test(result.snapshot.rendered_skill_sha256)));
             const workspaces = pair.map((result) => join(output, result.artifacts.workspace));
             assert.notEqual(workspaces[0], workspaces[1]);
             assert.notEqual(statSync(workspaces[0]).ino, statSync(workspaces[1]).ino);
@@ -386,6 +416,13 @@ test('behavioral runner compares isolated snapshots without making a model call'
         assert.ok(invocation.includes('sandbox_workspace_write.exclude_tmpdir_env_var=true'));
         assert.ok(invocation.includes('sandbox_workspace_write.exclude_slash_tmp=true'));
         assert.ok(invocation.includes('shell_environment_policy.inherit="core"'));
+        const addDir = invocation.indexOf('--add-dir');
+        assert.notEqual(addDir, -1);
+        assert.equal(invocation[addDir + 1], join(
+            output,
+            results[0].artifacts.workspace,
+            '.git',
+        ));
         const codexEnv = JSON.parse(readFileSync(join(
             output,
             results[0].artifacts.workspace,

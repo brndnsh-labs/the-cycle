@@ -61,7 +61,8 @@ both and presents desk first, then hands-on.
 8. **Apply the answers** (§7) — `{{@set_status "<n>" "<status:label>"}}` per issue, in a plain
    loop. Apply them together, after all the answers are in, so a half-answered session never
    leaves the queue half-moved.
-   - **Works** → unblock it: merge via §6's guard, or close it.
+   - **Works** → unblock it: before merging, ensure `{{harness.root}}/DELIVERY.md` is in context,
+     reading it only if absent, and use §6's configured guard; otherwise close it.
    - **Doesn't work** → capture the description **verbatim** as a `finding`. Their raw words are the
      evidence; don't paraphrase them into your own diagnosis.
    - **Not now** → leave it exactly as it was. No penalty, no nag.

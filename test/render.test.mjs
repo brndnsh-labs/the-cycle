@@ -122,6 +122,8 @@ for (const backend of BACKENDS) {
                     managedFiles = [
                         ...skills.map((s) => join(skillRoot, s, harness.skill_file)),
                         join(skillRoot, 'DOCTRINE.md'),
+                        join(skillRoot, 'DELIVERY.md'),
+                        join(skillRoot, 'FILING.md'),
                     ];
                 });
 
@@ -129,6 +131,16 @@ for (const backend of BACKENDS) {
                     const expected = profileConfig.skills;
                     assert.deepEqual(skills.sort(), [...expected].sort());
                     assert.ok(existsSync(join(skillRoot, 'DOCTRINE.md')));
+                    assert.ok(existsSync(join(skillRoot, 'DELIVERY.md')));
+                    assert.ok(existsSync(join(skillRoot, 'FILING.md')));
+                });
+
+                test('shared references carry provenance without masquerading as skills', () => {
+                    for (const name of ['DELIVERY.md', 'FILING.md']) {
+                        const text = readFileSync(join(skillRoot, name), 'utf8');
+                        assert.match(text, /<!-- cycle:rendered /, `${name}: no provenance`);
+                        assert.doesNotMatch(text, /^---$/m, `${name}: unexpected skill frontmatter`);
+                    }
                 });
 
                 test('every skill has parseable frontmatter and a provenance stamp', () => {
@@ -566,6 +578,8 @@ describe('multi-harness render', () => {
     test('renders a second tree at the codex harness root, alongside the untouched claude one', () => {
         assert.ok(existsSync(join(dir, '.claude', 'skills', 'DOCTRINE.md')));
         assert.ok(existsSync(join(dir, '.agents', 'skills', 'DOCTRINE.md')));
+        assert.ok(existsSync(join(dir, '.claude', 'skills', 'DELIVERY.md')));
+        assert.ok(existsSync(join(dir, '.agents', 'skills', 'FILING.md')));
         assert.ok(existsSync(join(dir, '.agents', 'skills', 'cycle', 'SKILL.md')));
     });
 
@@ -603,7 +617,10 @@ describe('multi-harness render', () => {
     });
 
     test('no unrendered template syntax survives in the codex tree', () => {
-        for (const s of ['DOCTRINE.md', 'cycle/SKILL.md', 'intake/SKILL.md', 'unblock/SKILL.md', 'done/SKILL.md']) {
+        for (const s of [
+            'DOCTRINE.md', 'DELIVERY.md', 'FILING.md',
+            'cycle/SKILL.md', 'intake/SKILL.md', 'unblock/SKILL.md', 'done/SKILL.md',
+        ]) {
             const text = readFileSync(join(dir, '.agents', 'skills', s), 'utf8');
             const leftover = (text.match(/\{\{[^}]*\}\}/g) ?? []).filter(
                 (m, i, all) => !text.includes(`$${all[i]}`),
@@ -612,16 +629,23 @@ describe('multi-harness render', () => {
         }
     });
 
-    test('each tree self-references its own doctrine path and attribution, not the other harness\'s', () => {
-        const claudeDoctrine = readFileSync(join(dir, '.claude', 'skills', 'DOCTRINE.md'), 'utf8');
-        const codexDoctrine = readFileSync(join(dir, '.agents', 'skills', 'DOCTRINE.md'), 'utf8');
-        assert.match(claudeDoctrine, /Generated with \[Claude Code\]/);
-        assert.match(codexDoctrine, /Generated with \[Codex CLI\]/);
+    test('each tree self-references its own doctrine and reference paths and attribution', () => {
+        const claudeDelivery = readFileSync(join(dir, '.claude', 'skills', 'DELIVERY.md'), 'utf8');
+        const codexDelivery = readFileSync(join(dir, '.agents', 'skills', 'DELIVERY.md'), 'utf8');
+        assert.match(claudeDelivery, /Generated with \[Claude Code\]/);
+        assert.match(codexDelivery, /Generated with \[Codex CLI\]/);
 
         const claudeCycle = readFileSync(join(dir, '.claude', 'skills', 'cycle', 'SKILL.md'), 'utf8');
         const codexCycle = readFileSync(join(dir, '.agents', 'skills', 'cycle', 'SKILL.md'), 'utf8');
         assert.match(claudeCycle, /Shared rules in `\.claude\/skills\/DOCTRINE\.md`/);
         assert.match(codexCycle, /Shared rules in `\.agents\/skills\/DOCTRINE\.md`/);
+        assert.match(claudeCycle, /ensure `\.claude\/skills\/DELIVERY\.md`/i);
+        assert.match(codexCycle, /ensure `\.agents\/skills\/DELIVERY\.md`/i);
+
+        const claudeIntake = readFileSync(join(dir, '.claude', 'skills', 'intake', 'SKILL.md'), 'utf8');
+        const codexIntake = readFileSync(join(dir, '.agents', 'skills', 'intake', 'SKILL.md'), 'utf8');
+        assert.match(claudeIntake, /if `\.claude\/skills\/FILING\.md`/i);
+        assert.match(codexIntake, /if `\.agents\/skills\/FILING\.md`/i);
     });
 
     test('Codex uses direct chat when its structured menu is unavailable in normal skill execution', () => {
@@ -759,11 +783,11 @@ describe('commit attribution', () => {
             assert.match(rendered, /Never infer an identity from repo config/);
         }
 
-        const claudeDoctrine = readFileSync(join(dir, '.claude', 'skills', 'DOCTRINE.md'), 'utf8');
-        const openCodeDoctrine = readFileSync(join(dir, '.opencode', 'skills', 'DOCTRINE.md'), 'utf8');
-        assert.match(claudeDoctrine, /Generated with \[Claude Code\]/);
-        assert.match(openCodeDoctrine, /Generated with \[OpenCode\]/);
-        assert.doesNotMatch(`${claudeDoctrine}\n${openCodeDoctrine}`, /Stale Model|stale@example\.com/);
+        const claudeDelivery = readFileSync(join(dir, '.claude', 'skills', 'DELIVERY.md'), 'utf8');
+        const openCodeDelivery = readFileSync(join(dir, '.opencode', 'skills', 'DELIVERY.md'), 'utf8');
+        assert.match(claudeDelivery, /Generated with \[Claude Code\]/);
+        assert.match(openCodeDelivery, /Generated with \[OpenCode\]/);
+        assert.doesNotMatch(`${claudeDelivery}\n${openCodeDelivery}`, /Stale Model|stale@example\.com/);
         assert.match(cycle(dir, ['check']), /clean/);
     });
 });
@@ -1180,11 +1204,12 @@ describe('backend_overrides.auto_merge', () => {
     });
 
     const doctrine = (d) => readFileSync(join(d, '.claude', 'skills', 'DOCTRINE.md'), 'utf8');
+    const delivery = (d) => readFileSync(join(d, '.claude', 'skills', 'DELIVERY.md'), 'utf8');
     const done = (d) => readFileSync(join(d, '.claude', 'skills', 'done', 'SKILL.md'), 'utf8');
     const cycleSkill = (d) => readFileSync(join(d, '.claude', 'skills', 'cycle', 'SKILL.md'), 'utf8');
 
     test('default renders the poll-then-merge guard, not --auto', () => {
-        const src = doctrine(guardDir);
+        const src = delivery(guardDir);
         const guardLine = src.split('\n').find((line) => line.includes('until gh pr checks'));
         assert.ok(guardLine, 'expected a rendered foreground guard command');
         assert.match(src, /gh pr checks .* --watch/, 'expected the poll guard');
@@ -1195,7 +1220,7 @@ describe('backend_overrides.auto_merge', () => {
     });
 
     test('the override swaps the merge path to server-side --auto', () => {
-        const src = doctrine(autoDir);
+        const src = delivery(autoDir);
         assert.match(src, /gh pr merge .*--auto/, 'expected the server-side merge');
         assert.doesNotMatch(src, /until gh pr checks/, 'the poll guard must be gone');
     });
@@ -1241,8 +1266,8 @@ describe('backend_overrides.auto_merge', () => {
     // the {{#unless auto_merge}} block, so a protected repo silently lost the one rule
     // that makes issue-closing work at all.
     test('Closes #<n> survives in BOTH modes', () => {
-        assert.match(doctrine(guardDir), /Closes #<n>/);
-        assert.match(doctrine(autoDir), /Closes #<n>/);
+        assert.match(delivery(guardDir), /Closes #<n>/);
+        assert.match(delivery(autoDir), /Closes #<n>/);
     });
 
     test('an overridden repo still renders clean and re-renders byte-identically', () => {
