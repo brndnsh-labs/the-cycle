@@ -2,6 +2,26 @@
   "version": 1,
   "study_id": "release-relay-review-v1",
   "claim": "Pre-existing repository-specific review guidance helps a single model identify consequential edge cases and produce more actionable review evidence than a strong generic review prompt.",
+  "revision": {
+    "number": 2,
+    "prior_protocol_sha256": "fda4e27bd8186dad607e4c5f78a498f4e4096beed84447b866a3c82827a8b87a",
+    "prior_runner_sha256": "46adf70d6dcce35dbefa51b8487cf55d10ff7525a8f4327e3e728c1f58c0a61d",
+    "reason": "Before any scored model call, Codex CLI 0.150.1 rejected the frozen strict reviewer configuration. Revision 2 preserves the image-tool restriction in the supported feature namespace and adds a credential-free, no-transport strict-config preflight probe.",
+    "preserved_invalid_attempt": {
+      "issue": 128,
+      "results_sha256": "88139d34b4852acad61270bc05391640014bd1e9468366be116a190d9bfd4412",
+      "summary_sha256": "b34ad05184e808e247613fa17683054096706954262cfd076c573d32fd8f9565",
+      "scored_model_calls": 0
+    },
+    "unchanged": [
+      "claim",
+      "cases",
+      "schedule",
+      "model",
+      "scoring",
+      "invalidation"
+    ]
+  },
   "census_path": "CENSUS.md",
   "source": {
     "repository": "https://github.com/brndnsh-labs/release-relay.git",
@@ -212,8 +232,8 @@
     }
   ],
   "artifact_lock": {
-    "runner_sha256": "46adf70d6dcce35dbefa51b8487cf55d10ff7525a8f4327e3e728c1f58c0a61d",
-    "fake_reviewer_sha256": "ab8ae64aa52dec26608af0196711d89fb7cae0134df53e9b86c8f71d6b9ccc06",
+    "runner_sha256": "1084a8a10d75bbeeb70cf2c932c97d6a6bc086aec6f274b33a06d7e4cfdaa084",
+    "fake_reviewer_sha256": "d9ce0ea2fc187ec9d5bb0a72524dfccfa77e54dcb01a1640ad5b83c35b773234",
     "census_sha256": "1eb2272dfdb5110663f277cf70d661dbbc487e73f0b71d6f3e9e8b3b7f20e603",
     "common_prompt_sha256": "98bae734100e4316267052c0f466f8f75658be1ef4702edf1d6b1fc31076353e",
     "output_schema_sha256": "8e3a76201d5a942e80a62245f6bb48bac06b97f6a9a55209eef1a7aaf96fee5d",

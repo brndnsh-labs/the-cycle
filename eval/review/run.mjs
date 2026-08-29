@@ -112,6 +112,22 @@ export function validateProtocol(protocol, { requireLock = true } = {}) {
         || !isNonEmptyString(protocol.census_path)) {
         fail('review protocol requires version 1, study_id, claim, and census_path');
     }
+    const revision = protocol.revision;
+    if (!revision || revision.number !== 2
+        || revision.prior_protocol_sha256 !== 'fda4e27bd8186dad607e4c5f78a498f4e4096beed84447b866a3c82827a8b87a'
+        || revision.prior_runner_sha256 !== '46adf70d6dcce35dbefa51b8487cf55d10ff7525a8f4327e3e728c1f58c0a61d'
+        || !isNonEmptyString(revision.reason)
+        || revision.preserved_invalid_attempt?.issue !== 128
+        || revision.preserved_invalid_attempt?.results_sha256
+            !== '88139d34b4852acad61270bc05391640014bd1e9468366be116a190d9bfd4412'
+        || revision.preserved_invalid_attempt?.summary_sha256
+            !== 'b34ad05184e808e247613fa17683054096706954262cfd076c573d32fd8f9565'
+        || revision.preserved_invalid_attempt?.scored_model_calls !== 0
+        || stableJson(revision.unchanged) !== stableJson([
+            'claim', 'cases', 'schedule', 'model', 'scoring', 'invalidation',
+        ])) {
+        fail('review protocol is missing the frozen revision 2 compatibility record');
+    }
     if (!protocol.source || !isNonEmptyString(protocol.source.repository)
         || !/^[0-9a-f]{40}$/.test(protocol.source.review_guidance_commit)
         || !Array.isArray(protocol.source.review_guidance_paths)
@@ -564,8 +580,6 @@ multi_agent = false
 network_proxy = false
 shell_snapshot = false
 skill_mcp_dependency_install = false
-
-[tools]
 view_image = false
 
 [permissions.review-fixture.filesystem]
@@ -857,6 +871,50 @@ function codexVersion(codexBin, env) {
     const result = run(codexBin, ['--version'], { env, allowFailure: true });
     if (result.status !== 0) fail(`cannot run ${codexBin} --version`);
     return result.stdout.trim();
+}
+
+export function runStrictConfigProbe({ codexBin, reviewerHome, workspace, scratch }) {
+    if (existsSync(join(reviewerHome, 'auth.json'))) {
+        fail('strict reviewer-config probe must not receive authentication');
+    }
+    const env = reviewerEnvironment({ reviewerHome, scratch });
+    const result = run(codexBin, [
+        'app-server', '--strict-config', '--listen', 'off',
+    ], {
+        cwd: workspace,
+        env,
+        timeout: 30_000,
+        allowFailure: true,
+    });
+    const expectedDiagnostic = 'Error: no transport configured; use --listen or enable remote control';
+    const expectedNoTransport = result.status === 1
+        && (result.stderr ?? '').trim() === expectedDiagnostic
+        && !(result.stdout ?? '').trim();
+    if (!expectedNoTransport) {
+        const diagnostic = result.error?.message || result.stderr || result.stdout || '';
+        fail(`Codex strict reviewer-config probe failed (${result.status})\n${diagnostic}`.trimEnd());
+    }
+    return {
+        strict_config: 'pass',
+        credentials: 'absent',
+        model_calls: 0,
+    };
+}
+
+export function probeReviewerConfig(codexBin = 'codex') {
+    const root = privateDirectory('cycle-review-config-probe-');
+    const workspace = join(root, 'workspace');
+    const scratch = join(root, 'tmp');
+    let reviewerHome;
+    try {
+        privateMkdir(workspace);
+        privateMkdir(scratch);
+        reviewerHome = createReviewerHome({ includeAuth: false, codexBin, workspace });
+        return runStrictConfigProbe({ codexBin, reviewerHome, workspace, scratch });
+    } finally {
+        if (reviewerHome) rmSync(reviewerHome, { recursive: true, force: true });
+        rmSync(root, { recursive: true, force: true });
+    }
 }
 
 function ensureNewOutput(path) {
@@ -1694,6 +1752,7 @@ export function probeIsolation(codexBin = 'codex') {
 
 function preflight({ protocol, protocolPath, source, output, codexBin, skipOracles }) {
     assertArtifactLock(protocol, protocolPath, source);
+    const reviewerConfigProbe = probeReviewerConfig(codexBin);
     const fixtures = [];
     for (const item of protocol.cases) {
         const root = privateDirectory(`cycle-review-preflight-${item.id}-`);
@@ -1724,6 +1783,7 @@ function preflight({ protocol, protocolPath, source, output, codexBin, skipOracl
         study_id: protocol.study_id,
         protocol_sha256: sha256(readFileSync(protocolPath)),
         artifact_lock: 'pass',
+        reviewer_config: reviewerConfigProbe,
         fixtures,
         isolation,
         oracles,

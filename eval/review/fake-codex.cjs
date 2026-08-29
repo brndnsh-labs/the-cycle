@@ -10,6 +10,28 @@ if (args[0] === '--version') {
     process.exit(0);
 }
 
+if (args[0] === 'app-server') {
+    if (!args.includes('--strict-config') || !args.includes('--listen') || !args.includes('off')) {
+        console.error('fake reviewer expected strict app-server no-transport config probe');
+        process.exit(2);
+    }
+    const reviewerHome = process.env.CODEX_HOME;
+    if (!reviewerHome || existsSync(join(reviewerHome, 'auth.json'))
+        || process.env.OPENAI_API_KEY || process.env.CODEX_API_KEY) {
+        console.error('fake reviewer config probe received authentication');
+        process.exit(2);
+    }
+    const config = readFileSync(join(reviewerHome, 'config.toml'), 'utf8');
+    const features = config.match(/\[features\]\n([\s\S]*?)(?:\n\[|$)/)?.[1] ?? '';
+    if (/\[tools\]\n[\s\S]*?view_image\s*=/.test(config)
+        || !/^view_image = false$/m.test(features)) {
+        console.error('unknown configuration field `tools.view_image`');
+        process.exit(1);
+    }
+    console.error('Error: no transport configured; use --listen or enable remote control');
+    process.exit(1);
+}
+
 if (args[0] !== 'exec') {
     console.error('fake reviewer expected codex exec');
     process.exit(2);
