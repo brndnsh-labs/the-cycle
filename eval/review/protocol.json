@@ -1,0 +1,257 @@
+{
+  "version": 1,
+  "study_id": "release-relay-review-v1",
+  "claim": "Pre-existing repository-specific review guidance helps a single model identify consequential edge cases and produce more actionable review evidence than a strong generic review prompt.",
+  "census_path": "CENSUS.md",
+  "source": {
+    "repository": "https://github.com/brndnsh-labs/release-relay.git",
+    "review_guidance_commit": "674f4d4a4f1588e7e8345dd7019142b41b255339",
+    "review_guidance_paths": [
+      ".agents/skills/review/SKILL.md",
+      ".agents/skills/DOCTRINE.md"
+    ],
+    "excluded_fixture_paths": [
+      ".agents",
+      ".claude",
+      ".codex",
+      ".cycle",
+      "AGENTS.md",
+      "CLAUDE.md"
+    ]
+  },
+  "prompt": {
+    "common_path": "common-prompt.md",
+    "output_schema_path": "findings.schema.json"
+  },
+  "arms": [
+    {
+      "id": "baseline",
+      "description": "Strong generic single-model review with neutral repository instructions"
+    },
+    {
+      "id": "treatment",
+      "description": "The same review plus the pinned pre-case Release Relay review guidance"
+    }
+  ],
+  "schedule": {
+    "seed": "release-relay-review-v1-2026-08-29",
+    "repetitions": 3,
+    "invalid_pair_retry_limit": 1,
+    "invalid_run_rule": "Invalidate and rerun both arms for the same case and repetition; preserve the invalid attempt."
+  },
+  "execution": {
+    "model": "gpt-5.6-sol",
+    "reasoning_effort": "high",
+    "timeout_ms": 900000,
+    "fixture_commit_time": "2026-08-29T12:00:00Z",
+    "reviewers_per_arm": 1,
+    "fresh_session_per_cell": true,
+    "subagents": false,
+    "command_network": false,
+    "reviewer_workspace": "read-only"
+  },
+  "scoring": {
+    "schema_path": "score.schema.json",
+    "recall": {
+      "caught": "A finding identifies the frozen target's concrete mechanism and a plausible consequence.",
+      "partial": "A finding identifies the relevant risk but omits or materially weakens either the mechanism or consequence.",
+      "missed": "No finding gives target-specific evidence; generic concern alone is missed."
+    },
+    "actionability": "Score repair direction and regression test as separate booleans for each target. Direction must be bounded enough to implement; the proposed test must fail on the flawed fixture and pass when the named behavior is repaired.",
+    "unsupported_findings": "Count only independently disproved claims; absence from the historical repair is insufficient.",
+    "controls": "Recall is not applicable for the named repaired target. Independently verify every reported finding; a named-target claim is unsupported only when the frozen repaired fixture disproves it.",
+    "separate_measures": ["token_usage", "elapsed_time", "reviewer_count", "lifecycle_evidence"],
+    "composite_score": false,
+    "blinding": "Normalize finding fields without summaries, plans, arm labels, case names, or tool traces. Randomize A/B labels deterministically within each pair.",
+    "scorers": 2,
+    "adjudication": "Scorers lock schema-valid files independently. Preserve both originals, then resolve target or disproval disagreements by documented consensus with evidence from the frozen fixture; never infer falsity from absence in the historical repair.",
+    "analysis": "Report each arm's target-level recall categories, paired treatment-versus-baseline wins/ties/losses, the two actionability rates, and independently disproved finding counts. Report controls, token usage, elapsed time, and lifecycle evidence separately. Do not produce a composite score, significance claim, or prevalence estimate."
+  },
+  "invalidation": {
+    "cell": [
+      "nonzero exit or timeout",
+      "malformed JSONL or missing turn.completed",
+      "missing or schema-invalid final findings",
+      "candidate mutation",
+      "treatment did not read pinned guidance",
+      "baseline discovered treatment guidance"
+    ],
+    "experiment": [
+      "artifact-lock mismatch",
+      "fixture history or remote leakage",
+      "filesystem-isolation probe failure",
+      "hidden-oracle fail/pass preflight failure",
+      "authentication path or material in a fixture, reviewer command environment, or captured public artifact"
+    ],
+    "pair_rule": "If either cell is invalid, retain both attempts and rerun the pair once. If either retry is invalid, stop incomplete and score neither attempt from that pair."
+  },
+  "privacy": {
+    "public_allowlist": [
+      "protocol and census",
+      "preflight summary without host paths",
+      "normalized scoring input and locked score files",
+      "aggregate report"
+    ],
+    "private_only": [
+      "raw events and stderr",
+      "private blinding map and per-cell measures",
+      "Codex home and authentication symlink",
+      "host source paths"
+    ],
+    "credential_rule": "Codex authentication remains an outer-client symlink in a disposable private home. It is never copied into a fixture, inherited by reviewer commands, or written to experiment artifacts."
+  },
+  "cases": [
+    {
+      "id": "rr-a7f2",
+      "title": "GitHub comparison boundary",
+      "original_issue": 30,
+      "original_task_path": "original-prompts/issue-30.md",
+      "task_path": "prompts/rr-a7f2.md",
+      "base": "674f4d4a4f1588e7e8345dd7019142b41b255339",
+      "candidate": "57d1b3733421e6961ec1441c6fea8ed4936a4e2d",
+      "repair": "c930975d355cffbce1295eb39cf3899c9258bee6",
+      "repair_paths": ["packages/github-integration/src/live.ts"],
+      "oracle_paths": ["packages/github-integration/src/live.test.ts"],
+      "oracle_commands": [
+        "pnpm build",
+        "pnpm --filter @release-relay/github-integration test"
+      ],
+      "targets": [
+        {
+          "id": "comparison-repository-unverifiable",
+          "credit": "Identify that comparison responses whose repository identity cannot be established are accepted, with a plausible cross-repository consequence."
+        },
+        {
+          "id": "positive-total-without-commits",
+          "credit": "Identify that total_commits greater than zero with no parseable commit list is silently accepted, with a plausible empty or incomplete candidate consequence."
+        }
+      ]
+    },
+    {
+      "id": "rr-k3m8",
+      "title": "OpenAI excluded-source grounding",
+      "original_issue": 9,
+      "original_task_path": "original-prompts/issue-9.md",
+      "task_path": "prompts/rr-k3m8.md",
+      "base": "909d523bb90757b153164db98c4f2b25a6a5f42e",
+      "candidate": "38e5748c2b633a9957bfb9a142db650999855062",
+      "repair": "17e47abc5948b10aeeca403a16642c47b16d341e",
+      "repair_paths": ["packages/openai-integration/src/draft.ts"],
+      "oracle_paths": ["packages/openai-integration/src/draft.test.ts"],
+      "oracle_commands": [
+        "pnpm build",
+        "pnpm --filter @release-relay/openai-integration test"
+      ],
+      "targets": [
+        {
+          "id": "excluded-source-citation",
+          "credit": "Identify that validation accepts a citation to an excluded candidate that was not sent to the provider, with a plausible provenance consequence."
+        }
+      ]
+    },
+    {
+      "id": "rr-p9v4",
+      "title": "Stripe same-second ordering",
+      "original_issue": 11,
+      "original_task_path": "original-prompts/issue-11.md",
+      "task_path": "prompts/rr-p9v4.md",
+      "base": "441aee1cc7c0eb9bc7b1b8d7d9df107e3ec17f45",
+      "candidate": "d5b8bf34668c10b9caa0a541fffd021df319b6df",
+      "repair": "7d5756408de076cbd77614dc06493485537feda9",
+      "repair_paths": ["packages/core/src/billing.ts"],
+      "oracle_paths": ["packages/core/src/billing.test.ts"],
+      "oracle_commands": [
+        "pnpm build",
+        "pnpm --filter @release-relay/core build",
+        "node --test packages/core/dist/billing.test.js"
+      ],
+      "targets": [
+        {
+          "id": "same-second-distinct-events",
+          "credit": "Identify the timestamp-tie ambiguity for distinct events and its membership-state consequence; any safe, explicit, testable resolution receives credit."
+        }
+      ]
+    },
+    {
+      "id": "rr-w5c1",
+      "title": "Stripe catalog pagination",
+      "original_issue": 12,
+      "original_task_path": "original-prompts/issue-12.md",
+      "task_path": "prompts/rr-w5c1.md",
+      "base": "d5b8bf34668c10b9caa0a541fffd021df319b6df",
+      "candidate": "9d29ef71192d4a36f19977af9104798aecb67ee0",
+      "repair": "dfa146789e1cf372038bf992402f1f89a6b79f2a",
+      "repair_paths": ["packages/stripe-integration/src/billing.ts"],
+      "oracle_paths": ["packages/stripe-integration/src/billing.test.ts"],
+      "oracle_commands": [
+        "pnpm build",
+        "pnpm --filter @release-relay/stripe-integration test"
+      ],
+      "targets": [
+        {
+          "id": "catalog-first-page-only",
+          "credit": "Identify that product or price lookup ignores has_more and can create duplicate resources or bind nondeterministically; any bounded safe, testable resolution receives credit."
+        }
+      ]
+    },
+    {
+      "id": "rr-f0d6",
+      "title": "Target-clean GitHub comparison control",
+      "variant_of": "rr-a7f2",
+      "variant": "target-clean"
+    },
+    {
+      "id": "rr-y2n9",
+      "title": "Target-clean Stripe pagination control",
+      "variant_of": "rr-w5c1",
+      "variant": "target-clean"
+    }
+  ],
+  "artifact_lock": {
+    "runner_sha256": "30096df14e4f696ceb8227915d9b80a1b64f24991a3660d2255da29f6661d653",
+    "fake_reviewer_sha256": "ab8ae64aa52dec26608af0196711d89fb7cae0134df53e9b86c8f71d6b9ccc06",
+    "census_sha256": "1eb2272dfdb5110663f277cf70d661dbbc487e73f0b71d6f3e9e8b3b7f20e603",
+    "common_prompt_sha256": "98bae734100e4316267052c0f466f8f75658be1ef4702edf1d6b1fc31076353e",
+    "output_schema_sha256": "8e3a76201d5a942e80a62245f6bb48bac06b97f6a9a55209eef1a7aaf96fee5d",
+    "score_schema_sha256": "917bf21114333358b025ef55e9b2eeb9e2b26be29e4ba4c4c431950fd581b198",
+    "review_guidance_sha256": "21dda26d26949cea99effd704c8c6b7fa7bfc8c1632d214f02a4146505a83178",
+    "cases": {
+      "rr-a7f2": {
+        "original_task_sha256": "86af9ead9197dc6bb1bd6d7e76993ec9ce7cba8702e6b030bea91046f4311d2c",
+        "task_sha256": "33887527a0eb96b431c553800417e1d5e3c3be42c4e2ba40daeadc9ed07f4276",
+        "base_tree_sha256": "c7228ea8cb5e5dda086030f45e1f976104264cac9e441fe2e6360bd7d97dd1f7",
+        "candidate_patch_sha256": "e1cac88691d85e1db1c6165d00c1f4e2a0fde2306e438e22534853002944e0d2",
+        "repair_patch_sha256": "e49fadfc615efc4db36ba52b7e8ce79286645231217a118e7610f14260f384e8",
+        "oracle_patch_sha256": "88a90533280b3b00a1de852dfd1700a7ee6243f454bbc1159e0e030896a6dfc7",
+        "target_clean_patch_sha256": "00d741818b70fef15ca7abf187fba09e03be5cafce73e82399e1d913b1c4e03d"
+      },
+      "rr-k3m8": {
+        "original_task_sha256": "c5f0ccd08575ad1ad8a7edb5347b08aff617e18f88ae2e678ef92b6a2ef20527",
+        "task_sha256": "85c118fba9e1ea16e770a42b1d014b82e71a526bdfcfd367601b99105332fbb7",
+        "base_tree_sha256": "bfbb15fccaaa08145f954d885eae6bc15864c16c5cc4b690ebd612d93ec70b51",
+        "candidate_patch_sha256": "2b0ebb2579b02b700259f78319a1e2e1840f32787c248d0cf290316b2d0c16d3",
+        "repair_patch_sha256": "7c8ca0c42f5b3ef43d2e1c974f859835c85cd8031cde3add2b7d433b4868d903",
+        "oracle_patch_sha256": "4cb37363610838b878e4e4cd56d4b7fa430ca8d94951029e582b2663ea99bbc7",
+        "target_clean_patch_sha256": "bd8ce6947a0ce9838a871aa9b26d09e2db1b6407476905633dbd6526bbdb5a7a"
+      },
+      "rr-p9v4": {
+        "original_task_sha256": "f27b0191d7af03dd06cc02023665ed9ea23a3e7ef536f96f3ffdfec0015322cd",
+        "task_sha256": "ec079fe515eeb40f2a46fa67efe35e3c16372b45394b50414265dbf9fdf94fe4",
+        "base_tree_sha256": "d36adb34722265c09080aa09ed9a0223c36b0e9ffcdcc2696d5b1f08f81bb10d",
+        "candidate_patch_sha256": "f23df70d7a0f46f9be5d7a5aeb23e518d117728338302e55603316b497651e0a",
+        "repair_patch_sha256": "5dfd5899a74127b31576561ceaca12af02175c5ae03586a78648edb6b9b37b92",
+        "oracle_patch_sha256": "70d99945099b04af9209d8ac43c599d22dc0c3bc06e9928f38a4ac85b9d8e715",
+        "target_clean_patch_sha256": "ac43d53dab4d04398cdcb99fe56c3b5e3aef63a25780f1d6472f31c93249a24b"
+      },
+      "rr-w5c1": {
+        "original_task_sha256": "08930ba0a1f1dfb135aaf9bb44138d7dcb6ce5fb83e4d1bb8f8e79964e899489",
+        "task_sha256": "35675fcfd2a53e1175f096e9ddd2a0f02ae3d3548e77c80059a2b64c6d57e0d9",
+        "base_tree_sha256": "a40b39b73aa1b832f54863e8e5e5565fe588d1c28b9cfc606c784fe8f844c5e8",
+        "candidate_patch_sha256": "e61b37dabbcc50e929e659147abc99951bb252e4eb24382d558cd239b7667876",
+        "repair_patch_sha256": "07fab658573cbce3a61fbbbf5295326bcda28d3019cc1c2f8129f02b25e6ff9b",
+        "oracle_patch_sha256": "75d7785770471aaca5772607cd89db818519f0ed797d5b7e48f4543da925086d",
+        "target_clean_patch_sha256": "22cfb1074003d1daae66ab8341d07a1634957839583725dee2d602d412b263a6"
+      }
+    }
+  }
+}
