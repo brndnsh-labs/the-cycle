@@ -21,8 +21,10 @@ import {
     buildSchedule,
     createReviewerHome,
     loadProtocol,
+    probeReviewerConfig,
     reviewerConfig,
     reviewerEnvironment,
+    runStrictConfigProbe,
     sha256,
 } from '../eval/review/run.mjs';
 
@@ -36,6 +38,13 @@ function json(path) {
 
 function permissionBits(path) {
     return statSync(path).mode & 0o777;
+}
+
+function reviewerProbeTempEntries() {
+    return readdirSync(tmpdir()).filter((entry) => [
+        'cycle-review-config-probe-',
+        'cycle-review-codex-home-',
+    ].some((prefix) => entry.startsWith(prefix))).sort();
 }
 
 function assertPrivateTree(path) {
@@ -63,6 +72,11 @@ test('review protocol freezes the balanced study and local artifact hashes', () 
     assert.equal(protocol.schedule.batch_unit, 'matched_pair');
     assert.equal(protocol.scoring.composite_score, false);
     assert.equal(protocol.scoring.scorers, 2);
+    assert.equal(protocol.revision.number, 2);
+    assert.equal(protocol.revision.preserved_invalid_attempt.scored_model_calls, 0);
+    assert.deepEqual(protocol.revision.unchanged, [
+        'claim', 'cases', 'schedule', 'model', 'scoring', 'invalidation',
+    ]);
 
     const reviewRoot = join(ROOT, 'eval', 'review');
     assert.equal(sha256(readFileSync(RUNNER)), protocol.artifact_lock.runner_sha256);
@@ -103,6 +117,9 @@ test('reviewer profile exposes only explicit read roots and drops ambient creden
     assert.match(config, /\[permissions\.review-fixture\.network\]\nenabled = false/);
     assert.match(config, /\[shell_environment_policy\]\ninherit = "none"/);
     assert.match(config, /multi_agent = false/);
+    const featureSection = config.match(/\[features\]\n([\s\S]*?)(?:\n\[|$)/)?.[1] ?? '';
+    assert.match(featureSection, /^view_image = false$/m);
+    assert.doesNotMatch(config, /\[tools\]/);
     assert.doesNotMatch(config, /workspace_roots/);
 
     const env = reviewerEnvironment({
@@ -131,6 +148,48 @@ test('reviewer profile exposes only explicit read roots and drops ambient creden
     assert.equal(env.CODEX_API_KEY, undefined);
     assert.equal(env.NPM_TOKEN, undefined);
     assert.equal(env.CYCLE_REVIEW_ATTEMPT, '1');
+});
+
+test('strict reviewer-config preflight is credential-free and rejects the obsolete field', () => {
+    const fakeCodex = join(ROOT, 'eval', 'review', 'fake-codex.cjs');
+    const tempEntriesBefore = reviewerProbeTempEntries();
+    assert.deepEqual(probeReviewerConfig(fakeCodex), {
+        strict_config: 'pass',
+        credentials: 'absent',
+        model_calls: 0,
+    });
+    assert.deepEqual(reviewerProbeTempEntries(), tempEntriesBefore);
+
+    const scratch = mkdtempSync(join(tmpdir(), 'cycle-review-config-probe-test-'));
+    try {
+        const reviewerHome = join(scratch, 'home');
+        const workspace = join(scratch, 'workspace');
+        const reviewerScratch = join(scratch, 'tmp');
+        mkdirSync(reviewerHome);
+        mkdirSync(workspace);
+        mkdirSync(reviewerScratch);
+        writeFileSync(join(reviewerHome, 'config.toml'), '[tools]\nview_image = false\n');
+        assert.throws(
+            () => runStrictConfigProbe({
+                codexBin: fakeCodex,
+                reviewerHome,
+                workspace,
+                scratch: reviewerScratch,
+            }),
+            /strict reviewer-config probe failed/,
+        );
+        assert.throws(
+            () => runStrictConfigProbe({
+                codexBin: '/bin/true',
+                reviewerHome,
+                workspace,
+                scratch: reviewerScratch,
+            }),
+            /strict reviewer-config probe failed \(0\)/,
+        );
+    } finally {
+        rmSync(scratch, { recursive: true, force: true });
+    }
 });
 
 test('outer Codex authentication is symlinked outside the fixture and never copied', () => {
