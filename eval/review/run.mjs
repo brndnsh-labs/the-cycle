@@ -1545,23 +1545,25 @@ function runExperiment({
     }
     progress = validateExperimentProgress({ protocol, output, experiment, results });
     const summary = writeExperimentSummary({ protocol, output, results, progress });
-    if (progress.terminalInvalidPair !== null) {
+    const invocationResults = results.slice(beforeCount);
+    const receipt = {
+        pair_index: selectedPairs[0]?.pair_index ?? null,
+        calls: invocationResults.length,
+        invalid_attempts: invocationResults.filter((result) => !result.valid).length,
+        token_usage: usageTotals(invocationResults),
+        elapsed_ms: Date.now() - invocationStarted,
+        completed_pairs: summary.completed_pairs,
+        remaining_pairs: summary.remaining_pairs,
+        complete: summary.complete,
+    };
+    if (progress.terminalInvalidPair !== null && !Number.isFinite(maxPairs)) {
         fail(`experiment stopped after the retry for pair ${progress.terminalInvalidPair} stayed invalid`);
     }
     if (progress.complete) writeScoringArtifacts({ protocol, protocolPath, output, results });
-    const invocationResults = results.slice(beforeCount);
     return {
         results,
-        receipt: {
-            pair_index: selectedPairs[0]?.pair_index ?? null,
-            calls: invocationResults.length,
-            invalid_attempts: invocationResults.filter((result) => !result.valid).length,
-            token_usage: usageTotals(invocationResults),
-            elapsed_ms: Date.now() - invocationStarted,
-            completed_pairs: summary.completed_pairs,
-            remaining_pairs: summary.remaining_pairs,
-            complete: summary.complete,
-        },
+        receipt,
+        terminalInvalidPair: progress.terminalInvalidPair,
     };
 }
 
@@ -1833,6 +1835,9 @@ export function main(argv = process.argv.slice(2)) {
                 maxPairs: protocol.schedule.pairs_per_batch,
             });
             console.log(JSON.stringify(result.receipt, null, 2));
+            if (result.terminalInvalidPair !== null) {
+                fail(`experiment stopped after the retry for pair ${result.terminalInvalidPair} stayed invalid`);
+            }
             return 0;
         });
     }
@@ -1883,7 +1888,12 @@ export function main(argv = process.argv.slice(2)) {
                     ? protocol.schedule.pairs_per_batch
                     : Number.POSITIVE_INFINITY,
             });
-            if (command === 'run-batch') console.log(JSON.stringify(result.receipt, null, 2));
+            if (command === 'run-batch') {
+                console.log(JSON.stringify(result.receipt, null, 2));
+                if (result.terminalInvalidPair !== null) {
+                    fail(`experiment stopped after the retry for pair ${result.terminalInvalidPair} stayed invalid`);
+                }
+            }
             return 0;
         };
         return command === 'run-batch' ? withBatchLock(output, execute) : execute();
