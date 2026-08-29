@@ -128,8 +128,11 @@ export function validateProtocol(protocol, { requireLock = true } = {}) {
     }
     if (!protocol.schedule || protocol.schedule.repetitions !== 3
         || protocol.schedule.invalid_pair_retry_limit !== 1
+        || protocol.schedule.pairs_per_batch !== 1
+        || protocol.schedule.batch_unit !== 'matched_pair'
+        || !isNonEmptyString(protocol.schedule.resume_rule)
         || !isNonEmptyString(protocol.schedule.seed)) {
-        fail('review protocol must freeze three repetitions and a seed');
+        fail('review protocol must freeze three repetitions, one matched pair per batch, and a seed');
     }
     if (!protocol.execution || !isNonEmptyString(protocol.execution.model)
         || !isNonEmptyString(protocol.execution.reasoning_effort)
@@ -865,6 +868,76 @@ function ensureNewOutput(path) {
     return output;
 }
 
+function validatePrivateBatchTree(root, path = root) {
+    const metadata = lstatSync(path);
+    if (metadata.isSymbolicLink()) fail(`batch output contains a symlink: ${relative(root, path) || '.'}`);
+    if (metadata.isDirectory()) {
+        if ((metadata.mode & 0o077) !== 0) {
+            fail(`batch output directory is not private: ${relative(root, path) || '.'}`);
+        }
+        for (const entry of readdirSync(path)) validatePrivateBatchTree(root, join(path, entry));
+        return;
+    }
+    if (!metadata.isFile()) fail(`batch output contains a special file: ${relative(root, path)}`);
+    if ((metadata.mode & 0o077) !== 0) fail(`batch output file is not private: ${relative(root, path)}`);
+}
+
+function prepareBatchOutput(path) {
+    const output = resolve(path);
+    if (!existsSync(output)) {
+        privateMkdir(output);
+        return { output, resume: false };
+    }
+    const metadata = lstatSync(output);
+    if (metadata.isSymbolicLink() || !metadata.isDirectory()) {
+        fail(`batch output path must be a real directory: ${output}`);
+    }
+    if ((metadata.mode & 0o077) !== 0) {
+        fail(`batch output directory must not be accessible by group or other users: ${output}`);
+    }
+    const entries = readdirSync(output);
+    const occupied = entries.length > 0;
+    if (occupied) validatePrivateBatchTree(output);
+    else privateMkdir(output);
+    const experimentPath = join(output, 'private', 'experiment.json');
+    const resultsPath = join(output, 'private', 'results.jsonl');
+    const resume = existsSync(experimentPath) || existsSync(resultsPath);
+    if (resume !== (existsSync(experimentPath) && existsSync(resultsPath))) {
+        fail('batch output contains a partial checkpoint; inspect private state before resuming');
+    }
+    if (!resume && occupied) {
+        const allowedRoot = new Set(['preflight.json', 'private']);
+        for (const entry of entries) {
+            if (!allowedRoot.has(entry)) {
+                fail(`batch output contains stale non-checkpoint state: ${entry}`);
+            }
+        }
+        const privateRoot = join(output, 'private');
+        if (existsSync(privateRoot) && readdirSync(privateRoot).length > 0) {
+            fail('batch output contains stale private state before the first checkpoint; inspect it before resuming');
+        }
+    }
+    return { output, resume };
+}
+
+function withBatchLock(output, callback) {
+    const lockPath = join(output, 'private', 'batch.lock');
+    privateMkdir(dirname(lockPath));
+    try {
+        writeFileSync(lockPath, `${JSON.stringify({ pid: process.pid, started_at: new Date().toISOString() })}\n`, {
+            flag: 'wx',
+            mode: 0o600,
+        });
+    } catch (error) {
+        fail(`batch output is locked or cannot be locked: ${lockPath} (${error.code ?? error.message})`);
+    }
+    try {
+        return callback();
+    } finally {
+        rmSync(lockPath, { force: true });
+    }
+}
+
 function installOffline(workspace) {
     return run('pnpm', ['install', '--offline', '--frozen-lockfile', '--ignore-scripts'], {
         cwd: workspace,
@@ -1014,10 +1087,20 @@ function executeCell({
         if (!before.equals(after) || !statusBefore.equals(statusAfter)) {
             invalid.push('reviewer mutated the candidate fixture');
         }
+        const artifacts = {
+            events: relative(output, join(runDir, 'events.jsonl')),
+            stderr: relative(output, join(runDir, 'stderr.txt')),
+            candidate_diff: relative(output, join(runDir, 'candidate.diff')),
+            final: finalText ? relative(output, join(runDir, 'final.json')) : null,
+        };
+        const artifactSha256 = Object.fromEntries(Object.entries(artifacts)
+            .filter(([, path]) => path)
+            .map(([key, path]) => [key, sha256(readFileSync(join(output, path)))]));
         const result = {
             study_id: protocol.study_id,
             case_id: cell.case_id,
             repetition: cell.repetition,
+            pair_index: cell.pair_index,
             arm: cell.arm,
             cell_id: cell.cell_id,
             attempt,
@@ -1032,12 +1115,8 @@ function executeCell({
             usage: parsed.usage,
             fixture: fixture.history,
             treatment_guidance_read: guidance.read,
-            artifacts: {
-                events: relative(output, join(runDir, 'events.jsonl')),
-                stderr: relative(output, join(runDir, 'stderr.txt')),
-                candidate_diff: relative(output, join(runDir, 'candidate.diff')),
-                final: finalText ? relative(output, join(runDir, 'final.json')) : null,
-            },
+            artifacts,
+            artifact_sha256: artifactSha256,
         };
         privateWrite(join(runDir, 'result.json'), `${JSON.stringify(result, null, 2)}\n`);
         return result;
@@ -1068,6 +1147,136 @@ export function acceptedResults(protocol, results) {
         }
     }
     return latestValid;
+}
+
+function readResults(path) {
+    if (!existsSync(path)) fail(`missing resumable results: ${path}`);
+    const text = readFileSync(path, 'utf8').trim();
+    if (!text) return [];
+    return text.split('\n').map((line, index) => {
+        try {
+            return JSON.parse(line);
+        } catch (error) {
+            fail(`invalid resumable results JSON at line ${index + 1}: ${error.message}`);
+        }
+    });
+}
+
+function expectedArtifacts(pair, cell, result) {
+    const runName = `${String(pair.pair_index).padStart(2, '0')}-${cell.cell_id}-a${result.attempt}`;
+    const root = join('private', 'runs', runName);
+    return {
+        events: join(root, 'events.jsonl'),
+        stderr: join(root, 'stderr.txt'),
+        candidate_diff: join(root, 'candidate.diff'),
+        final: result.artifacts?.final === null ? null : join(root, 'final.json'),
+    };
+}
+
+function validatePersistedResult({ output, experiment, pair, cell, attempt, result }) {
+    if (!result || typeof result !== 'object' || Array.isArray(result)) {
+        fail(`resumable result for pair ${pair.pair_index} is not an object`);
+    }
+    const expectedIdentity = {
+        study_id: experiment.study_id,
+        case_id: pair.case_id,
+        repetition: pair.repetition,
+        pair_index: pair.pair_index,
+        arm: cell.arm,
+        cell_id: cell.cell_id,
+        attempt,
+        model: experiment.model,
+        reasoning_effort: experiment.reasoning_effort,
+        codex_version: experiment.codex_version,
+    };
+    for (const [key, expected] of Object.entries(expectedIdentity)) {
+        if (result[key] !== expected) {
+            fail(`resumable result mismatch for pair ${pair.pair_index} ${cell.arm}: ${key}`);
+        }
+    }
+    if (typeof result.valid !== 'boolean' || !Array.isArray(result.invalid_reasons)
+        || !Number.isSafeInteger(result.elapsed_ms) || result.elapsed_ms < 0) {
+        fail(`resumable result has invalid status fields for pair ${pair.pair_index} ${cell.arm}`);
+    }
+    const artifacts = expectedArtifacts(pair, cell, result);
+    if (stableJson(result.artifacts) !== stableJson(artifacts)) {
+        fail(`resumable result has unexpected artifact paths for pair ${pair.pair_index} ${cell.arm}`);
+    }
+    const paths = [...Object.values(artifacts).filter(Boolean), join(
+        'private',
+        'runs',
+        `${String(pair.pair_index).padStart(2, '0')}-${cell.cell_id}-a${attempt}`,
+        'result.json',
+    )];
+    for (const artifact of paths) {
+        const path = resolve(output, artifact);
+        ensureInside(output, path);
+        if (!existsSync(path) || lstatSync(path).isSymbolicLink() || !lstatSync(path).isFile()) {
+            fail(`missing or unsafe resumable artifact: ${artifact}`);
+        }
+        ensureInside(realpathSync(output), realpathSync(path));
+        if ((lstatSync(path).mode & 0o077) !== 0) fail(`resumable artifact is not private: ${artifact}`);
+    }
+    const actualHashes = Object.fromEntries(Object.entries(artifacts)
+        .filter(([, path]) => path)
+        .map(([key, path]) => [key, sha256(readFileSync(resolve(output, path)))]));
+    if (stableJson(result.artifact_sha256) !== stableJson(actualHashes)) {
+        fail(`resumable artifact content changed for pair ${pair.pair_index} ${cell.arm}`);
+    }
+    const resultPath = resolve(output, paths.at(-1));
+    let persisted;
+    try { persisted = JSON.parse(readFileSync(resultPath, 'utf8')); }
+    catch (error) { fail(`invalid resumable result artifact ${relative(output, resultPath)}: ${error.message}`); }
+    if (stableJson(persisted) !== stableJson(result)) {
+        fail(`resumable result index disagrees with ${relative(output, resultPath)}`);
+    }
+}
+
+export function validateExperimentProgress({ protocol, output, experiment, results }) {
+    const schedule = buildSchedule(protocol);
+    let cursor = 0;
+    let completedPairs = 0;
+    let terminalInvalidPair = null;
+    for (const pair of schedule) {
+        if (cursor === results.length) break;
+        const first = results.slice(cursor, cursor + 2);
+        if (first.length !== 2) fail(`resumable results split pair ${pair.pair_index}`);
+        first.forEach((result, index) => validatePersistedResult({
+            output,
+            experiment,
+            pair,
+            cell: pair.cells[index],
+            attempt: 1,
+            result,
+        }));
+        cursor += 2;
+        if (first.every((result) => result.valid)) {
+            completedPairs += 1;
+            continue;
+        }
+        const retry = results.slice(cursor, cursor + 2);
+        if (retry.length !== 2) fail(`resumable results split retry for pair ${pair.pair_index}`);
+        retry.forEach((result, index) => validatePersistedResult({
+            output,
+            experiment,
+            pair,
+            cell: pair.cells[index],
+            attempt: 2,
+            result,
+        }));
+        cursor += 2;
+        if (retry.every((result) => result.valid)) completedPairs += 1;
+        else terminalInvalidPair = pair.pair_index;
+        if (terminalInvalidPair !== null) break;
+    }
+    if (cursor !== results.length) {
+        fail('resumable results are not an exact completed prefix of the frozen schedule');
+    }
+    return {
+        completedPairs,
+        terminalInvalidPair,
+        complete: completedPairs === schedule.length,
+    };
 }
 
 function writeScoringArtifacts({ protocol, protocolPath, output, results }) {
@@ -1193,6 +1402,39 @@ function writeScoringArtifacts({ protocol, protocolPath, output, results }) {
     }, null, 2)}\n`);
 }
 
+function writeResults(output, results) {
+    privateWrite(
+        join(output, 'private', 'results.jsonl'),
+        results.length ? `${results.map((result) => JSON.stringify(result)).join('\n')}\n` : '',
+    );
+}
+
+function usageTotals(results) {
+    const totals = {};
+    for (const result of results) {
+        if (!result.usage || typeof result.usage !== 'object' || Array.isArray(result.usage)) continue;
+        for (const [key, value] of Object.entries(result.usage)) {
+            if (typeof value === 'number' && Number.isFinite(value)) totals[key] = (totals[key] ?? 0) + value;
+        }
+    }
+    return totals;
+}
+
+function writeExperimentSummary({ protocol, output, results, progress }) {
+    const latestValid = acceptedResults(protocol, results);
+    const summary = {
+        complete: progress.complete,
+        completed_pairs: progress.completedPairs,
+        total_pairs: buildSchedule(protocol).length,
+        remaining_pairs: buildSchedule(protocol).length - progress.completedPairs,
+        valid_cells: latestValid.size,
+        attempts: results.length,
+        invalid_attempts: results.filter((result) => !result.valid).length,
+    };
+    privateWrite(join(output, 'summary.json'), `${JSON.stringify(summary, null, 2)}\n`);
+    return summary;
+}
+
 function runExperiment({
     protocol,
     protocolPath,
@@ -1204,7 +1446,13 @@ function runExperiment({
     timeoutMs,
     dryRun,
     codexHome,
+    resume = false,
+    maxPairs = Number.POSITIVE_INFINITY,
 }) {
+    const activePairPath = join(output, 'private', 'active-pair.json');
+    if (existsSync(activePairPath)) {
+        fail(`previous batch stopped mid-pair; inspect its private artifacts before removing ${activePairPath}`);
+    }
     const reviewerHome = createReviewerHome({ codexHome, includeAuth: false, codexBin });
     const versionEnv = reviewerEnvironment({ reviewerHome, scratch: privateDirectory('cycle-review-version-') });
     let version;
@@ -1223,9 +1471,38 @@ function runExperiment({
         codex_version: version,
         schedule,
     };
-    privateWrite(join(output, 'private', 'experiment.json'), `${JSON.stringify(experiment, null, 2)}\n`);
-    const results = [];
-    for (const pair of schedule) {
+    const experimentPath = join(output, 'private', 'experiment.json');
+    const resultsPath = join(output, 'private', 'results.jsonl');
+    let results;
+    if (resume) {
+        if (!existsSync(experimentPath)) fail(`missing resumable experiment: ${experimentPath}`);
+        let persistedExperiment;
+        try { persistedExperiment = JSON.parse(readFileSync(experimentPath, 'utf8')); }
+        catch (error) { fail(`invalid resumable experiment: ${error.message}`); }
+        if (stableJson(persistedExperiment) !== stableJson(experiment)) {
+            fail('resumable experiment does not match the frozen protocol, model, effort, Codex version, or schedule');
+        }
+        results = readResults(resultsPath);
+    } else {
+        if (existsSync(experimentPath) || existsSync(resultsPath)) fail('new experiment output already contains state');
+        privateWrite(experimentPath, `${JSON.stringify(experiment, null, 2)}\n`);
+        results = [];
+        writeResults(output, results);
+    }
+    let progress = validateExperimentProgress({ protocol, output, experiment, results });
+    if (progress.terminalInvalidPair !== null) {
+        fail(`experiment is terminally incomplete at pair ${progress.terminalInvalidPair}`);
+    }
+    if (progress.complete) fail('experiment is already complete');
+    if (existsSync(join(output, 'scoring'))) fail('incomplete experiment unexpectedly contains scoring artifacts');
+    const beforeCount = results.length;
+    const invocationStarted = Date.now();
+    const selectedPairs = schedule.slice(progress.completedPairs, progress.completedPairs + maxPairs);
+    for (const pair of selectedPairs) {
+        privateWrite(activePairPath, `${JSON.stringify({
+            pair_index: pair.pair_index,
+            started_at: new Date().toISOString(),
+        }, null, 2)}\n`);
         let pairResults = pair.cells.map((cell) => executeCell({
             protocol,
             protocolPath,
@@ -1259,24 +1536,33 @@ function runExperiment({
                 codexHome,
             }));
             results.push(...pairResults);
-            if (pairResults.some((result) => !result.valid)) break;
         }
+        writeResults(output, results);
+        progress = validateExperimentProgress({ protocol, output, experiment, results });
+        rmSync(activePairPath, { force: true });
+        writeExperimentSummary({ protocol, output, results, progress });
+        if (progress.terminalInvalidPair !== null) break;
     }
-    privateWrite(
-        join(output, 'private', 'results.jsonl'),
-        `${results.map((result) => JSON.stringify(result)).join('\n')}\n`,
-    );
-    const latestValid = acceptedResults(protocol, results);
-    const complete = latestValid.size === 36;
-    privateWrite(join(output, 'summary.json'), `${JSON.stringify({
-        complete,
-        valid_cells: latestValid.size,
-        attempts: results.length,
-        invalid_attempts: results.filter((result) => !result.valid).length,
-    }, null, 2)}\n`);
-    if (!complete) fail(`experiment stopped with ${latestValid.size}/36 valid cells`);
-    writeScoringArtifacts({ protocol, protocolPath, output, results });
-    return results;
+    progress = validateExperimentProgress({ protocol, output, experiment, results });
+    const summary = writeExperimentSummary({ protocol, output, results, progress });
+    if (progress.terminalInvalidPair !== null) {
+        fail(`experiment stopped after the retry for pair ${progress.terminalInvalidPair} stayed invalid`);
+    }
+    if (progress.complete) writeScoringArtifacts({ protocol, protocolPath, output, results });
+    const invocationResults = results.slice(beforeCount);
+    return {
+        results,
+        receipt: {
+            pair_index: selectedPairs[0]?.pair_index ?? null,
+            calls: invocationResults.length,
+            invalid_attempts: invocationResults.filter((result) => !result.valid).length,
+            token_usage: usageTotals(invocationResults),
+            elapsed_ms: Date.now() - invocationStarted,
+            completed_pairs: summary.completed_pairs,
+            remaining_pairs: summary.remaining_pairs,
+            complete: summary.complete,
+        },
+    };
 }
 
 function runOracleCommands(workspace, commands) {
@@ -1451,8 +1737,11 @@ function usage() {
   node eval/review/run.mjs plan
   node eval/review/run.mjs fetch-cache --source <checkout> --allow-network
   node eval/review/run.mjs dry-run --output <new-directory>
+  node eval/review/run.mjs dry-run-batch --output <new-or-resumable-directory>
   node eval/review/run.mjs preflight --source <checkout> --output <new-directory> [--skip-oracles]
   node eval/review/run.mjs run --source <checkout> --output <new-directory>
+       --confirm-protocol-sha256 <sha256> [--codex-home <path>]
+  node eval/review/run.mjs run-batch --source <checkout> --output <new-or-resumable-directory>
        --confirm-protocol-sha256 <sha256> [--codex-home <path>]
 
 Options:
@@ -1508,8 +1797,14 @@ export function main(argv = process.argv.slice(2)) {
     }
     const timeoutMs = Number(values['timeout-ms'] ?? protocol.execution.timeout_ms);
     if (!Number.isSafeInteger(timeoutMs) || timeoutMs < 1) fail('--timeout-ms must be a positive integer');
+    const experimentCommands = ['dry-run', 'dry-run-batch', 'preflight', 'run', 'run-batch'];
+    if (!experimentCommands.includes(command)) fail(`unknown command: ${command}`);
     if (!values.output) fail(`${command} requires --output`);
-    const output = ensureNewOutput(values.output);
+    const batchCommand = command === 'dry-run-batch' || command === 'run-batch';
+    const prepared = batchCommand
+        ? prepareBatchOutput(values.output)
+        : { output: ensureNewOutput(values.output), resume: false };
+    const { output, resume } = prepared;
     if (command === 'dry-run') {
         runExperiment({
             protocol,
@@ -1522,6 +1817,24 @@ export function main(argv = process.argv.slice(2)) {
             dryRun: true,
         });
         return 0;
+    }
+    if (command === 'dry-run-batch') {
+        return withBatchLock(output, () => {
+            const result = runExperiment({
+                protocol,
+                protocolPath,
+                output,
+                codexBin: resolve(values['codex-bin'] ?? DEFAULT_FAKE_CODEX),
+                model: 'fake-review-model',
+                effort: protocol.execution.reasoning_effort,
+                timeoutMs,
+                dryRun: true,
+                resume,
+                maxPairs: protocol.schedule.pairs_per_batch,
+            });
+            console.log(JSON.stringify(result.receipt, null, 2));
+            return 0;
+        });
     }
     if (!values.source) fail(`${command} requires --source`);
     const source = verifySource(values.source, protocol);
@@ -1536,38 +1849,46 @@ export function main(argv = process.argv.slice(2)) {
         });
         return 0;
     }
-    if (command === 'run') {
+    if (command === 'run' || command === 'run-batch') {
         const expected = sha256(readFileSync(protocolPath));
         if (values['confirm-protocol-sha256'] !== expected) {
-            fail(`run requires --confirm-protocol-sha256 ${expected}`);
+            fail(`${command} requires --confirm-protocol-sha256 ${expected}`);
         }
         if (timeoutMs !== protocol.execution.timeout_ms) {
-            fail(`run timeout is frozen at ${protocol.execution.timeout_ms}ms`);
+            fail(`${command} timeout is frozen at ${protocol.execution.timeout_ms}ms`);
         }
-        if (values['skip-oracles']) fail('run cannot skip hidden-oracle preflight');
-        preflight({
-            protocol,
-            protocolPath,
-            source,
-            output,
-            codexBin: values['codex-bin'] ?? 'codex',
-            skipOracles: false,
-        });
-        runExperiment({
-            protocol,
-            protocolPath,
-            source,
-            output,
-            codexBin: values['codex-bin'] ?? 'codex',
-            model: protocol.execution.model,
-            effort: protocol.execution.reasoning_effort,
-            timeoutMs,
-            dryRun: false,
-            codexHome: values['codex-home'],
-        });
-        return 0;
+        if (values['skip-oracles']) fail(`${command} cannot skip hidden-oracle preflight`);
+        const execute = () => {
+            preflight({
+                protocol,
+                protocolPath,
+                source,
+                output,
+                codexBin: values['codex-bin'] ?? 'codex',
+                skipOracles: false,
+            });
+            const result = runExperiment({
+                protocol,
+                protocolPath,
+                source,
+                output,
+                codexBin: values['codex-bin'] ?? 'codex',
+                model: protocol.execution.model,
+                effort: protocol.execution.reasoning_effort,
+                timeoutMs,
+                dryRun: false,
+                codexHome: values['codex-home'],
+                resume,
+                maxPairs: command === 'run-batch'
+                    ? protocol.schedule.pairs_per_batch
+                    : Number.POSITIVE_INFINITY,
+            });
+            if (command === 'run-batch') console.log(JSON.stringify(result.receipt, null, 2));
+            return 0;
+        };
+        return command === 'run-batch' ? withBatchLock(output, execute) : execute();
     }
-    fail(`unknown command: ${command}`);
+    fail(`unhandled command: ${command}`);
 }
 
 function invokedDirectly() {

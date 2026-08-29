@@ -97,17 +97,27 @@ node eval/review/run.mjs preflight \
 
 The fake run exercises the complete seeded schedule, a deliberately invalid cell and paired retry,
 successful content-backed reads of both guidance files, normalization, blinded scoring input, and
-private artifact writing. Preflight
+private artifact writing. `dry-run-batch` exercises the same path one matched pair at a time and
+resumes from the same output directory:
+
+```sh
+node eval/review/run.mjs dry-run-batch --output /tmp/review-eval-dry-batched
+```
+
+Repeat that command 18 times; each successful invocation prints a receipt with reviewer calls,
+invalid attempts, reported token usage, elapsed time, and completed/remaining pairs. The first fake
+pair deliberately retries both arms, so its receipt shows four calls; ordinary pairs show two.
+Preflight
 reconstructs all six one-commit repositories, checks the artifact lock and history truncation,
 probes filesystem isolation, and proves every hidden oracle is green before insertion, red on the
 flaw, and green after repair. It records `scored_model_calls: 0`.
 
-Every scored `run` repeats the full preflight before authenticating or invoking the model. A red
-artifact, oracle, history, or filesystem-isolation check therefore stops before the first scored
-cell. Review commands run through Codex's Linux sandbox with root denied, only the exact fixture and
-Codex runtime readable, and command network disabled. Source/evaluator repositories, sibling temp
-trees, memory, and hidden-oracle sentinels are not mounted. Fixtures have no remotes, tags,
-alternates, reflogs, or later objects.
+Every scored `run` or `run-batch` repeats the full preflight before authenticating or invoking the
+model. A red artifact, oracle, history, or filesystem-isolation check therefore stops before the
+first scored cell. Review commands run through Codex's Linux sandbox with root denied, only the
+exact fixture and Codex runtime readable, and command network disabled. Source/evaluator
+repositories, sibling temp trees, memory, and hidden-oracle sentinels are not mounted. Fixtures
+have no remotes, tags, alternates, reflogs, or later objects.
 
 ### Scored run brake
 
@@ -124,6 +134,26 @@ node eval/review/run.mjs run \
   --output /tmp/review-eval-scored \
   --confirm-protocol-sha256 EXACT_HASH_FROM_ABOVE
 ```
+
+For quota-monitored execution, use `run-batch` with the same output directory and exact hash. Each
+invocation completes exactly one matched pair, including both arms of its single allowed retry, and
+then stops with a receipt:
+
+```sh
+node eval/review/run.mjs run-batch \
+  --source ../release-relay \
+  --output /tmp/review-eval-scored \
+  --confirm-protocol-sha256 EXACT_HASH_FROM_ABOVE
+```
+
+Resume validates an exact completed prefix of the frozen schedule plus the protocol bytes, model,
+effort, Codex version, result index, private per-cell results, artifact paths, and artifact hashes
+before another reviewer call. A lock prevents concurrent batches. An `active-pair.json` marker is
+written before either arm starts and removed only after the complete pair is persisted; if a process
+dies mid-pair, later invocations fail closed so no model call is silently duplicated. Inspect the
+private artifacts and quota state before manually removing a stale marker or lock. Preflight-only
+state from a batch that never reached its first checkpoint can be reused safely with the same
+command and output directory.
 
 Do not commit scored output. Authentication remains only in a mode-0700 disposable Codex home and
 is never copied into candidate fixtures. Reviewer commands inherit no shell environment, cannot

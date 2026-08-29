@@ -10,6 +10,7 @@ import {
     readlinkSync,
     rmSync,
     statSync,
+    symlinkSync,
     writeFileSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -58,6 +59,8 @@ test('review protocol freezes the balanced study and local artifact hashes', () 
     assert.equal(protocol.execution.fixture_commit_time, '2026-08-29T12:00:00Z');
     assert.equal(protocol.execution.subagents, false);
     assert.equal(protocol.execution.command_network, false);
+    assert.equal(protocol.schedule.pairs_per_batch, 1);
+    assert.equal(protocol.schedule.batch_unit, 'matched_pair');
     assert.equal(protocol.scoring.composite_score, false);
     assert.equal(protocol.scoring.scorers, 2);
 
@@ -193,6 +196,9 @@ test('fake reviewer exercises paired retry, guidance evidence, normalization, an
 
         assert.deepEqual(json(join(output, 'summary.json')), {
             complete: true,
+            completed_pairs: 18,
+            total_pairs: 18,
+            remaining_pairs: 0,
             valid_cells: 36,
             attempts: 38,
             invalid_attempts: 1,
@@ -273,11 +279,174 @@ test('a retry cannot combine valid cells from different attempts', { timeout: 12
         }));
         assert.deepEqual(json(join(output, 'summary.json')), {
             complete: false,
+            completed_pairs: 0,
+            total_pairs: 18,
+            remaining_pairs: 18,
             valid_cells: 0,
             attempts: 4,
             invalid_attempts: 2,
         });
         assert.equal(statSync(join(output, 'scoring'), { throwIfNoEntry: false }), undefined);
+    } finally {
+        rmSync(scratch, { recursive: true, force: true });
+    }
+});
+
+test('fake reviewer resumes one complete matched pair per quota-monitored batch', {
+    timeout: 120_000,
+}, () => {
+    const scratch = mkdtempSync(join(tmpdir(), 'cycle-review-batch-test-'));
+    try {
+        const output = join(scratch, 'output');
+        for (let batch = 1; batch <= 18; batch += 1) {
+            const receipt = JSON.parse(execFileSync(process.execPath, [
+                RUNNER,
+                'dry-run-batch',
+                '--output',
+                output,
+            ], {
+                cwd: ROOT,
+                encoding: 'utf8',
+                stdio: 'pipe',
+            }));
+            assert.equal(receipt.pair_index, batch);
+            assert.equal(receipt.calls, batch === 1 ? 4 : 2);
+            assert.equal(receipt.invalid_attempts, batch === 1 ? 1 : 0);
+            assert.equal(receipt.token_usage.input_tokens, receipt.calls * 100);
+            assert.equal(receipt.token_usage.cached_input_tokens, receipt.calls * 25);
+            assert.equal(receipt.token_usage.output_tokens, receipt.calls * 20);
+            assert.equal(receipt.token_usage.reasoning_output_tokens, receipt.calls * 5);
+            assert.equal(receipt.completed_pairs, batch);
+            assert.equal(receipt.remaining_pairs, 18 - batch);
+            assert.equal(receipt.complete, batch === 18);
+            if (batch < 18) assert.equal(statSync(join(output, 'scoring'), { throwIfNoEntry: false }), undefined);
+        }
+        assert.deepEqual(json(join(output, 'summary.json')), {
+            complete: true,
+            completed_pairs: 18,
+            total_pairs: 18,
+            remaining_pairs: 0,
+            valid_cells: 36,
+            attempts: 38,
+            invalid_attempts: 1,
+        });
+        assert.equal(json(join(output, 'scoring', 'manifest.json')).normalized_review_count, 36);
+        assertPrivateTree(output);
+    } finally {
+        rmSync(scratch, { recursive: true, force: true });
+    }
+});
+
+test('batched resume rejects changed checkpoint state before another reviewer call', {
+    timeout: 120_000,
+}, () => {
+    const scratch = mkdtempSync(join(tmpdir(), 'cycle-review-batch-tamper-test-'));
+    try {
+        const output = join(scratch, 'output');
+        execFileSync(process.execPath, [RUNNER, 'dry-run-batch', '--output', output], {
+            cwd: ROOT,
+            encoding: 'utf8',
+            stdio: 'pipe',
+        });
+        const runsPath = join(output, 'private', 'runs');
+        const runCount = readdirSync(runsPath).length;
+        const activePairPath = join(output, 'private', 'active-pair.json');
+        writeFileSync(activePairPath, '{}\n', { mode: 0o600 });
+        assert.throws(() => execFileSync(process.execPath, [
+            RUNNER,
+            'dry-run-batch',
+            '--output',
+            output,
+        ], {
+            cwd: ROOT,
+            encoding: 'utf8',
+            stdio: 'pipe',
+        }));
+        assert.equal(readdirSync(runsPath).length, runCount);
+        rmSync(activePairPath);
+
+        const resultsPath = join(output, 'private', 'results.jsonl');
+        const results = readFileSync(resultsPath, 'utf8').trim().split('\n').map(JSON.parse);
+        results[0].pair_index = 99;
+        writeFileSync(resultsPath, `${results.map((result) => JSON.stringify(result)).join('\n')}\n`);
+
+        assert.throws(() => execFileSync(process.execPath, [
+            RUNNER,
+            'dry-run-batch',
+            '--output',
+            output,
+        ], {
+            cwd: ROOT,
+            encoding: 'utf8',
+            stdio: 'pipe',
+        }));
+        assert.equal(readdirSync(runsPath).length, runCount);
+
+        results[0].pair_index = 1;
+        writeFileSync(resultsPath, `${results.map((result) => JSON.stringify(result)).join('\n')}\n`);
+        const candidatePath = join(output, results[0].artifacts.candidate_diff);
+        writeFileSync(candidatePath, `${readFileSync(candidatePath, 'utf8')}changed after checkpoint\n`);
+        assert.throws(() => execFileSync(process.execPath, [
+            RUNNER,
+            'dry-run-batch',
+            '--output',
+            output,
+        ], {
+            cwd: ROOT,
+            encoding: 'utf8',
+            stdio: 'pipe',
+        }));
+        assert.equal(readdirSync(runsPath).length, runCount);
+    } finally {
+        rmSync(scratch, { recursive: true, force: true });
+    }
+});
+
+test('batched output rejects symlinked state before writing through it', () => {
+    const scratch = mkdtempSync(join(tmpdir(), 'cycle-review-batch-symlink-test-'));
+    try {
+        const output = join(scratch, 'output');
+        const target = join(scratch, 'target');
+        mkdirSync(output, { mode: 0o700 });
+        mkdirSync(target, { mode: 0o700 });
+        symlinkSync(target, join(output, 'private'));
+        assert.throws(() => execFileSync(process.execPath, [
+            RUNNER,
+            'dry-run-batch',
+            '--output',
+            output,
+        ], {
+            cwd: ROOT,
+            encoding: 'utf8',
+            stdio: 'pipe',
+        }));
+        assert.deepEqual(readdirSync(target), []);
+    } finally {
+        rmSync(scratch, { recursive: true, force: true });
+    }
+});
+
+test('batched execution can restart from preflight-only state before the first checkpoint', {
+    timeout: 120_000,
+}, () => {
+    const scratch = mkdtempSync(join(tmpdir(), 'cycle-review-batch-fresh-restart-test-'));
+    try {
+        const output = join(scratch, 'output');
+        mkdirSync(join(output, 'private'), { recursive: true, mode: 0o700 });
+        writeFileSync(join(output, 'preflight.json'), '{}\n', { mode: 0o600 });
+        const receipt = JSON.parse(execFileSync(process.execPath, [
+            RUNNER,
+            'dry-run-batch',
+            '--output',
+            output,
+        ], {
+            cwd: ROOT,
+            encoding: 'utf8',
+            stdio: 'pipe',
+        }));
+        assert.equal(receipt.pair_index, 1);
+        assert.equal(receipt.calls, 4);
+        assert.equal(json(join(output, 'summary.json')).completed_pairs, 1);
     } finally {
         rmSync(scratch, { recursive: true, force: true });
     }

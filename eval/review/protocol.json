@@ -37,6 +37,9 @@
     "seed": "release-relay-review-v1-2026-08-29",
     "repetitions": 3,
     "invalid_pair_retry_limit": 1,
+    "pairs_per_batch": 1,
+    "batch_unit": "matched_pair",
+    "resume_rule": "Each batch invocation completes exactly one matched pair, including its paired retry if needed. Resume only from an exact validated prefix of the frozen schedule; a mid-pair marker or state drift stops before another reviewer call.",
     "invalid_run_rule": "Invalidate and rerun both arms for the same case and repetition; preserve the invalid attempt."
   },
   "execution": {
@@ -81,6 +84,7 @@
       "fixture history or remote leakage",
       "filesystem-isolation probe failure",
       "hidden-oracle fail/pass preflight failure",
+      "resume state, artifact content, model, effort, Codex version, protocol, or schedule mismatch",
       "authentication path or material in a fixture, reviewer command environment, or captured public artifact"
     ],
     "pair_rule": "If either cell is invalid, retain both attempts and rerun the pair once. If either retry is invalid, stop incomplete and score neither attempt from that pair."
@@ -208,7 +212,7 @@
     }
   ],
   "artifact_lock": {
-    "runner_sha256": "30096df14e4f696ceb8227915d9b80a1b64f24991a3660d2255da29f6661d653",
+    "runner_sha256": "75a1174e31bae8ecfe0d76dcb98a8bbae31451b2d5b4ceb4654e801c203e93c5",
     "fake_reviewer_sha256": "ab8ae64aa52dec26608af0196711d89fb7cae0134df53e9b86c8f71d6b9ccc06",
     "census_sha256": "1eb2272dfdb5110663f277cf70d661dbbc487e73f0b71d6f3e9e8b3b7f20e603",
     "common_prompt_sha256": "98bae734100e4316267052c0f466f8f75658be1ef4702edf1d6b1fc31076353e",
