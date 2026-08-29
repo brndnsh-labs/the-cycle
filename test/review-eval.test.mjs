@@ -426,6 +426,71 @@ test('batched output rejects symlinked state before writing through it', () => {
     }
 });
 
+test('an early zero-call batch failure can retry from the same output', { timeout: 120_000 }, () => {
+    const scratch = mkdtempSync(join(tmpdir(), 'cycle-review-batch-early-failure-test-'));
+    try {
+        const output = join(scratch, 'output');
+        assert.throws(() => execFileSync(process.execPath, [
+            RUNNER,
+            'dry-run-batch',
+            '--output',
+            output,
+            '--codex-bin',
+            join(scratch, 'missing-codex'),
+        ], {
+            cwd: ROOT,
+            encoding: 'utf8',
+            stdio: 'pipe',
+        }));
+        assert.deepEqual(readdirSync(join(output, 'private')), []);
+        const receipt = JSON.parse(execFileSync(process.execPath, [
+            RUNNER,
+            'dry-run-batch',
+            '--output',
+            output,
+        ], {
+            cwd: ROOT,
+            encoding: 'utf8',
+            stdio: 'pipe',
+        }));
+        assert.equal(receipt.pair_index, 1);
+        assert.equal(receipt.calls, 4);
+        assert.equal(receipt.completed_pairs, 1);
+    } finally {
+        rmSync(scratch, { recursive: true, force: true });
+    }
+});
+
+test('a terminally invalid batch still reports consumed calls and tokens', { timeout: 120_000 }, () => {
+    const scratch = mkdtempSync(join(tmpdir(), 'cycle-review-batch-invalid-receipt-test-'));
+    try {
+        const output = join(scratch, 'output');
+        let failure;
+        try {
+            execFileSync(process.execPath, [RUNNER, 'dry-run-batch', '--output', output], {
+                cwd: ROOT,
+                env: { ...process.env, CYCLE_REVIEW_FAKE_MODE: 'split-retry' },
+                encoding: 'utf8',
+                stdio: 'pipe',
+            });
+        } catch (error) {
+            failure = error;
+        }
+        assert.ok(failure);
+        const receipt = JSON.parse(failure.stdout);
+        assert.equal(receipt.pair_index, 1);
+        assert.equal(receipt.calls, 4);
+        assert.equal(receipt.invalid_attempts, 2);
+        assert.equal(receipt.token_usage.input_tokens, 400);
+        assert.equal(receipt.completed_pairs, 0);
+        assert.equal(receipt.remaining_pairs, 18);
+        assert.equal(receipt.complete, false);
+        assert.equal(statSync(join(output, 'scoring'), { throwIfNoEntry: false }), undefined);
+    } finally {
+        rmSync(scratch, { recursive: true, force: true });
+    }
+});
+
 test('batched execution can restart from preflight-only state before the first checkpoint', {
     timeout: 120_000,
 }, () => {
