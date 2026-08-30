@@ -1,0 +1,13 @@
+#!/bin/sh
+if [ "$1" = "push" ]; then
+    printf '%s\n' 'CYCLE_PIPELINE_GIT_PUSH:accepted-local-double'
+    exit 0
+fi
+if [ "$1" = "fetch" ]; then
+    printf '%s\n' 'CYCLE_PIPELINE_GIT_FETCH:accepted-local-double'
+    exit 0
+fi
+if [ "$1" = "reset" ] && [ "$2" = "--hard" ] && [ "$3" = "origin/main" ]; then
+    exec /usr/bin/git reset --hard main
+fi
+exec /usr/bin/git "$@"

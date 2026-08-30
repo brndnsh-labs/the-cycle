@@ -1,0 +1,12 @@
+{
+  "case_id": "sik-139",
+  "max_followups_per_stage": 3,
+  "rules": [
+    {
+      "id": "approve-filing",
+      "question_regex": "((approve|file).*(draft|issue)|(draft|issue).*(approve|file)|ready to create)",
+      "answer": "Approved. File the drafted issue and proceed."
+    }
+  ],
+  "default_answer": "Use a five-second grace period after onblocked. Then reject with an actionable close-other-tabs-and-reload error, clear only the still-current cached open generation, allow a later retry, and close an uncancellable late-success connection. Surface one deduplicated app-wide toast. Test the timeout boundary, temporary recovery, retry, late cleanup, and notification."
+}

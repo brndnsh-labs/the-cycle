@@ -1,0 +1,272 @@
+{
+  "version": 1,
+  "study_id": "songsiknow-full-pipeline-pilot-v1",
+  "claim": "For short, underspecified coding requests, a frozen intake-to-cycle workflow can improve verified task completion, decision handling, regression coverage, scope control, and evidence quality relative to direct implementation prompts.",
+  "census_path": "CENSUS.md",
+  "source": {
+    "repository": "https://github.com/brndnsh-labs/songsiknow.git",
+    "pipeline_guidance_commit": "31513e80e7d425bb04aeb71792776c8950cdca6e",
+    "pipeline_guidance_paths": [
+      "AGENTS.md",
+      "CLAUDE.md",
+      ".cycle/config.jsonc",
+      ".agents/skills/DOCTRINE.md",
+      ".agents/skills/FILING.md",
+      ".agents/skills/DELIVERY.md",
+      ".agents/skills/intake/SKILL.md",
+      ".agents/skills/implement/SKILL.md",
+      ".agents/skills/review/SKILL.md",
+      ".agents/skills/patch/SKILL.md",
+      ".agents/skills/done/SKILL.md",
+      ".agents/skills/cycle/SKILL.md"
+    ],
+    "excluded_fixture_paths": [
+      ".agents",
+      ".claude",
+      ".codex",
+      ".cycle",
+      ".git",
+      "AGENTS.md",
+      "CLAUDE.md",
+      "node_modules"
+    ]
+  },
+  "prompts": {
+    "direct_path": "direct-prompt.md",
+    "stage_path": "stage-prompt.md",
+    "turn_schema_path": "turn.schema.json"
+  },
+  "arms": [
+    {
+      "id": "raw-direct",
+      "input": "reconstructed raw request",
+      "workflow": "generic direct implementation"
+    },
+    {
+      "id": "shaped-direct",
+      "input": "exact issue title and body bytes created by the frozen intake session",
+      "workflow": "generic direct implementation"
+    },
+    {
+      "id": "full-cycle",
+      "input": "the same exact issue title and body bytes as shaped-direct",
+      "workflow": "four resumed stages: implement, review, patch, done"
+    }
+  ],
+  "schedule": {
+    "seed": "songsiknow-full-pipeline-pilot-v1-2026-08-30",
+    "case_order": ["sik-133", "sik-131", "sik-139", "sik-123"],
+    "arms_per_case": 3,
+    "cases_per_batch": 1,
+    "invalid_case_retry_limit": 1,
+    "resume_rule": "Each invocation completes exactly one case across intake and all three arms. Resume only from an exact validated prefix. An active-case marker stops before any repeated model turn.",
+    "retry_rule": "Preserve every invalid attempt and retry the entire case once. If the retry is invalid, stop incomplete and do not score either attempt."
+  },
+  "execution": {
+    "model": "gpt-5.6-sol",
+    "reasoning_effort": "high",
+    "codex_version": "codex-cli 0.150.1",
+    "timeout_ms_per_turn": 900000,
+    "fixture_commit_time": "2026-08-30T12:00:00Z",
+    "subagents": false,
+    "command_network": false,
+    "workspace_access": "read-write exact candidate root only",
+    "dependency_install": "full physical copy of the selected local node_modules tree into each workspace; no symlink, hardlink, or shared root",
+    "intake": {
+      "fresh_session": true,
+      "resumable": true,
+      "max_followups_per_stage": 3,
+      "output_contract": "turn.schema.json"
+    },
+    "raw_direct": {
+      "fresh_session": true,
+      "resumable": true,
+      "answer_responder": true
+    },
+    "shaped_direct": {
+      "fresh_session": true,
+      "resumable": true,
+      "answer_responder": true
+    },
+    "full_cycle": {
+      "fresh_session": true,
+      "resumed_stages": ["implement", "review", "patch", "done"],
+      "snapshots_after": ["implement", "review", "patch", "done"],
+      "answer_responder": true
+    }
+  },
+  "scoring": {
+    "schema_path": "score.schema.json",
+    "primary": "Whether the evaluator-owned hidden regression oracle passes against the arm's final source tree.",
+    "process_quality": {
+      "scope_control": "Avoid unrelated production changes and preserve stated non-goals.",
+      "decision_handling": "Identify and resolve material ambiguity without silently inventing policy.",
+      "test_quality": "Add regression coverage that targets the failure mechanism rather than only the happy path.",
+      "evidence_quality": "Report commands and outcomes that are supported by captured execution evidence."
+    },
+    "separate_measures": [
+      "model turns started and completed",
+      "token usage when reported",
+      "elapsed time",
+      "changed paths",
+      "test and gate command evidence",
+      "full-cycle stage deltas"
+    ],
+    "blinding": "After all four cases are valid, deterministically assign opaque case and arm labels. Expose only allowlisted issue text, normalized final diffs, hidden-oracle outcomes, and command evidence to two independent scorers.",
+    "analysis": "Report four matched case tables and qualitative mechanisms. Do not combine measures into one score, claim statistical significance, or infer population prevalence."
+  },
+  "privacy": {
+    "public_allowlist": [
+      "protocol and census",
+      "path-scrubbed preflight summary",
+      "normalized scoring packet and score schema",
+      "reviewed aggregate report"
+    ],
+    "private_only": [
+      "raw events and stderr",
+      "per-turn measures and host paths",
+      "arm ordering and blinding map",
+      "tracker transcript and created issue bytes",
+      "Codex home and authentication symlink"
+    ],
+    "credential_rule": "Codex authentication remains an outer-client symlink in a mode-0700 disposable home. It is never copied into a candidate, inherited by model-generated commands, or persisted before credential-fingerprint scanning."
+  },
+  "invalidation": {
+    "turn": [
+      "nonzero exit or timeout",
+      "malformed JSONL or missing turn.started or turn.completed",
+      "missing or schema-invalid final response",
+      "unmatched question or follow-up limit exceeded"
+    ],
+    "case": [
+      "intake did not create exactly one issue",
+      "shaped-direct and full-cycle did not receive byte-identical issue title and body text",
+      "required full-cycle stage or snapshot is missing",
+      "candidate repository gained a remote, later object, credential, symlinked dependency tree, or writable evaluator asset"
+    ],
+    "experiment": [
+      "artifact-lock mismatch",
+      "hidden-oracle base-fail repair-pass or mutation proof failure",
+      "filesystem or command-network isolation probe failure",
+      "resume state, artifact hash, protocol, model, effort, CLI version, or schedule mismatch"
+    ]
+  },
+  "cases": [
+    {
+      "id": "sik-133",
+      "issue": 133,
+      "title": "Bound raw Stripe webhook bodies",
+      "raw_prompt_path": "raw-prompts/sik-133.md",
+      "canonical_issue_path": "canonical-issues/sik-133.md",
+      "answer_sheet_path": "answers/sik-133.json",
+      "base": "eb1b11c2dd53c542452e1212925ad53dc454821c",
+      "repair": "ef808807a0662f25fa3810101d0eace958bf155d",
+      "repair_paths": [
+        "src/app/api/payments/webhook/route.ts",
+        "src/lib/payments/webhook-body.ts"
+      ],
+      "oracle_paths": ["src/app/api/payments/webhook/route.test.ts"],
+      "oracle_commands": ["npx vitest run src/app/api/payments/webhook/route.test.ts"]
+    },
+    {
+      "id": "sik-131",
+      "issue": 131,
+      "title": "Make FilterPopover clear actions independent",
+      "raw_prompt_path": "raw-prompts/sik-131.md",
+      "canonical_issue_path": "canonical-issues/sik-131.md",
+      "answer_sheet_path": "answers/sik-131.json",
+      "base": "a724994a53b197f3b5467cd634e4925f6c904e8a",
+      "repair": "2ca6aa20eda638bee51bdaec886137eff0b1e2ff",
+      "repair_paths": ["src/components/library/FilterPopover.tsx"],
+      "oracle_paths": ["src/components/library/FilterPopover.test.tsx"],
+      "oracle_commands": ["npx vitest run src/components/library/FilterPopover.test.tsx"]
+    },
+    {
+      "id": "sik-139",
+      "issue": 139,
+      "title": "Bound blocked IndexedDB opens",
+      "raw_prompt_path": "raw-prompts/sik-139.md",
+      "canonical_issue_path": "canonical-issues/sik-139.md",
+      "answer_sheet_path": "answers/sik-139.json",
+      "base": "6de1d1c79b999677896e3366c1d2c707dc233edf",
+      "repair": "142078c3f3b6f5df3d272814162b1c3d6620304b",
+      "repair_paths": [
+        "src/app/layout.tsx",
+        "src/components/layout/StorageBlockedToastMount.tsx",
+        "src/lib/stems/storage-events.ts",
+        "src/lib/stems/store.ts"
+      ],
+      "oracle_paths": [
+        "src/components/layout/StorageBlockedToastMount.test.tsx",
+        "src/lib/stems/store.test.ts"
+      ],
+      "oracle_commands": [
+        "npx vitest run src/lib/stems/store.test.ts src/components/layout/StorageBlockedToastMount.test.tsx"
+      ]
+    },
+    {
+      "id": "sik-123",
+      "issue": 123,
+      "title": "Grow the shared Drawer close target",
+      "raw_prompt_path": "raw-prompts/sik-123.md",
+      "canonical_issue_path": "canonical-issues/sik-123.md",
+      "answer_sheet_path": "answers/sik-123.json",
+      "base": "655d38300d94b724fa3148e0dac5f10165464606",
+      "repair": "6f8bf57d4368b1507feb14228733b6f25d37e215",
+      "repair_paths": ["src/components/ui/drawer.tsx"],
+      "oracle_paths": ["src/components/ui/drawer.test.tsx"],
+      "oracle_commands": ["npx vitest run src/components/ui/drawer.test.tsx"]
+    }
+  ],
+  "artifact_lock": {
+    "runner_sha256": "2fc240e5d0589c630d3c117dcc5006ada5295a56704d5cd272d9355da1453b70",
+    "fake_codex_sha256": "e65f1997e33c6f4a7736a7f2181d87c7279712027d85276ddf1c0f3964723204",
+    "fake_tracker_sha256": "348839290d85bff664edef0474cb148d5b1c46410cb7c3830c45c16c3bb97f97",
+    "fake_git_sha256": "47ec70403d0bf70dd6624d28d2ec9809eac2353a3fbac91b126cd3f0f7929c4f",
+    "census_sha256": "e42323abc27318d48769bdaef231d897645111721454e0b4bacd6265cd164fcc",
+    "direct_prompt_sha256": "a7b38e269d6e8d95ce7c83fa75d2f2d80aa37c1a2a0cf94f3c536d0eccab79cf",
+    "stage_prompt_sha256": "ae218d4ed179519db48150060e7a1bdf46a5958d584498895156a8e0988b5e87",
+    "turn_schema_sha256": "81192f93ffcde962204d333c87270c197553108638b226faa199f52539f6d3d4",
+    "score_schema_sha256": "5b837720daf02407e0a956d2224a1a245478557846dc1ace40ac4a074667d960",
+    "pipeline_guidance_sha256": "5a71931cf22a3afe2f174d4cd4828e7de7f43aa85a7697a01a6fc171f54c7212",
+    "dependency_manifest_sha256": "0933e5e95f2e8a40cadf822593837dfd06821c0ba44e647f4f0d97257aadfd54",
+    "cases": {
+      "sik-133": {
+        "raw_prompt_sha256": "2621d4fd6c8a1edbd9bfa79470abb022fe0c31b5bcc4295b6db99bdd5f1f6029",
+        "canonical_issue_sha256": "904bed1a59740efe017ebca9d58ce4acddceec411b038af615ec7139c8399a75",
+        "answer_sheet_sha256": "120b65add9eac2d3e94215ebd6c1971def847e9acd8b7b40b181d352259f8cd8",
+        "base_tree_sha256": "d727a3b7fccb127ee1b190f4e4c92b0407b59100a8fe25b38ee4a7721dba784a",
+        "repair_patch_sha256": "fce7d8a6bfe1aed81e7669506b38a626efb8ac6c28abea03fd26b6a96f805381",
+        "oracle_patch_sha256": "a1de573a500e04bdfcfed7c05c55e36ac408d831910a2478cded0c7db6b82b2f",
+        "aggregate_sha256": "963d49247afb820d65de04b12b60884108735cd1eaa92878d9630d64a966f29b"
+      },
+      "sik-131": {
+        "raw_prompt_sha256": "3b7c057fe3ddeba5e26242c9d6cbcc57f457c54e632c5fc3db8bf3844ff86966",
+        "canonical_issue_sha256": "de5d69e907ffaf32f4de7c994b332712cb7e461d2c60f8c757a71857afb60da5",
+        "answer_sheet_sha256": "c51df6ae1a207d3a61cf1b41ffbd127b5fc4d179f6498cc54f68797021288a62",
+        "base_tree_sha256": "e3a6786ffc292b1ef3f4a3d190815d51854929024f10f7a8a4617e8d906d7a83",
+        "repair_patch_sha256": "516de23d2f60ce365ee08db07e7d0a46088a9cb19ce606156e84c49f663580bf",
+        "oracle_patch_sha256": "5c5b2ae39845e383f235a8a754237b57c01b35bd95cd9ef0a8a93bb4d4e9376d",
+        "aggregate_sha256": "b864efa134fa9bb51ab5a65e9bc596e02a7e23338134205fe3408e557159e8fe"
+      },
+      "sik-139": {
+        "raw_prompt_sha256": "e4d88af817f2be9042956d389798f50f4e85af9dcc6ae10ae623ada6f09bdd10",
+        "canonical_issue_sha256": "48487cad0f67183e2c6ec551ec983431db265cab78e8227a7bb06a3125425daf",
+        "answer_sheet_sha256": "fe3b336a418bebf9733d220a3c112e67de1c1e1bd2c36e3046c1c10ae4bb446f",
+        "base_tree_sha256": "bf93a178035b3656b6b56d369c46d73dfa6de1462f9f999696199ed39f9c9fd7",
+        "repair_patch_sha256": "b8fe7262699c9332b78af3a85923ad42d4460391d3bbb64617d0c2a1beed8c53",
+        "oracle_patch_sha256": "8224503a867cd90297f14de8b2d2a6fac341604073cf1021d853d06f0944d043",
+        "aggregate_sha256": "6d3ab94877720727e34cae5f206f842fd1baf815c94ca8a3ab3af4b38e7b9117"
+      },
+      "sik-123": {
+        "raw_prompt_sha256": "db21aab495bb398a5b65eb59cfa1d40befb8ca74af9b05ecd28f5e031446afc9",
+        "canonical_issue_sha256": "320ef6e50a877a2bd475e621f5c0f8f4ec4afddaa1986e3c5e78c7061c18e320",
+        "answer_sheet_sha256": "31d473e6b8cf0ff2304e92e099d6bc2cbb28dc2a57075367eda594648b725c4c",
+        "base_tree_sha256": "d4075334bf7bd746e05cf178a27edf040850a1d5f0f3e642b523a3941cb438b2",
+        "repair_patch_sha256": "fefb95eb5813d42dec8a43d98b728fd2844c39aab1986f87808cafbee17e4c9b",
+        "oracle_patch_sha256": "c0b7af5597f4149c03d2f9d175d55fd5f7587429c3379669e139d9c8f17f595e",
+        "aggregate_sha256": "f97fdab35d4832b834ab5072e8f821868b2513623854707b9acd31cd6ed9ba30"
+      }
+    }
+  }
+}
