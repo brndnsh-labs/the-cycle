@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "study_id": "songsiknow-full-pipeline-pilot-v1",
+  "protocol_sha256": "4b6292686119ddb26c7e078b88062045095e80b1710a08ed6841f8e4a1ce7eb3",
+  "files": {
+    "docs/evaluations/full-pipeline-pilot-v1.md": "98cb37007178befa5538935dfb45b9b255bcd172af96684154225cba5614360d",
+    "aggregate.json": "44531793ffa17e2ffe258d66cc930c7df4c538086aca3ec29c432f12893e900d",
+    "preflight.json": "87536b3a2fa7f34d71a56353ed4f13ac92b23c267b2be0d8e3f83649ba6cb918",
+    "summary.json": "f7a6341855c695ece8648c3fa04cee908da39cc7afe482fac476307694e0b995",
+    "scoring/manifest.json": "aa4e73bcbcaab8aa12fe5df69dd5dd805c2651292413777bb8b47f22952732ea",
+    "scoring/scoring-input.json": "e0e99e72fc4afbb9498aafd67b7adce6ee3f636dd198d1667207defbd13a2cd4",
+    "scoring/score.schema.json": "5b837720daf02407e0a956d2224a1a245478557846dc1ace40ac4a074667d960",
+    "scoring/score-a.json": "b43aa80e2ec62db2601123794499a3a0e29e2a76794e89901ba5b7aaee2f2471",
+    "scoring/score-b.json": "f537dd02aa80a035fccaaa7c27eb23c01828cb7004e2d2c0573dc13c9b5879e1",
+    "scoring/score-lock.json": "3ac97b8ade308c6f05a96ae7a9741b2ce6abee3a9195906394fc22fed39291b6"
+  },
+  "excluded_private_classes": [
+    "raw events and stderr",
+    "per-turn records and host paths",
+    "tracker transcripts and created issue bytes",
+    "hidden-oracle contents",
+    "credentials and authentication state",
+    "private ordering and blinding map"
+  ]
+}

@@ -1,0 +1,161 @@
+{
+  "version": 1,
+  "study_id": "songsiknow-full-pipeline-pilot-v1",
+  "protocol_sha256": "4b6292686119ddb26c7e078b88062045095e80b1710a08ed6841f8e4a1ce7eb3",
+  "status": "complete-with-primary-outcome-validity-failure",
+  "execution": {
+    "model": "gpt-5.6-sol",
+    "reasoning_effort": "high",
+    "codex_version": "codex-cli 0.151.0",
+    "valid_cases": 4,
+    "attempts": 5,
+    "invalid_attempts": {
+      "behavioral": 1,
+      "infrastructure": 0
+    }
+  },
+  "primary_outcome": {
+    "reported_by_arm": {
+      "raw-direct": { "pass": 1, "fail": 3, "invalid": 0 },
+      "shaped-direct": { "pass": 1, "fail": 3, "invalid": 0 },
+      "full-cycle": { "pass": 1, "fail": 3, "invalid": 0 }
+    },
+    "post_reveal_validity": {
+      "behavior_compatible_cases": 1,
+      "implementation_coupled_cases": 3,
+      "interpretation": "No comparative verified-completion result is reported."
+    }
+  },
+  "blind_scoring": {
+    "score_lock_sha256": "3ac97b8ade308c6f05a96ae7a9741b2ce6abee3a9195906394fc22fed39291b6",
+    "scorers": [
+      {
+        "id": "pipeline-v3-scorer-a-terra-high",
+        "model": "gpt-5.6-terra",
+        "reasoning_effort": "high",
+        "score_sha256": "b43aa80e2ec62db2601123794499a3a0e29e2a76794e89901ba5b7aaee2f2471"
+      },
+      {
+        "id": "pipeline-v3-scorer-b-gpt55-xhigh",
+        "model": "gpt-5.5",
+        "reasoning_effort": "xhigh",
+        "score_sha256": "f537dd02aa80a035fccaaa7c27eb23c01828cb7004e2d2c0573dc13c9b5879e1"
+      }
+    ],
+    "agreement": {
+      "supplied_outcomes": { "equal": 12, "total": 12 },
+      "process_cells": { "equal": 41, "total": 48 },
+      "process_by_dimension": {
+        "scope_control": { "equal": 10, "total": 12 },
+        "decision_handling": { "equal": 10, "total": 12 },
+        "test_quality": { "equal": 12, "total": 12 },
+        "evidence_quality": { "equal": 9, "total": 12 }
+      }
+    },
+    "paired_case_counts": {
+      "full-cycle_vs_raw-direct": {
+        "scope_control": {
+          "scorer_a": { "better": 0, "equal": 3, "worse": 1 },
+          "scorer_b": { "better": 1, "equal": 2, "worse": 1 }
+        },
+        "decision_handling": {
+          "scorer_a": { "better": 3, "equal": 1, "worse": 0 },
+          "scorer_b": { "better": 3, "equal": 1, "worse": 0 }
+        },
+        "test_quality": {
+          "scorer_a": { "better": 4, "equal": 0, "worse": 0 },
+          "scorer_b": { "better": 4, "equal": 0, "worse": 0 }
+        },
+        "evidence_quality": {
+          "scorer_a": { "better": 1, "equal": 2, "worse": 1 },
+          "scorer_b": { "better": 0, "equal": 4, "worse": 0 }
+        }
+      },
+      "shaped-direct_vs_raw-direct": {
+        "scope_control": {
+          "scorer_a": { "better": 0, "equal": 4, "worse": 0 },
+          "scorer_b": { "better": 1, "equal": 3, "worse": 0 }
+        },
+        "decision_handling": {
+          "scorer_a": { "better": 3, "equal": 1, "worse": 0 },
+          "scorer_b": { "better": 3, "equal": 1, "worse": 0 }
+        },
+        "test_quality": {
+          "scorer_a": { "better": 4, "equal": 0, "worse": 0 },
+          "scorer_b": { "better": 4, "equal": 0, "worse": 0 }
+        },
+        "evidence_quality": {
+          "scorer_a": { "better": 1, "equal": 2, "worse": 1 },
+          "scorer_b": { "better": 1, "equal": 2, "worse": 1 }
+        }
+      },
+      "full-cycle_vs_shaped-direct": {
+        "scope_control": {
+          "scorer_a": { "better": 0, "equal": 3, "worse": 1 },
+          "scorer_b": { "better": 0, "equal": 3, "worse": 1 }
+        },
+        "decision_handling": {
+          "scorer_a": { "better": 0, "equal": 4, "worse": 0 },
+          "scorer_b": { "better": 0, "equal": 4, "worse": 0 }
+        },
+        "test_quality": {
+          "scorer_a": { "better": 0, "equal": 4, "worse": 0 },
+          "scorer_b": { "better": 0, "equal": 4, "worse": 0 }
+        },
+        "evidence_quality": {
+          "scorer_a": { "better": 1, "equal": 2, "worse": 1 },
+          "scorer_b": { "better": 1, "equal": 2, "worse": 1 }
+        }
+      }
+    }
+  },
+  "lifecycle_audit": {
+    "review_findings": 6,
+    "cases_with_findings": 3,
+    "cases_without_findings": 1,
+    "cases_with_post_review_diff_changes": 3,
+    "full_cycle_delivery": "All four done stages stopped before commit or PR on red repository-wide gates."
+  },
+  "valid_attempt_measure_totals": {
+    "shared-intake": {
+      "model_turns": 12,
+      "elapsed_ms": 451678,
+      "input_tokens": 1443105,
+      "cached_input_tokens": 1211136,
+      "output_tokens": 17178,
+      "reasoning_output_tokens": 8109
+    },
+    "raw-direct": {
+      "model_turns": 4,
+      "elapsed_ms": 561230,
+      "input_tokens": 1350388,
+      "cached_input_tokens": 1172224,
+      "output_tokens": 19378,
+      "reasoning_output_tokens": 7816
+    },
+    "shaped-direct": {
+      "model_turns": 4,
+      "elapsed_ms": 1014463,
+      "input_tokens": 2326475,
+      "cached_input_tokens": 2062336,
+      "output_tokens": 36024,
+      "reasoning_output_tokens": 15864
+    },
+    "full-cycle": {
+      "model_turns": 20,
+      "elapsed_ms": 3020910,
+      "input_tokens": 14545748,
+      "cached_input_tokens": 13581312,
+      "output_tokens": 96560,
+      "reasoning_output_tokens": 53153
+    }
+  },
+  "preserved_invalid_attempt_measures": {
+    "model_turns": 3,
+    "elapsed_ms": 92765,
+    "input_tokens": 272753,
+    "cached_input_tokens": 204800,
+    "output_tokens": 3593,
+    "reasoning_output_tokens": 1458
+  }
+}

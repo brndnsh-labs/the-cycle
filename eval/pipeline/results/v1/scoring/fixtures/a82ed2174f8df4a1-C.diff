@@ -1,0 +1,127 @@
+diff --git a/src/components/library/FilterPopover.tsx b/src/components/library/FilterPopover.tsx
+index ad71f58d17d35eabb1866e4ce4fa1b3610adfe42..c5a030fd87ae00ffd1e8fd0ffc05c9958012ae1a 100644
+--- a/src/components/library/FilterPopover.tsx
++++ b/src/components/library/FilterPopover.tsx
+@@ -42,42 +42,51 @@ export function FilterPopover({
+       panelLabel={label}
+       panelStyle={{ minWidth: 184, maxWidth: 280, padding: 6 }}
+       trigger={({ open, toggle, close }) => (
+-        <button
+-          type="button"
+-          onClick={toggle}
+-          aria-expanded={open}
+-          aria-haspopup="true"
+-          className="siknow-press siknow-focus"
++        <div
+           style={{
+             height: 38,
+-            padding: showClear ? '0 6px 0 14px' : '0 11px 0 14px',
+-            display: 'inline-flex', alignItems: 'center', gap: 6,
+-            borderRadius: 'var(--r-full)', cursor: 'pointer',
+-            fontSize: 14, fontWeight: active ? 500 : 400, whiteSpace: 'nowrap',
++            display: 'inline-flex', alignItems: 'center',
++            borderRadius: 'var(--r-full)', whiteSpace: 'nowrap',
+             color: active ? 'var(--accent-ink)' : 'var(--ink-2)',
+             background: active ? 'var(--accent-soft)' : 'var(--surface)',
+             boxShadow: active ? '0 0 0 1px var(--accent)' : 'inset 0 0 0 1px var(--hairline-2)',
+-            border: 'none',
+           }}
+         >
+-          {icon && <Icon name={icon} size={14} />}
+-          {active && summary ? summary : label}
++          <button
++            type="button"
++            onClick={toggle}
++            aria-expanded={open}
++            aria-haspopup="true"
++            className="siknow-press siknow-focus"
++            style={{
++              height: '100%', padding: showClear ? '0 0 0 14px' : '0 11px 0 14px',
++              display: 'inline-flex', alignItems: 'center', gap: 6,
++              borderRadius: 'var(--r-full)', cursor: 'pointer',
++              fontSize: 14, fontWeight: active ? 500 : 400, whiteSpace: 'nowrap',
++              color: 'inherit', background: 'transparent', border: 'none',
++            }}
++          >
++            {icon && <Icon name={icon} size={14} />}
++            {active && summary ? summary : label}
++            {!showClear && (
++              <span aria-hidden style={{ fontSize: 9, opacity: 0.6, marginLeft: 1 }}>▼</span>
++            )}
++          </button>
+           {showClear ? (
+             <button
+               type="button"
+               aria-label={`Clear ${label}`}
+-              onClick={e => { e.stopPropagation(); onClear!(); close() }}
++              onClick={() => { onClear!(); close() }}
++              className="siknow-press siknow-focus"
+               style={{
+                 display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+-                width: 20, height: 20, marginLeft: 1, borderRadius: '50%',
++                width: 32, height: '100%', borderRadius: 'var(--r-full)',
+                 fontSize: 15, lineHeight: 1, color: 'var(--accent-ink)',
+-                border: 'none', background: 'transparent', padding: 0, cursor: 'pointer',
++                border: 'none', background: 'transparent', padding: '0 6px', cursor: 'pointer',
+               }}
+             >×</button>
+-          ) : (
+-            <span aria-hidden style={{ fontSize: 9, opacity: 0.6, marginLeft: 1 }}>▼</span>
+-          )}
+-        </button>
++          ) : null}
++        </div>
+       )}
+     >
+       {children}
+diff --git a/src/components/library/FilterPopover.test.tsx b/src/components/library/FilterPopover.test.tsx
+new file mode 100644
+index 0000000000000000000000000000000000000000..0f07504741f79644144813be56ce6fa91e6cb2c0
+--- /dev/null
++++ b/src/components/library/FilterPopover.test.tsx
+@@ -0,0 +1,45 @@
++// @vitest-environment happy-dom
++import { cleanup, render, screen } from '@testing-library/react'
++import userEvent from '@testing-library/user-event'
++import { afterEach, describe, expect, it, vi } from 'vitest'
++import { FilterPopover } from './FilterPopover'
++
++afterEach(cleanup)
++
++describe('FilterPopover', () => {
++  it('clears an active filter without opening its options', async () => {
++    const user = userEvent.setup()
++    const onClear = vi.fn()
++    render(
++      <FilterPopover label="Tempo" active summary="Tempo: Fast" onClear={onClear}>
++        <span>Tempo options</span>
++      </FilterPopover>,
++    )
++
++    const trigger = screen.getByRole('button', { name: 'Tempo: Fast' })
++    const clear = screen.getByRole('button', { name: 'Clear Tempo' })
++
++    // The clear action must be a sibling control, not an invalid button nested
++    // inside the popover trigger. Browsers repair nested buttons inconsistently.
++    expect(trigger.contains(clear)).toBe(false)
++
++    await user.click(clear)
++
++    expect(onClear).toHaveBeenCalledOnce()
++    expect(screen.queryByRole('menu')).toBeNull()
++  })
++
++  it('still opens the options from the filter label', async () => {
++    const user = userEvent.setup()
++    render(
++      <FilterPopover label="Tempo" active summary="Tempo: Fast" onClear={() => {}}>
++        <span>Tempo options</span>
++      </FilterPopover>,
++    )
++
++    await user.click(screen.getByRole('button', { name: 'Tempo: Fast' }))
++
++    expect(screen.getByRole('menu', { name: 'Tempo' })).not.toBeNull()
++    expect(screen.getByText('Tempo options')).not.toBeNull()
++  })
++})

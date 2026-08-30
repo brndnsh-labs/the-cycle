@@ -1,0 +1,321 @@
+diff --git a/src/components/layout/AppShell.tsx b/src/components/layout/AppShell.tsx
+index dbcf0717d669317b286c01e5a226d43f4c231235..2106618464b4266e2379e4a5dc78c86000e3a8ba 100644
+--- a/src/components/layout/AppShell.tsx
++++ b/src/components/layout/AppShell.tsx
+@@ -12,6 +12,7 @@ import { AnalysisDrainerMount } from './AnalysisDrainerMount'
+ import { DeletedSongsPurgerMount } from './DeletedSongsPurgerMount'
+ import { SyncToastMount } from './SyncToastMount'
+ import { SyncPresenceBanner } from './SyncPresenceBanner'
++import { BlockedDbToastMount } from './BlockedDbToastMount'
+ import { InstallListenerMount } from '@/components/pwa/InstallAffordance'
+ 
+ export async function AppShell({ children }: { children: React.ReactNode }) {
+@@ -45,6 +46,7 @@ export async function AppShell({ children }: { children: React.ReactNode }) {
+       <AnalysisDrainerMount />
+       <DeletedSongsPurgerMount />
+       <SyncToastMount />
++      <BlockedDbToastMount />
+       {paid && <SyncPresenceBanner />}
+       <InstallListenerMount />
+       {/* Sidebar — hidden on mobile */}
+diff --git a/src/lib/stems/store.test.ts b/src/lib/stems/store.test.ts
+index 751d5ce84dd8cdacd93a548ca7531c10acec0f04..a8506789f671caf9d8df737342fb664ea6f5de7d 100644
+--- a/src/lib/stems/store.test.ts
++++ b/src/lib/stems/store.test.ts
+@@ -15,12 +15,13 @@ type FakeRequest = {
+   onsuccess: (() => void) | null
+   onerror: (() => void) | null
+   onupgradeneeded: (() => void) | null
++  onblocked: (() => void) | null
+   result: unknown
+   error: { name: string; message: string } | null
+ }
+ 
+ function fakeOpenRequest(): FakeRequest {
+-  return { onsuccess: null, onerror: null, onupgradeneeded: null, result: null, error: null }
++  return { onsuccess: null, onerror: null, onupgradeneeded: null, onblocked: null, result: null, error: null }
+ }
+ 
+ /** A fake IDBDatabase whose transaction()/objectStore()/get() chain always
+@@ -28,6 +29,7 @@ function fakeOpenRequest(): FakeRequest {
+  *  getSongManifest() to complete its read path. */
+ function fakeDb() {
+   return {
++    close: vi.fn(),
+     objectStoreNames: { contains: () => true },
+     transaction: () => ({
+       objectStore: () => ({
+@@ -68,6 +70,7 @@ function installFakeIndexedDB(behavior: (callCount: number, req: FakeRequest) =>
+ }
+ 
+ afterEach(() => {
++  vi.useRealTimers()
+   // @ts-expect-error - test-only cleanup of the fake global
+   delete globalThis.indexedDB
+ })
+@@ -156,4 +159,93 @@ describe('openDb (via getSongManifest)', () => {
+       ['analysis', 'artwork', 'manifests', 'overrides', 'pending-sources', 'stems', 'originals'].sort(),
+     )
+   })
++
++  it('waits five seconds after onblocked, then rejects concurrent callers with one recovery notification', async () => {
++    vi.useFakeTimers()
++    const getOpenCallCount = installFakeIndexedDB((_callCount, req) => req.onblocked?.())
++    const { getSongManifest } = await import('./store')
++    const { subscribeToBlockedDbOpen } = await import('./db-open-notifications')
++    const notifications: Array<{ generation: number; message: string }> = []
++    const unsubscribe = subscribeToBlockedDbOpen((notification) => notifications.push(notification))
++
++    const first = getSongManifest('song-1')
++    const second = getSongManifest('song-2')
++    const firstRejection = expect(first).rejects.toThrow(/close other Songs I Know tabs and reload/i)
++    const secondRejection = expect(second).rejects.toThrow(/close other Songs I Know tabs and reload/i)
++    let settled = false
++    void first.finally(() => { settled = true }).catch(() => {})
++
++    await vi.advanceTimersByTimeAsync(4_999)
++    expect(settled).toBe(false)
++    expect(notifications).toEqual([])
++    expect(getOpenCallCount()).toBe(1)
++
++    await vi.advanceTimersByTimeAsync(1)
++    await firstRejection
++    await secondRejection
++    expect(notifications).toHaveLength(1)
++    expect(notifications[0].message).toMatch(/close other Songs I Know tabs and reload/i)
++    unsubscribe()
++  })
++
++  it('succeeds without notifying when a blocked open clears during the grace period', async () => {
++    vi.useFakeTimers()
++    let openRequest: FakeRequest | null = null
++    installFakeIndexedDB((_callCount, req) => {
++      openRequest = req
++      req.onblocked?.()
++    })
++    const { getSongManifest } = await import('./store')
++    const { subscribeToBlockedDbOpen } = await import('./db-open-notifications')
++    const listener = vi.fn()
++    const unsubscribe = subscribeToBlockedDbOpen(listener)
++
++    const manifest = getSongManifest('song-1')
++    await vi.advanceTimersByTimeAsync(4_999)
++    const db = fakeDb()
++    openRequest!.result = db
++    openRequest!.onsuccess?.()
++
++    await expect(manifest).resolves.toBeNull()
++    await vi.advanceTimersByTimeAsync(1)
++    expect(listener).not.toHaveBeenCalled()
++    expect(db.close).not.toHaveBeenCalled()
++    unsubscribe()
++  })
++
++  it('retries after timeout and closes a late stale success without replacing the newer cache', async () => {
++    vi.useFakeTimers()
++    const requests: FakeRequest[] = []
++    const newerDb = fakeDb()
++    const getOpenCallCount = installFakeIndexedDB((callCount, req) => {
++      requests.push(req)
++      if (callCount === 1) {
++        req.onblocked?.()
++      } else {
++        req.result = newerDb
++        req.onsuccess?.()
++      }
++    })
++    const { getSongManifest } = await import('./store')
++
++    const timedOut = getSongManifest('song-1')
++    const timeoutRejection = expect(timedOut).rejects.toThrow(/close other Songs I Know tabs and reload/i)
++    await vi.advanceTimersByTimeAsync(5_000)
++    await timeoutRejection
++
++    // Clearing the timed-out generation lets the next caller mint a fresh open.
++    await expect(getSongManifest('song-2')).resolves.toBeNull()
++    expect(getOpenCallCount()).toBe(2)
++
++    // The uncancellable first request is granted later. It must close immediately
++    // and a subsequent call must still reuse generation two's connection.
++    const staleDb = fakeDb()
++    requests[0].result = staleDb
++    requests[0].onsuccess?.()
++    expect(staleDb.close).toHaveBeenCalledOnce()
++
++    await expect(getSongManifest('song-3')).resolves.toBeNull()
++    expect(getOpenCallCount()).toBe(2)
++    expect(newerDb.close).not.toHaveBeenCalled()
++  })
+ })
+diff --git a/src/lib/stems/store.ts b/src/lib/stems/store.ts
+index 0b87d1e0fafd37d0fc65966f28d964a3b65134b8..952f3e9ab72a06faee70e9c81d592867325f28bc 100644
+--- a/src/lib/stems/store.ts
++++ b/src/lib/stems/store.ts
+@@ -17,6 +17,7 @@ import { shiftMeasures } from './measures'
+ import { getBeatOffsetMs } from './beat-offset'
+ import type { SongOverrides } from './overrides'
+ import { normalizeOriginalAudioMime } from '@/lib/import/audio-file-types'
++import { BLOCKED_DB_OPEN_MESSAGE, notifyBlockedDbOpen } from './db-open-notifications'
+ 
+ const DB_NAME = 'songsiknow-stems'
+ // v2 adds the `analysis` store (tempo/key/chords); v3 adds `originals` (opt-in
+@@ -150,6 +151,7 @@ let dbPromise: Promise<IDBDatabase> | null = null
+ // request (e.g. one that resolves/rejects after a newer attempt already
+ // replaced it) can't clobber that newer attempt's cache entry.
+ let dbGeneration = 0
++const BLOCKED_OPEN_GRACE_MS = 5_000
+ 
+ function openDb(): Promise<IDBDatabase> {
+   if (typeof indexedDB === 'undefined') {
+@@ -160,6 +162,32 @@ function openDb(): Promise<IDBDatabase> {
+   const myGeneration = ++dbGeneration
+   dbPromise = new Promise((resolve, reject) => {
+     const req = indexedDB.open(DB_NAME, DB_VERSION)
++    let settled = false
++    let blockedTimer: ReturnType<typeof setTimeout> | null = null
++
++    const clearBlockedTimer = () => {
++      if (blockedTimer !== null) clearTimeout(blockedTimer)
++      blockedTimer = null
++    }
++
++    req.onblocked = () => {
++      // A block is expected to clear briefly while another tab closes its old
++      // connection. Only start the grace period after the browser confirms an
++      // actual block; ordinary opens have no timer at all.
++      if (settled || blockedTimer !== null) return
++      blockedTimer = setTimeout(() => {
++        blockedTimer = null
++        if (settled) return
++        settled = true
++
++        // The IDB request itself cannot be cancelled. Drop only our cache entry
++        // so the next caller may retry; the callback guards below quarantine
++        // whatever this now-stale request eventually does.
++        if (dbGeneration === myGeneration) dbPromise = null
++        notifyBlockedDbOpen(myGeneration)
++        reject(new Error(BLOCKED_DB_OPEN_MESSAGE))
++      }, BLOCKED_OPEN_GRACE_MS)
++    }
+     req.onupgradeneeded = () => {
+       const db = req.result
+       if (!db.objectStoreNames.contains(STORE_STEMS)) db.createObjectStore(STORE_STEMS)
+@@ -171,6 +199,15 @@ function openDb(): Promise<IDBDatabase> {
+       if (!db.objectStoreNames.contains(STORE_OVERRIDES)) db.createObjectStore(STORE_OVERRIDES)
+     }
+     req.onsuccess = () => {
++      if (settled) {
++        // A request that timed out may still be granted later. Never let that
++        // stale connection resolve over a newer generation or remain open and
++        // block a future schema change.
++        req.result.close()
++        return
++      }
++      settled = true
++      clearBlockedTimer()
+       // Close on a version change requested elsewhere (e.g. another tab running
+       // a newer build) so its schema upgrade isn't blocked by this connection.
+       // Null the cached promise too — otherwise openDb() hands back a closed
+@@ -183,6 +220,9 @@ function openDb(): Promise<IDBDatabase> {
+       resolve(req.result)
+     }
+     req.onerror = () => {
++      if (settled) return
++      settled = true
++      clearBlockedTimer()
+       // Don't leave a rejected promise cached — a transient open failure
+       // (e.g. a momentary storage condition) would otherwise permanently
+       // reject every future store call until a full page reload. The one
+diff --git a/src/components/layout/BlockedDbToastMount.test.tsx b/src/components/layout/BlockedDbToastMount.test.tsx
+new file mode 100644
+index 0000000000000000000000000000000000000000..c01a9b0e7d481061ce47d13856bf020c2f94dfb9
+--- /dev/null
++++ b/src/components/layout/BlockedDbToastMount.test.tsx
+@@ -0,0 +1,30 @@
++// @vitest-environment happy-dom
++import { act, cleanup, render } from '@testing-library/react'
++import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
++
++const mocks = vi.hoisted(() => ({ error: vi.fn() }))
++
++vi.mock('sonner', () => ({ toast: { error: mocks.error } }))
++
++import { notifyBlockedDbOpen } from '@/lib/stems/db-open-notifications'
++import { BlockedDbToastMount } from './BlockedDbToastMount'
++
++beforeEach(() => mocks.error.mockReset())
++afterEach(cleanup)
++
++describe('BlockedDbToastMount', () => {
++  it('shows one actionable app-wide error toast per blocked generation', () => {
++    render(<BlockedDbToastMount />)
++
++    act(() => {
++      notifyBlockedDbOpen(101)
++      notifyBlockedDbOpen(101)
++    })
++
++    expect(mocks.error).toHaveBeenCalledOnce()
++    expect(mocks.error).toHaveBeenCalledWith(
++      expect.stringMatching(/close other Songs I Know tabs and reload/i),
++      expect.objectContaining({ id: 'blocked-db-open-101' }),
++    )
++  })
++})
+diff --git a/src/components/layout/BlockedDbToastMount.tsx b/src/components/layout/BlockedDbToastMount.tsx
+new file mode 100644
+index 0000000000000000000000000000000000000000..dfbe34e2b899aea9c88e8d7f55ce536b312b216a
+--- /dev/null
++++ b/src/components/layout/BlockedDbToastMount.tsx
+@@ -0,0 +1,17 @@
++'use client'
++
++import { useEffect } from 'react'
++import { toast } from 'sonner'
++import { subscribeToBlockedDbOpen } from '@/lib/stems/db-open-notifications'
++
++/** Surfaces recovery guidance for an IndexedDB schema upgrade blocked by another tab. */
++export function BlockedDbToastMount() {
++  useEffect(() => subscribeToBlockedDbOpen(({ generation, message }) => {
++    toast.error(message, {
++      id: `blocked-db-open-${generation}`,
++      duration: 10_000,
++    })
++  }), [])
++
++  return null
++}
+diff --git a/src/lib/stems/db-open-notifications.ts b/src/lib/stems/db-open-notifications.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..6576a2b63869ff1e117d2313dc6b5669dc5516df
+--- /dev/null
++++ b/src/lib/stems/db-open-notifications.ts
+@@ -0,0 +1,28 @@
++export const BLOCKED_DB_OPEN_MESSAGE =
++  'Songs I Know could not update its local database. Close other Songs I Know tabs and reload this page.'
++
++export type BlockedDbOpenNotification = {
++  generation: number
++  message: string
++}
++
++type Listener = (notification: BlockedDbOpenNotification) => void
++
++const listeners = new Set<Listener>()
++const publishedGenerations = new Set<number>()
++
++/** Publish at most one recovery notification for each IndexedDB open attempt. */
++export function notifyBlockedDbOpen(generation: number): void {
++  if (publishedGenerations.has(generation)) return
++  publishedGenerations.add(generation)
++
++  const notification = { generation, message: BLOCKED_DB_OPEN_MESSAGE }
++  listeners.forEach((listener) => {
++    try { listener(notification) } catch { /* one toast listener must not starve the rest */ }
++  })
++}
++
++export function subscribeToBlockedDbOpen(listener: Listener): () => void {
++  listeners.add(listener)
++  return () => listeners.delete(listener)
++}

@@ -1,0 +1,136 @@
+{
+  "study_id": "songsiknow-full-pipeline-pilot-v1",
+  "protocol_sha256": "4b6292686119ddb26c7e078b88062045095e80b1710a08ed6841f8e4a1ce7eb3",
+  "artifact_lock": "pass",
+  "codex_version": "codex-cli 0.151.0",
+  "config": {
+    "strict_config": "pass",
+    "authentication": "absent",
+    "model_calls": 0
+  },
+  "fixtures": [
+    {
+      "case_id": "sik-133",
+      "base_tree_sha256": "d727a3b7fccb127ee1b190f4e4c92b0407b59100a8fe25b38ee4a7721dba784a",
+      "history": {
+        "commits": 1,
+        "remotes": 0,
+        "tags": 0,
+        "alternates": false
+      },
+      "hermetic_build": {
+        "next_bundler": "webpack",
+        "typescript_cli": false,
+        "webpack_build_worker": false,
+        "worker_threads": true
+      }
+    },
+    {
+      "case_id": "sik-131",
+      "base_tree_sha256": "e3a6786ffc292b1ef3f4a3d190815d51854929024f10f7a8a4617e8d906d7a83",
+      "history": {
+        "commits": 1,
+        "remotes": 0,
+        "tags": 0,
+        "alternates": false
+      },
+      "hermetic_build": {
+        "next_bundler": "webpack",
+        "typescript_cli": false,
+        "webpack_build_worker": false,
+        "worker_threads": true
+      }
+    },
+    {
+      "case_id": "sik-139",
+      "base_tree_sha256": "bf93a178035b3656b6b56d369c46d73dfa6de1462f9f999696199ed39f9c9fd7",
+      "history": {
+        "commits": 1,
+        "remotes": 0,
+        "tags": 0,
+        "alternates": false
+      },
+      "hermetic_build": {
+        "next_bundler": "webpack",
+        "typescript_cli": false,
+        "webpack_build_worker": false,
+        "worker_threads": true
+      }
+    },
+    {
+      "case_id": "sik-123",
+      "base_tree_sha256": "d4075334bf7bd746e05cf178a27edf040850a1d5f0f3e642b523a3941cb438b2",
+      "history": {
+        "commits": 1,
+        "remotes": 0,
+        "tags": 0,
+        "alternates": false
+      },
+      "hermetic_build": {
+        "next_bundler": "webpack",
+        "typescript_cli": false,
+        "webpack_build_worker": false,
+        "worker_threads": true
+      }
+    }
+  ],
+  "isolation": {
+    "candidate_workspace_read_write": true,
+    "candidate_git_metadata_write": true,
+    "candidate_local_tmp_write": true,
+    "candidate_dependencies_read_only": true,
+    "candidate_runtime_controls_read_only": true,
+    "evaluator_assets_read_only": true,
+    "denied_host_loopback_listener": true,
+    "denied_host_sentinels": [
+      "source",
+      "evaluator",
+      "sibling",
+      "oracle",
+      "client-home"
+    ],
+    "command_network": false,
+    "filesystem_profile_sha256": "e56c60aa8b1cd1d515892a9ccd8a54954a9d3c089779d84ac524194b136e885f"
+  },
+  "candidate_runtime": {
+    "case_id": "sik-133",
+    "candidate_git_branch_and_commit": "pass",
+    "required_gate": "npm run build",
+    "required_gate_status": "pass",
+    "dependency_instrumentation": "node --import tsx",
+    "hermetic_build": {
+      "next_bundler": "webpack",
+      "typescript_cli": false,
+      "webpack_build_worker": false,
+      "worker_threads": true
+    },
+    "model_calls": 0
+  },
+  "oracles": [
+    {
+      "case_id": "sik-133",
+      "hidden_oracle_on_base": "fail",
+      "hidden_oracle_after_repair": "pass",
+      "accepted_repair_removed_mutation": "fail"
+    },
+    {
+      "case_id": "sik-131",
+      "hidden_oracle_on_base": "fail",
+      "hidden_oracle_after_repair": "pass",
+      "accepted_repair_removed_mutation": "fail"
+    },
+    {
+      "case_id": "sik-139",
+      "hidden_oracle_on_base": "fail",
+      "hidden_oracle_after_repair": "pass",
+      "accepted_repair_removed_mutation": "fail"
+    },
+    {
+      "case_id": "sik-123",
+      "hidden_oracle_on_base": "fail",
+      "hidden_oracle_after_repair": "pass",
+      "accepted_repair_removed_mutation": "fail"
+    }
+  ],
+  "scored_model_calls": 0
+}

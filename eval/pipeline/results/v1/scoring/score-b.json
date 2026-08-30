@@ -1,0 +1,138 @@
+{
+  "version": 1,
+  "scorer": "pipeline-v3-scorer-b-gpt55-xhigh",
+  "cases": [
+    {
+      "packet_id": "d5dd193cc39dc0eb",
+      "outcomes": {
+        "A": "fail",
+        "B": "fail",
+        "C": "fail"
+      },
+      "process_quality": {
+        "A": {
+          "scope_control": "strong",
+          "decision_handling": "strong",
+          "test_quality": "adequate",
+          "evidence_quality": "adequate"
+        },
+        "B": {
+          "scope_control": "adequate",
+          "decision_handling": "strong",
+          "test_quality": "strong",
+          "evidence_quality": "adequate"
+        },
+        "C": {
+          "scope_control": "strong",
+          "decision_handling": "strong",
+          "test_quality": "strong",
+          "evidence_quality": "weak"
+        }
+      },
+      "notes": {
+        "A": "Outcome follows the hidden oracle. The patch is narrowly scoped and adopts the approved 1 MB raw-body limit, with early signature and declared-length checks plus boundary tests, but coverage omits several deceptive-header and existing payment/idempotency paths and the captured broad gate remained red before narrower checks passed.",
+        "B": "Outcome follows the hidden oracle. The bounded reader and tests cover missing signatures, declared and streamed overflow, deceptive lengths, exact-limit raw bytes, and payment behavior, but the diff also changes database error semantics beyond the body-size request; gate evidence is useful but does not include a normal lint command.",
+        "C": "Outcome follows the hidden oracle. The change stays on the requested route and has strong regression coverage for raw bytes, boundary cases, deceptive lengths, and payment behavior, but no captured gate execution was supplied, so the evidence trail is weak despite the focused tests."
+      }
+    },
+    {
+      "packet_id": "a82ed2174f8df4a1",
+      "outcomes": {
+        "A": "fail",
+        "B": "fail",
+        "C": "fail"
+      },
+      "process_quality": {
+        "A": {
+          "scope_control": "strong",
+          "decision_handling": "adequate",
+          "test_quality": "strong",
+          "evidence_quality": "weak"
+        },
+        "B": {
+          "scope_control": "strong",
+          "decision_handling": "adequate",
+          "test_quality": "strong",
+          "evidence_quality": "weak"
+        },
+        "C": {
+          "scope_control": "strong",
+          "decision_handling": "weak",
+          "test_quality": "weak",
+          "evidence_quality": "weak"
+        }
+      },
+      "notes": {
+        "A": "Outcome follows the hidden oracle. The diff cleanly separates the trigger and clear action and adds solid pointer, keyboard, naming, nesting, and target-size tests, though it introduces extra z-index behavior and the 44 px clear target protrudes from the 38 px pill; no gate evidence was captured.",
+        "B": "Outcome follows the hidden oracle. The implementation is scoped and tests the sibling buttons, distinct names, independent pointer and keyboard behavior, stable pill height, and target size, but the accessible-name choice is slightly different from the original clear label and the captured gates omit running the new tests.",
+        "C": "Outcome follows the hidden oracle. The patch removes nested buttons and keeps the visual scope small, but it leaves the clear control below the stated 44 px target and tests only the basic pointer happy paths without keyboard or size coverage; evidence shows static checks but not the focused regression tests."
+      }
+    },
+    {
+      "packet_id": "3997904718867ebe",
+      "outcomes": {
+        "A": "fail",
+        "B": "fail",
+        "C": "fail"
+      },
+      "process_quality": {
+        "A": {
+          "scope_control": "adequate",
+          "decision_handling": "weak",
+          "test_quality": "adequate",
+          "evidence_quality": "weak"
+        },
+        "B": {
+          "scope_control": "strong",
+          "decision_handling": "strong",
+          "test_quality": "strong",
+          "evidence_quality": "weak"
+        },
+        "C": {
+          "scope_control": "strong",
+          "decision_handling": "strong",
+          "test_quality": "strong",
+          "evidence_quality": "weak"
+        }
+      },
+      "notes": {
+        "A": "Outcome follows the hidden oracle. The core store change bounds blocked opens, clears the cached promise, and tests timeout, retry, and success-before-timeout behavior, but it silently uses 10 seconds instead of the intake's five-second decision and omits the requested app-wide recovery notification and late-success regression coverage; no gates were captured.",
+        "B": "Outcome follows the hidden oracle. The change follows the five-second decision, adds one-per-generation notification plumbing and a shell-mounted toast, and tests concurrent callers, early unblock, retry, late success, and toast behavior, but the only captured green command exercises unrelated API tests rather than the changed stems/layout tests.",
+        "C": "Outcome follows the hidden oracle. The implementation stays aligned with the chosen five-second recovery policy, separates notification plumbing cleanly, closes late stale connections, and covers the key timing, retry, concurrency, and toast cases, but no gate evidence was supplied."
+      }
+    },
+    {
+      "packet_id": "09b7ef26a603e7dd",
+      "outcomes": {
+        "A": "pass",
+        "B": "pass",
+        "C": "pass"
+      },
+      "process_quality": {
+        "A": {
+          "scope_control": "strong",
+          "decision_handling": "adequate",
+          "test_quality": "adequate",
+          "evidence_quality": "weak"
+        },
+        "B": {
+          "scope_control": "strong",
+          "decision_handling": "strong",
+          "test_quality": "strong",
+          "evidence_quality": "adequate"
+        },
+        "C": {
+          "scope_control": "strong",
+          "decision_handling": "strong",
+          "test_quality": "strong",
+          "evidence_quality": "weak"
+        }
+      },
+      "notes": {
+        "A": "Outcome follows the hidden oracle. The patch is deliberately narrow and raises the close button to 44 px with a basic click regression, but it does not address long-title flex shrink or header proportions and provides no captured gate evidence.",
+        "B": "Outcome follows the hidden oracle. The implementation handles target size, flex-shrink resistance, title overflow, and header rhythm, with focused tests for long-title layout and close behavior; evidence includes useful targeted checks but also unresolved red full-test attempts.",
+        "C": "Outcome follows the hidden oracle. The change covers the 44 px target, non-shrinking button, header spacing, mobile-width budget, and close behavior with focused tests, but the captured evidence includes a failed test run and only a later build success, leaving verification weaker than the diff itself."
+      }
+    }
+  ]
+}

@@ -1,0 +1,90 @@
+diff --git a/src/components/ui/drawer.tsx b/src/components/ui/drawer.tsx
+index f192c778ff9eaf598c4809e3171ab7cedd6548db..48419313faeb46960902bbb8faa6e57efa208527 100644
+--- a/src/components/ui/drawer.tsx
++++ b/src/components/ui/drawer.tsx
+@@ -112,11 +112,15 @@ export function Drawer({
+         </div>
+ 
+         {/* Header */}
++        {/* 44px target + 6px/4px padding preserves the previous 54px single-line height. */}
+         <div style={{
+           display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+-          padding: '12px 16px 10px', borderBottom: '1px solid var(--hairline)',
++          gap: 8, padding: '6px 16px 4px', borderBottom: '1px solid var(--hairline)',
+         }}>
+-          <span style={{ fontSize: 14, fontWeight: 600, letterSpacing: '-0.01em', color: 'var(--ink)' }}>
++          <span style={{
++            minWidth: 0, overflowWrap: 'anywhere',
++            fontSize: 14, fontWeight: 600, letterSpacing: '-0.01em', color: 'var(--ink)',
++          }}>
+             {title ?? 'Adjust'}
+           </span>
+           <button
+@@ -124,7 +128,7 @@ export function Drawer({
+             onClick={onClose}
+             aria-label="Close"
+             style={{
+-              width: 32, height: 32, borderRadius: 'var(--r-sm)', border: 'none',
++              width: 44, height: 44, flexShrink: 0, borderRadius: 'var(--r-sm)', border: 'none',
+               background: 'none', color: 'var(--ink-3)', cursor: 'pointer',
+               fontSize: 20, lineHeight: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
+             }}
+diff --git a/src/components/ui/drawer.test.tsx b/src/components/ui/drawer.test.tsx
+new file mode 100644
+index 0000000000000000000000000000000000000000..044785b27f2a10c350960880f3dcb680cb74508c
+--- /dev/null
++++ b/src/components/ui/drawer.test.tsx
+@@ -0,0 +1,53 @@
++// @vitest-environment happy-dom
++
++import { cleanup, render, screen } from '@testing-library/react'
++import userEvent from '@testing-library/user-event'
++import { afterEach, describe, expect, it, vi } from 'vitest'
++import { Drawer } from './drawer'
++
++afterEach(cleanup)
++
++describe('Drawer', () => {
++  it('keeps the Close target at 44 px beside a long title at a 390 px viewport', async () => {
++    const onClose = vi.fn()
++    const user = userEvent.setup()
++    const longTitle = 'Adjust the count-in and backing-track balance for this practice session'
++    const viewportWidth = 390
++
++    render(
++      <Drawer open onClose={onClose} title={longTitle}>
++        Drawer content
++      </Drawer>,
++    )
++
++    const dialog = screen.getByRole('dialog', { name: longTitle })
++    const closeButton = screen.getByRole('button', { name: 'Close' })
++    const closeStyle = window.getComputedStyle(closeButton)
++    const headerStyle = window.getComputedStyle(closeButton.parentElement as HTMLElement)
++    const titleStyle = window.getComputedStyle(screen.getByText(longTitle))
++    // Why: happy-dom does not perform layout, so prove the mobile flex budget from
++    // the actual computed dimensions instead of setting an inert window.innerWidth.
++    const titleWidthBudget = viewportWidth
++      - Number.parseFloat(headerStyle.paddingLeft)
++      - Number.parseFloat(headerStyle.paddingRight)
++      - Number.parseFloat(headerStyle.gap)
++      - Number.parseFloat(closeStyle.width)
++
++    expect(dialog.className.split(' ')).toContain('inset-x-0')
++    expect(Number.parseFloat(closeStyle.width)).toBeGreaterThanOrEqual(44)
++    expect(Number.parseFloat(closeStyle.height)).toBeGreaterThanOrEqual(44)
++    expect(closeStyle.flexShrink).toBe('0')
++    expect(titleWidthBudget).toBe(306)
++    expect(
++      Number.parseFloat(closeStyle.height)
++      + Number.parseFloat(headerStyle.paddingTop)
++      + Number.parseFloat(headerStyle.paddingBottom),
++    ).toBe(54)
++    expect(titleStyle.minWidth).toBe('0')
++    expect(titleStyle.overflowWrap).toBe('anywhere')
++    expect(document.activeElement).toBe(dialog)
++
++    await user.click(closeButton)
++    expect(onClose).toHaveBeenCalledOnce()
++  })
++})

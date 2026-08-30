@@ -1,0 +1,85 @@
+diff --git a/src/components/ui/drawer.tsx b/src/components/ui/drawer.tsx
+index f192c778ff9eaf598c4809e3171ab7cedd6548db..154d5b25cd31894a37e548833ec4ea1e54a82cfd 100644
+--- a/src/components/ui/drawer.tsx
++++ b/src/components/ui/drawer.tsx
+@@ -113,10 +113,15 @@ export function Drawer({
+ 
+         {/* Header */}
+         <div style={{
+-          display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+-          padding: '12px 16px 10px', borderBottom: '1px solid var(--hairline)',
++          display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8,
++          // Keep the header's existing 54px rhythm after enlarging the close
++          // target, and keep its icon centered at the same distance from the edge.
++          padding: '6px 10px 4px 16px', borderBottom: '1px solid var(--hairline)',
+         }}>
+-          <span style={{ fontSize: 14, fontWeight: 600, letterSpacing: '-0.01em', color: 'var(--ink)' }}>
++          <span style={{
++            minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
++            fontSize: 14, fontWeight: 600, letterSpacing: '-0.01em', color: 'var(--ink)',
++          }}>
+             {title ?? 'Adjust'}
+           </span>
+           <button
+@@ -124,7 +129,7 @@ export function Drawer({
+             onClick={onClose}
+             aria-label="Close"
+             style={{
+-              width: 32, height: 32, borderRadius: 'var(--r-sm)', border: 'none',
++              width: 44, height: 44, flexShrink: 0, borderRadius: 'var(--r-sm)', border: 'none',
+               background: 'none', color: 'var(--ink-3)', cursor: 'pointer',
+               fontSize: 20, lineHeight: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
+             }}
+diff --git a/src/components/ui/drawer.test.tsx b/src/components/ui/drawer.test.tsx
+new file mode 100644
+index 0000000000000000000000000000000000000000..4b5cd243dbec920df9b52bc84883ad2a396f6a9c
+--- /dev/null
++++ b/src/components/ui/drawer.test.tsx
+@@ -0,0 +1,47 @@
++// @vitest-environment happy-dom
++
++import { afterEach, describe, expect, it, vi } from 'vitest'
++import { cleanup, render, screen } from '@testing-library/react'
++import userEvent from '@testing-library/user-event'
++import { Drawer } from './drawer'
++
++afterEach(cleanup)
++
++describe('Drawer close button', () => {
++  it('keeps a 44px non-shrinking touch target beside a long title', () => {
++    render(
++      <Drawer
++        open
++        onClose={() => undefined}
++        title="Share an exceptionally long setlist title that must not crowd the close control"
++      >
++        Drawer body
++      </Drawer>,
++    )
++
++    const close = screen.getByRole('button', { name: 'Close' })
++    const style = getComputedStyle(close)
++    const title = screen.getByText(/Share an exceptionally long setlist title/)
++    const titleStyle = getComputedStyle(title)
++    const headerStyle = getComputedStyle(close.parentElement as HTMLElement)
++
++    expect(Number.parseFloat(style.width)).toBeGreaterThanOrEqual(44)
++    expect(Number.parseFloat(style.height)).toBeGreaterThanOrEqual(44)
++    expect(style.flexShrink).toBe('0')
++    expect(Number.parseFloat(titleStyle.minWidth)).toBe(0)
++    expect(titleStyle.overflow).toBe('hidden')
++    expect(titleStyle.textOverflow).toBe('ellipsis')
++    expect(titleStyle.whiteSpace).toBe('nowrap')
++    expect(Number.parseFloat(headerStyle.gap)).toBeGreaterThan(0)
++  })
++
++  it('invokes onClose when clicked', async () => {
++    const onClose = vi.fn()
++    const user = userEvent.setup()
++    render(<Drawer open onClose={onClose} title="Adjust">Drawer body</Drawer>)
++
++    await user.click(screen.getByRole('button', { name: 'Close' }))
++
++    expect(onClose).toHaveBeenCalledTimes(1)
++  })
++})

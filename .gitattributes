@@ -1,0 +1,2 @@
+# Locked evaluation artifacts preserve candidate diff bytes, including their original whitespace.
+eval/pipeline/results/v1/scoring/fixtures/*.diff -whitespace

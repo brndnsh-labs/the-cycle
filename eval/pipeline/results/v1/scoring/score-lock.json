@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "status": "locked-before-reveal",
+  "locked_at": "2026-08-30T20:56:14Z",
+  "protocol_sha256": "4b6292686119ddb26c7e078b88062045095e80b1710a08ed6841f8e4a1ce7eb3",
+  "scoring_input_sha256": "e0e99e72fc4afbb9498aafd67b7adce6ee3f636dd198d1667207defbd13a2cd4",
+  "private_blinding_map_sha256": "41fdd37999206bbe5cc895499a2b193dc30de187c40b3568db0a2e3fc57a0589",
+  "scores": {
+    "a": {
+      "scorer": "pipeline-v3-scorer-a-terra-high",
+      "model": "gpt-5.6-terra",
+      "reasoning_effort": "high",
+      "sha256": "b43aa80e2ec62db2601123794499a3a0e29e2a76794e89901ba5b7aaee2f2471"
+    },
+    "b": {
+      "scorer": "pipeline-v3-scorer-b-gpt55-xhigh",
+      "model": "gpt-5.5",
+      "reasoning_effort": "xhigh",
+      "sha256": "f537dd02aa80a035fccaaa7c27eb23c01828cb7004e2d2c0573dc13c9b5879e1"
+    }
+  }
+}

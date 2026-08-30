@@ -1,0 +1,355 @@
+diff --git a/src/app/api/payments/webhook/route.ts b/src/app/api/payments/webhook/route.ts
+index 4032618328302d0ff412cf42a1718ba267f99ac7..5b2709034cb11ed0261ab20918326be2e7390c66 100644
+--- a/src/app/api/payments/webhook/route.ts
++++ b/src/app/api/payments/webhook/route.ts
+@@ -2,13 +2,83 @@ import { NextRequest, NextResponse } from 'next/server'
+ import { stripe } from '@/lib/payments/stripe'
+ import { createPayment } from '@/lib/db/queries/payments'
+ import { nanoid } from 'nanoid'
++import Database from 'better-sqlite3'
+ import type Stripe from 'stripe'
+ 
++const MAX_WEBHOOK_BODY_BYTES = 1_000_000
++
++function declaredBodyExceedsLimit(value: string | null): boolean {
++  if (value === null || !/^\d+$/.test(value)) return false
++
++  const normalized = value.replace(/^0+/, '') || '0'
++  const limit = String(MAX_WEBHOOK_BODY_BYTES)
++
++  return normalized.length > limit.length
++    || (normalized.length === limit.length && normalized > limit)
++}
++
++async function cancelRequestBody(req: NextRequest): Promise<void> {
++  try {
++    await req.body?.cancel()
++  } catch {
++    // Why: a disconnect during cancellation must not replace the intended 400/413 response.
++  }
++}
++
++async function readBoundedBody(req: NextRequest): Promise<Uint8Array | null> {
++  if (!req.body) return new Uint8Array()
++
++  const reader = req.body.getReader()
++  const chunks: Uint8Array[] = []
++  let totalBytes = 0
++
++  try {
++    while (true) {
++      const { done, value } = await reader.read()
++      if (done) break
++
++      if (totalBytes + value.byteLength > MAX_WEBHOOK_BODY_BYTES) {
++        try {
++          await reader.cancel()
++        } catch {
++          // The response is still 413 even if the client disconnects during cancellation.
++        }
++        return null
++      }
++
++      chunks.push(value)
++      totalBytes += value.byteLength
++    }
++  } finally {
++    reader.releaseLock()
++  }
++
++  const body = new Uint8Array(totalBytes)
++  let offset = 0
++  for (const chunk of chunks) {
++    body.set(chunk, offset)
++    offset += chunk.byteLength
++  }
++
++  return body
++}
++
+ export async function POST(req: NextRequest) {
+-  const rawBody = await req.text()
+   const sig = req.headers.get('stripe-signature')
++  if (!sig) {
++    await cancelRequestBody(req)
++    return NextResponse.json({ error: 'Missing signature' }, { status: 400 })
++  }
+ 
+-  if (!sig) return NextResponse.json({ error: 'Missing signature' }, { status: 400 })
++  if (declaredBodyExceedsLimit(req.headers.get('content-length'))) {
++    await cancelRequestBody(req)
++    return NextResponse.json({ error: 'Request body too large' }, { status: 413 })
++  }
++
++  const rawBody = await readBoundedBody(req)
++  if (rawBody === null) {
++    return NextResponse.json({ error: 'Request body too large' }, { status: 413 })
++  }
+ 
+   let event: Stripe.Event
+   try {
+@@ -43,8 +113,12 @@ export async function POST(req: NextRequest) {
+         status: 'succeeded',
+         createdAt: Date.now(),
+       })
+-    } catch {
+-      // Duplicate webhook delivery — idempotent
++    } catch (error) {
++      // Why: only the unique payment-intent collision is an idempotent replay;
++      // every other DB failure must reach Stripe as a 5xx so it retries.
++      if (!(error instanceof Database.SqliteError) || error.code !== 'SQLITE_CONSTRAINT_UNIQUE') {
++        throw error
++      }
+     }
+   }
+ 
+diff --git a/src/app/api/payments/webhook/route.test.ts b/src/app/api/payments/webhook/route.test.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..5b99a9f3646b992dd37c107a41c251d8e5133b23
+--- /dev/null
++++ b/src/app/api/payments/webhook/route.test.ts
+@@ -0,0 +1,244 @@
++import { beforeEach, describe, expect, it, vi } from 'vitest'
++import { NextRequest } from 'next/server'
++import Database from 'better-sqlite3'
++import type Stripe from 'stripe'
++
++const mocks = vi.hoisted(() => ({
++  constructEvent: vi.fn(),
++  createPayment: vi.fn(),
++  nanoid: vi.fn(),
++}))
++
++vi.mock('@/lib/payments/stripe', () => ({
++  stripe: { webhooks: { constructEvent: mocks.constructEvent } },
++}))
++
++vi.mock('@/lib/db/queries/payments', () => ({
++  createPayment: mocks.createPayment,
++}))
++
++vi.mock('nanoid', () => ({ nanoid: mocks.nanoid }))
++
++const { POST } = await import('@/app/api/payments/webhook/route')
++
++const URL = 'http://localhost:3000/api/payments/webhook'
++const LIMIT = 1_000_000
++
++function makeRequest(
++  body: BodyInit,
++  options: { signature?: string | null; contentLength?: string } = {},
++): NextRequest {
++  const headers = new Headers()
++  if (options.signature !== null) {
++    headers.set('stripe-signature', options.signature ?? 'test-signature')
++  }
++  if (options.contentLength !== undefined) {
++    headers.set('content-length', options.contentLength)
++  }
++
++  return new NextRequest(URL, { method: 'POST', headers, body })
++}
++
++function makeStreamRequest(
++  chunks: Uint8Array[],
++  options: {
++    signature?: string | null
++    contentLength?: string
++    cancel?: (reason?: unknown) => void | PromiseLike<void>
++  } = {},
++): NextRequest {
++  let index = 0
++  const stream = new ReadableStream<Uint8Array>({
++    pull(controller) {
++      const chunk = chunks[index++]
++      if (chunk) controller.enqueue(chunk)
++      else controller.close()
++    },
++    cancel: options.cancel,
++  })
++
++  const headers = new Headers()
++  if (options.signature !== null) {
++    headers.set('stripe-signature', options.signature ?? 'test-signature')
++  }
++  if (options.contentLength !== undefined) {
++    headers.set('content-length', options.contentLength)
++  }
++
++  const init: NonNullable<ConstructorParameters<typeof NextRequest>[1]> = {
++    method: 'POST',
++    headers,
++    body: stream,
++    duplex: 'half',
++  }
++  return new NextRequest(URL, init)
++}
++
++function checkoutEvent(overrides: Partial<Stripe.Checkout.Session> = {}): Stripe.Event {
++  return {
++    type: 'checkout.session.completed',
++    data: {
++      object: {
++        payment_status: 'paid',
++        metadata: { userId: 'user-1' },
++        payment_intent: 'pi_123',
++        customer: 'cus_123',
++        amount_total: 499,
++        ...overrides,
++      } as Stripe.Checkout.Session,
++    },
++  } as Stripe.Event
++}
++
++beforeEach(() => {
++  mocks.constructEvent.mockReset()
++  mocks.createPayment.mockReset()
++  mocks.nanoid.mockReset().mockReturnValue('payment-1')
++  mocks.constructEvent.mockReturnValue({ type: 'unhandled.event' } as unknown as Stripe.Event)
++})
++
++describe('POST /api/payments/webhook body bounds', () => {
++  it('returns 400 for a missing signature without reading the body', async () => {
++    const cancel = vi.fn()
++    const req = makeStreamRequest([
++      new TextEncoder().encode('body must remain unread'),
++    ], { signature: null, cancel })
++    const getReader = vi.spyOn(req.body!, 'getReader')
++
++    const res = await POST(req)
++
++    expect(res.status).toBe(400)
++    expect(getReader).not.toHaveBeenCalled()
++    expect(cancel).toHaveBeenCalledOnce()
++    expect(mocks.constructEvent).not.toHaveBeenCalled()
++  })
++
++  it('returns 413 for a declared body over the limit without reading it', async () => {
++    const cancel = vi.fn().mockRejectedValue(new Error('client disconnected'))
++    const req = makeStreamRequest([
++      new TextEncoder().encode('small actual body'),
++    ], { contentLength: String(LIMIT + 1), cancel })
++    const getReader = vi.spyOn(req.body!, 'getReader')
++
++    const res = await POST(req)
++
++    expect(res.status).toBe(413)
++    expect(getReader).not.toHaveBeenCalled()
++    expect(cancel).toHaveBeenCalledOnce()
++    expect(mocks.constructEvent).not.toHaveBeenCalled()
++  })
++
++  it('returns 413 when an unlabelled stream exceeds the limit', async () => {
++    const req = makeStreamRequest([
++      new Uint8Array(600_000),
++      new Uint8Array(400_001),
++    ])
++
++    const res = await POST(req)
++
++    expect(res.status).toBe(413)
++    expect(mocks.constructEvent).not.toHaveBeenCalled()
++  })
++
++  it('returns 413 when a deceptive Content-Length understates the stream', async () => {
++    const req = makeStreamRequest([
++      new Uint8Array(750_000),
++      new Uint8Array(250_001),
++    ], { contentLength: '12' })
++
++    const res = await POST(req)
++
++    expect(res.status).toBe(413)
++    expect(mocks.constructEvent).not.toHaveBeenCalled()
++  })
++
++  it('returns 413 when an invalid Content-Length accompanies an oversized stream', async () => {
++    const req = makeStreamRequest([
++      new Uint8Array(500_000),
++      new Uint8Array(500_001),
++    ], { contentLength: 'invalid' })
++
++    const res = await POST(req)
++
++    expect(res.status).toBe(413)
++    expect(mocks.constructEvent).not.toHaveBeenCalled()
++  })
++
++  it('passes an exact-limit body to Stripe as byte-for-byte-identical raw bytes', async () => {
++    const body = new Uint8Array(LIMIT)
++    for (let index = 0; index < body.length; index++) body[index] = index % 251
++    const req = makeRequest(body, { contentLength: String(LIMIT) })
++
++    const res = await POST(req)
++
++    expect(res.status).toBe(200)
++    expect(mocks.constructEvent).toHaveBeenCalledOnce()
++    const [receivedBody, signature] = mocks.constructEvent.mock.calls[0]
++    expect(receivedBody).toBeInstanceOf(Uint8Array)
++    expect(receivedBody).toEqual(body)
++    expect(signature).toBe('test-signature')
++  })
++})
++
++describe('POST /api/payments/webhook payment behavior', () => {
++  it('returns 400 when Stripe rejects a malformed signature', async () => {
++    mocks.constructEvent.mockImplementation(() => { throw new Error('bad signature') })
++
++    const res = await POST(makeRequest('{}'))
++
++    expect(res.status).toBe(400)
++    expect(mocks.createPayment).not.toHaveBeenCalled()
++  })
++
++  it('does not record an unpaid checkout session', async () => {
++    mocks.constructEvent.mockReturnValue(checkoutEvent({ payment_status: 'unpaid' }))
++
++    const res = await POST(makeRequest('{}'))
++
++    expect(res.status).toBe(200)
++    await expect(res.json()).resolves.toEqual({ received: true })
++    expect(mocks.createPayment).not.toHaveBeenCalled()
++  })
++
++  it('records a valid paid checkout session', async () => {
++    mocks.constructEvent.mockReturnValue(checkoutEvent())
++
++    const res = await POST(makeRequest('{}'))
++
++    expect(res.status).toBe(200)
++    expect(mocks.createPayment).toHaveBeenCalledWith(expect.objectContaining({
++      id: 'payment-1',
++      userId: 'user-1',
++      stripePaymentIntentId: 'pi_123',
++      stripeCustomerId: 'cus_123',
++      amountCents: 499,
++      status: 'succeeded',
++    }))
++  })
++
++  it('acknowledges duplicate delivery when payment creation conflicts', async () => {
++    mocks.constructEvent.mockReturnValue(checkoutEvent())
++    mocks.createPayment.mockImplementation(() => {
++      throw new Database.SqliteError(
++        'UNIQUE constraint failed: payments.stripe_payment_intent_id',
++        'SQLITE_CONSTRAINT_UNIQUE',
++      )
++    })
++
++    const res = await POST(makeRequest('{}'))
++
++    expect(res.status).toBe(200)
++    await expect(res.json()).resolves.toEqual({ received: true })
++    expect(mocks.createPayment).toHaveBeenCalledOnce()
++  })
++
++  it('propagates non-duplicate DB failures so Stripe retries delivery', async () => {
++    mocks.constructEvent.mockReturnValue(checkoutEvent())
++    mocks.createPayment.mockImplementation(() => {
++      throw new Database.SqliteError('database is locked', 'SQLITE_BUSY')
++    })
++
++    await expect(POST(makeRequest('{}'))).rejects.toMatchObject({ code: 'SQLITE_BUSY' })
++    expect(mocks.createPayment).toHaveBeenCalledOnce()
++  })
++})
