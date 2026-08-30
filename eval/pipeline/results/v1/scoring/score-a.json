@@ -1,0 +1,62 @@
+{
+  "version": 1,
+  "scorer": "pipeline-v3-scorer-a-terra-high",
+  "cases": [
+    {
+      "packet_id": "d5dd193cc39dc0eb",
+      "outcomes": { "A": "fail", "B": "fail", "C": "fail" },
+      "process_quality": {
+        "A": { "scope_control": "strong", "decision_handling": "strong", "test_quality": "adequate", "evidence_quality": "adequate" },
+        "B": { "scope_control": "weak", "decision_handling": "strong", "test_quality": "strong", "evidence_quality": "adequate" },
+        "C": { "scope_control": "strong", "decision_handling": "strong", "test_quality": "strong", "evidence_quality": "weak" }
+      },
+      "notes": {
+        "A": "Focused route-only change preserves raw bytes and tests size boundaries, but omits a regression for the no-signature unread-stream requirement; captured targeted checks support the work despite one failed broad run.",
+        "B": "The bounded-reader implementation and extensive mechanism tests are careful, but it also changes database-error idempotency semantics outside the requested body-limit scope; captured checks are targeted rather than a clean full gate.",
+        "C": "Route-only implementation resolves the stated cap and exercises absent, deceptive, and exact-boundary streams plus preserved payment paths, but supplies no captured gate execution."
+      }
+    },
+    {
+      "packet_id": "a82ed2174f8df4a1",
+      "outcomes": { "A": "fail", "B": "fail", "C": "fail" },
+      "process_quality": {
+        "A": { "scope_control": "strong", "decision_handling": "strong", "test_quality": "strong", "evidence_quality": "weak" },
+        "B": { "scope_control": "strong", "decision_handling": "strong", "test_quality": "strong", "evidence_quality": "adequate" },
+        "C": { "scope_control": "strong", "decision_handling": "weak", "test_quality": "weak", "evidence_quality": "adequate" }
+      },
+      "notes": {
+        "A": "It keeps production changes to the component, makes sibling controls and a 44px clear target explicit, and tests structure plus independent pointer and keyboard behavior; no gate output is supplied.",
+        "B": "The component and tests directly implement sibling accessible controls, independent activation, stable pill height, and the stated target size; lint and type-check evidence is captured, though no test execution is shown.",
+        "C": "The change fixes nesting and basic click behavior but silently leaves the clear control at 32px rather than the required 44px; tests cover only happy-path clicks and the captured lint/type checks do not compensate for that gap."
+      }
+    },
+    {
+      "packet_id": "3997904718867ebe",
+      "outcomes": { "A": "fail", "B": "fail", "C": "fail" },
+      "process_quality": {
+        "A": { "scope_control": "strong", "decision_handling": "weak", "test_quality": "adequate", "evidence_quality": "weak" },
+        "B": { "scope_control": "strong", "decision_handling": "strong", "test_quality": "strong", "evidence_quality": "weak" },
+        "C": { "scope_control": "strong", "decision_handling": "strong", "test_quality": "strong", "evidence_quality": "weak" }
+      },
+      "notes": {
+        "A": "The store-only patch bounds blocked opens and tests timeout/retry behavior, but selects ten seconds instead of the intake's five-second decision and omits the required recovery-notification surface; no gates are captured.",
+        "B": "This follows the selected five-second grace period, generation guard, late-connection close, and shell-mounted recovery toast, with focused tests for timeout, recovery, retry, and toast behavior; the only recorded command runs unrelated API tests.",
+        "C": "The scoped store, notification, and shell changes explicitly handle the chosen timeout, stale success, retry, and one-per-generation UI messaging, with targeted tests for each mechanism; no execution evidence is provided."
+      }
+    },
+    {
+      "packet_id": "09b7ef26a603e7dd",
+      "outcomes": { "A": "pass", "B": "pass", "C": "pass" },
+      "process_quality": {
+        "A": { "scope_control": "strong", "decision_handling": "adequate", "test_quality": "adequate", "evidence_quality": "weak" },
+        "B": { "scope_control": "strong", "decision_handling": "strong", "test_quality": "strong", "evidence_quality": "adequate" },
+        "C": { "scope_control": "strong", "decision_handling": "strong", "test_quality": "strong", "evidence_quality": "adequate" }
+      },
+      "notes": {
+        "A": "The minimal shared-component change stays in scope and proves target size and click closure, but does not address or test flex-shrink and long-title layout behavior; no gate results are supplied.",
+        "B": "It adds non-shrinking dimensions, long-title truncation, and adjusted header spacing with tests for the layout mechanism and click behavior; captured targeted testing, typing, lint, and diff checks support it despite failed broad runs.",
+        "C": "It protects the close target from shrink, budgets the 390px header, and keeps a compact header while exercising the long-title and close interaction; the build passes, while the recorded full test command failed."
+      }
+    }
+  ]
+}

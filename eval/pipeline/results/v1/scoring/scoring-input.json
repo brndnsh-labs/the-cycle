@@ -1,0 +1,259 @@
+{
+  "version": 1,
+  "study_id": "songsiknow-full-pipeline-pilot-v1",
+  "instructions": {
+    "primary": "Whether the evaluator-owned hidden regression oracle passes against the arm's final source tree.",
+    "process_quality": {
+      "scope_control": "Avoid unrelated production changes and preserve stated non-goals.",
+      "decision_handling": "Identify and resolve material ambiguity without silently inventing policy.",
+      "test_quality": "Add regression coverage that targets the failure mechanism rather than only the happy path.",
+      "evidence_quality": "Report commands and outcomes that are supported by captured execution evidence."
+    },
+    "analysis": "Report four matched case tables and qualitative mechanisms. Do not combine measures into one score, claim statistical significance, or infer population prevalence.",
+    "independence": "Two scorers lock separate schema-valid files before the arm map is revealed."
+  },
+  "packets": [
+    {
+      "packet_id": "d5dd193cc39dc0eb",
+      "raw_request": "Protect the Stripe webhook from oversized bodies.\n",
+      "historical_reference_title": "Bound raw Stripe webhook bodies",
+      "historical_reference_issue": "**Why:** `src/app/api/payments/webhook/route.ts:7-15` buffers the entire public request body before checking for the required signature: `const rawBody = await req.text()` runs before `const sig = req.headers.get('stripe-signature')` and the missing-signature return. The deployed Caddy route has no application-specific request-body cap. Stripe verification requires the unchanged raw body, so parsing and re-serializing is unsafe.\n\nFailure scenario: an unauthenticated caller sends concurrent oversized POST bodies to `/api/payments/webhook`. The single PM2 process buffers each complete body before it checks whether a signature exists; forged signatures also reach the unbounded read. This can consume memory and CPU before authentication.\n\n**Touches:** `src/app/api/payments/webhook/route.ts`; bounded raw-body helper and tests.\n\n**Fix (drafted):** Move the `stripe-signature` check before any body read. Propose `MAX_STRIPE_WEBHOOK_BYTES = 1_000_000` for approval. Add a bounded raw-byte reader that rejects a declared `Content-Length` above the cap, streams chunks, stops when cumulative bytes exceed the cap, and returns the unchanged `Buffer`/`Uint8Array` to `constructEvent`. Never call `request.json()` or re-serialize the payload.\n\n**Acceptance:** Missing signature returns 400 without pulling the request stream. A forged-signature body of `MAX + 1` bytes returns 413 without invoking `constructEvent`. A valid SDK-generated signature over an at-or-under-limit raw fixture verifies and preserves existing paid-session/idempotency behavior. Standard gates pass.\n\n**Decision:** Stripe does not publish a webhook payload maximum. Approve the proposed 1MB ceiling, or choose a different operational ceiling. This is a payment-surface §5 brake and requires security review plus a human merge.\n",
+      "intake_produced_title": "Bound Stripe webhook request bodies at 1,000,000 bytes",
+      "intake_produced_issue": "**Why:** `src/app/api/payments/webhook/route.ts` currently calls `req.text()` before checking `stripe-signature`, buffering an unbounded request and converting it to text before Stripe verifies it. Oversized or chunked requests can consume excessive memory on a payment/security-sensitive endpoint.\n\n**Touches:** `src/app/api/payments/webhook/route.ts`; focused webhook route tests (new `route.test.ts` beside the handler if needed).\n\n**Fix (drafted):** Check for `stripe-signature` before reading the request body. Enforce a hard ceiling of exactly 1,000,000 bytes: reject a declared `Content-Length` above the ceiling before consuming the stream, then read and count streamed bytes so absent, invalid, or understated headers cannot bypass the limit. Return HTTP 413 for either declared or streamed overflow. Accumulate only up to the ceiling and pass the exact raw bytes—not decoded or re-encoded text—to `stripe.webhooks.constructEvent`. Preserve paid-session validation, payment creation, and duplicate-delivery idempotency behavior.\n\n**Acceptance:** Requests with no Stripe signature return 400 without reading the body. A declared body over 1,000,000 bytes returns 413. A streamed body over 1,000,000 bytes returns 413 even when `Content-Length` is absent or deceptively smaller. A body of exactly 1,000,000 bytes reaches signature verification with byte-for-byte-identical input. Regression tests cover the boundary and deceptive-header cases, and existing paid, unpaid, malformed, and duplicate webhook behavior remains unchanged. Type-check, lint, unit tests, and production build pass. This touches the Stripe payment/security always-brake surface: implementation must receive security review and remain behind a human merge approval.",
+      "outputs": [
+        {
+          "output_label": "A",
+          "final_diff": "fixtures/d5dd193cc39dc0eb-A.diff",
+          "final_diff_sha256": "9e8acb9046cdd7b8eb29382ac3b4ff20882017e5c481224bd519b9cd5973f91d",
+          "changed_paths": [
+            "src/app/api/payments/webhook/route.test.ts",
+            "src/app/api/payments/webhook/route.ts"
+          ],
+          "hidden_oracle": "fail",
+          "gate_evidence": [
+            {
+              "command": "/usr/bin/zsh -c 'git diff -- src/app/api/payments/webhook/route.ts src/app/api/payments/webhook/route.test.ts && npm test -- --run src/app/api/payments/webhook/route.test.ts'",
+              "exit_code": 0
+            },
+            {
+              "command": "/usr/bin/zsh -c 'npm test && npm run lint'",
+              "exit_code": 1
+            },
+            {
+              "command": "/usr/bin/zsh -c 'npx vitest run src/app/api/payments/webhook/route.test.ts && npm run typecheck:app && npx eslint src/app/api/payments/webhook/route.ts src/app/api/payments/webhook/route.test.ts && git diff --check && git status --short'",
+              "exit_code": 0
+            }
+          ]
+        },
+        {
+          "output_label": "B",
+          "final_diff": "fixtures/d5dd193cc39dc0eb-B.diff",
+          "final_diff_sha256": "e8b9b7459390bcc1db1dd3b10f189fdb9e672bd44a1857981ce525578b437cec",
+          "changed_paths": [
+            "src/app/api/payments/webhook/route.test.ts",
+            "src/app/api/payments/webhook/route.ts"
+          ],
+          "hidden_oracle": "fail",
+          "gate_evidence": [
+            {
+              "command": "/usr/bin/zsh -c 'git diff --check && git diff -- src/app/api/payments/webhook/route.ts src/app/api/payments/webhook/route.test.ts && npx vitest run src/app/api/payments/webhook/route.test.ts'",
+              "exit_code": 0
+            },
+            {
+              "command": "/usr/bin/zsh -c 'git diff --check && npx tsc --noEmit && npx vitest run src/app/api/payments/webhook/route.test.ts'",
+              "exit_code": 0
+            }
+          ]
+        },
+        {
+          "output_label": "C",
+          "final_diff": "fixtures/d5dd193cc39dc0eb-C.diff",
+          "final_diff_sha256": "f23f3f6ff0dc4ed32efb09965e01e2ea401b609463b6e983c26db1a881226e46",
+          "changed_paths": [
+            "src/app/api/payments/webhook/route.test.ts",
+            "src/app/api/payments/webhook/route.ts"
+          ],
+          "hidden_oracle": "fail",
+          "gate_evidence": []
+        }
+      ]
+    },
+    {
+      "packet_id": "a82ed2174f8df4a1",
+      "raw_request": "Fix the filter clear button.\n",
+      "historical_reference_title": "Make FilterPopover clear actions independent",
+      "historical_reference_issue": "**Why:** `src/components/library/FilterPopover.tsx:45-80` renders the active filter's clear `<button>` inside its trigger `<button>`. The exact inner control is `<button type=\"button\" aria-label={\\`Clear ${label}\\`} onClick={e => { e.stopPropagation(); onClear!(); close() }}>×</button>`. An active filter therefore contains invalid nested interactive content. The clear control is also only 20×20px.\n\nFailure scenario: browsers and assistive technology can expose the open-filter and clear-filter actions unpredictably, while a hands-occupied user gets a target far below the repository's established 44px touch floor.\n\n**Touches:** `src/components/library/FilterPopover.tsx`; focused component tests.\n\n**Fix (drafted):** Move the pill background, border, and layout to a non-interactive `inline-flex` wrapper. Render the trigger and `Clear ${label}` action as sibling native buttons. Keep `aria-expanded` and `aria-haspopup=\"menu\"` only on the trigger. Have the clear sibling call `onClear()` and `close()` directly. Give both controls independent focus-visible rings and the clear action a minimum 44×44px target.\n\n**Acceptance:** An active filter renders two sibling buttons with distinct accessible names; neither contains the other. Keyboard users can focus and activate each independently. Clearing does not open the menu; opening does not clear. A regression test covers DOM nesting, names, and both actions; standard gates pass; the pill is checked on a touch device.\n",
+      "intake_produced_title": "Make filter open and clear controls independent, accessible buttons",
+      "intake_produced_issue": "**Why:** `src/components/library/FilterPopover.tsx:45-80` renders the active filter’s Clear button inside the button that opens the popover. Nested native buttons are invalid markup and couple the two actions, so clear/open behavior and keyboard accessibility are unreliable.\n\n**Touches:** `src/components/library/FilterPopover.tsx`; focused FilterPopover regression coverage.\n\n**Fix (drafted):** Render the open-filter trigger and Clear action as sibling native buttons within the same visual pill. Give them distinct accessible names and independent click and keyboard behavior. Preserve the pill’s current visible height while making the Clear hit target at least 44×44 CSS pixels.\n\n**Acceptance:** No button is nested inside another button. The open trigger and Clear action have distinct accessible names. Mouse/touch, Enter, and Space on Clear clear the selected filter without opening the menu; the same interactions on the open trigger open the menu without clearing the filter. The visible pill height does not change when Clear appears, and the Clear target is at least 44×44 CSS pixels. Focused regression tests cover structure, accessible names, independent pointer/keyboard behavior, stable height, and target size.",
+      "outputs": [
+        {
+          "output_label": "A",
+          "final_diff": "fixtures/a82ed2174f8df4a1-A.diff",
+          "final_diff_sha256": "901e21e49b6c9a1143085a178aa835e05149496645b1be2c15402f9d9619188b",
+          "changed_paths": [
+            "src/components/library/FilterPopover.test.tsx",
+            "src/components/library/FilterPopover.tsx"
+          ],
+          "hidden_oracle": "fail",
+          "gate_evidence": []
+        },
+        {
+          "output_label": "B",
+          "final_diff": "fixtures/a82ed2174f8df4a1-B.diff",
+          "final_diff_sha256": "7a036bb1a7e74a6b46c461fbf74dd7adc6e7159de1eafbb1cec6253646a7300f",
+          "changed_paths": [
+            "src/components/library/FilterPopover.test.tsx",
+            "src/components/library/FilterPopover.tsx"
+          ],
+          "hidden_oracle": "fail",
+          "gate_evidence": [
+            {
+              "command": "/usr/bin/zsh -c 'git diff --check && git diff -- src/components/library/FilterPopover.tsx src/components/library/FilterPopover.test.tsx && npx eslint src/components/library/FilterPopover.tsx src/components/library/FilterPopover.test.tsx && npm run typecheck:app'",
+              "exit_code": 0
+            }
+          ]
+        },
+        {
+          "output_label": "C",
+          "final_diff": "fixtures/a82ed2174f8df4a1-C.diff",
+          "final_diff_sha256": "46ec59b8737b7c95c10275f50d4db0b82e130380fa14a883125de29b75dcc302",
+          "changed_paths": [
+            "src/components/library/FilterPopover.test.tsx",
+            "src/components/library/FilterPopover.tsx"
+          ],
+          "hidden_oracle": "fail",
+          "gate_evidence": [
+            {
+              "command": "/usr/bin/zsh -c 'npx eslint src/components/library/FilterPopover.tsx src/components/library/FilterPopover.test.tsx && npm run typecheck:app && git diff --check && git status --short && git diff -- src/components/library/FilterPopover.tsx src/components/library/FilterPopover.test.tsx'",
+              "exit_code": 0
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "packet_id": "3997904718867ebe",
+      "raw_request": "Stop IndexedDB upgrades from hanging forever.\n",
+      "historical_reference_title": "Bound blocked IndexedDB opens",
+      "historical_reference_issue": "**Why:** Found by `audio-stems-reviewer` while reviewing #130 (retry a failed IndexedDB open instead of caching the rejection). `openDb()` (`src/lib/stems/store.ts`) has no `req.onblocked` handler. A blocked open never fires `error` — it stays pending indefinitely — and `if (dbPromise) return dbPromise` hands that pending promise to every caller. `wipeLocalDevice()` already knows about this exact hazard and handles it (`store.ts` — `req.onblocked = () => resolve()`, \"a best-effort wipe must not hang\"); `openDb()` doesn't.\n\nConcrete scenario the file's own comments already anticipate (`store.ts:168-172` — \"a backgrounded phone tab holds a pending source — S8a\"): a frozen/backgrounded tab holds a v6 connection open. A new tab on a newer build (v7) opens → `blocked` → the frozen tab's `onversionchange` never runs to release the lock (it's frozen, not closed) → the new tab's player, library, and sync all hang forever on `openDb()` with no error surfaced to the user.\n\nThis is a distinct failure mode from what #130 fixed — #130 was about a *rejected* open being cached forever; this is about an open that *never settles*.\n\n**Touches:** `src/lib/stems/store.ts` (`openDb()`).\n\n**Fix (sketch):** add `req.onblocked` with a bounded timeout that rejects (and, per #130's generation-guard pattern, nulls `dbPromise` only if it's still the current generation) so the UI can surface \"close other tabs to continue\" instead of spinning silently. Needs a decision on the timeout window and what the calling UI does with the rejection — flagging as needs-decision rather than drafting a fix inline.\n\n**Acceptance:** A blocked `indexedDB.open()` surfaces as a rejected `openDb()` within a bounded time, not an indefinite hang; existing non-blocked paths are unaffected.\n",
+      "intake_produced_title": "Bound blocked IndexedDB upgrades and surface recovery guidance",
+      "intake_produced_issue": "**Why:** `openDb()` caches one `indexedDB.open()` promise (`src/lib/stems/store.ts:147-197`) but does not handle `onblocked`. When another tab holds an older connection during a schema upgrade, every caller can therefore wait forever on the same cached promise with no recovery guidance.\n\n**Touches:** `src/lib/stems/store.ts`; `src/lib/stems/store.test.ts`; an app-wide client toast mount under `src/components/layout/` with its test; `src/components/layout/AppShell.tsx`.\n\n**Fix (drafted):** Start a five-second grace timer only when the current open request fires `onblocked`. If it remains blocked at the boundary, reject with an actionable error telling the user to close other Songs I Know tabs and reload, and clear `dbPromise` only when that request still owns the current `dbGeneration`. This permits a later call to retry. Because an IndexedDB open request cannot be cancelled, guard its later callbacks: if the timed-out request eventually succeeds, close the returned connection instead of resolving or replacing newer state. Cancel the timer when the request settles within the grace period. Emit one deduplicated app-wide notification per blocked generation and surface it through a single shell-mounted error toast.\n\n**Acceptance:** Tests with fake timers prove that (1) the promise remains pending before five seconds and rejects at the five-second boundary with close-other-tabs-and-reload guidance; (2) a block that clears during the grace period succeeds without an error notification; (3) a call after timeout starts and can complete a fresh open; (4) late success from the timed-out request closes that connection and cannot clobber the newer cached generation; and (5) concurrent callers produce one app-wide toast rather than duplicate notifications. Existing transient-error, VersionError, successful-cache, and schema-creation tests remain green.",
+      "outputs": [
+        {
+          "output_label": "A",
+          "final_diff": "fixtures/3997904718867ebe-A.diff",
+          "final_diff_sha256": "9d10b24c9ebc890b5dda212b36fd5c0ae42991e14b1d854272d5e308ddba8ded",
+          "changed_paths": [
+            "src/lib/stems/store.test.ts",
+            "src/lib/stems/store.ts"
+          ],
+          "hidden_oracle": "fail",
+          "gate_evidence": []
+        },
+        {
+          "output_label": "B",
+          "final_diff": "fixtures/3997904718867ebe-B.diff",
+          "final_diff_sha256": "16a33fddab28c88ac58e42e22353d17f3c25b115bf94401b82bf7f24d806ba54",
+          "changed_paths": [
+            "src/components/layout/AppShell.tsx",
+            "src/components/layout/StemsStoreErrorToastMount.test.tsx",
+            "src/components/layout/StemsStoreErrorToastMount.tsx",
+            "src/lib/stems/store.test.ts",
+            "src/lib/stems/store.ts"
+          ],
+          "hidden_oracle": "fail",
+          "gate_evidence": [
+            {
+              "command": "/usr/bin/zsh -c \"WEBAUTHN_ORIGIN=http://localhost:3000 npm test -- 'src/app/api/overrides/[songId]/route.test.ts' 'src/app/api/sync/presence/request/route.test.ts'\"",
+              "exit_code": 0
+            }
+          ]
+        },
+        {
+          "output_label": "C",
+          "final_diff": "fixtures/3997904718867ebe-C.diff",
+          "final_diff_sha256": "ab6e09ba5d4d0121c9b6b80ea1eb9bd9dc343daa296c005cfcf9223a76bbb4b3",
+          "changed_paths": [
+            "src/components/layout/AppShell.tsx",
+            "src/components/layout/BlockedDbToastMount.test.tsx",
+            "src/components/layout/BlockedDbToastMount.tsx",
+            "src/lib/stems/db-open-notifications.ts",
+            "src/lib/stems/store.test.ts",
+            "src/lib/stems/store.ts"
+          ],
+          "hidden_oracle": "fail",
+          "gate_evidence": []
+        }
+      ]
+    },
+    {
+      "packet_id": "09b7ef26a603e7dd",
+      "raw_request": "Make the Drawer Close button easier to tap.\n",
+      "historical_reference_title": "Grow the shared Drawer close target",
+      "historical_reference_issue": "**Why:** `src/components/ui/drawer.tsx:122-131` renders the sheet's Close button at a hardcoded\n`width: 32, height: 32` with no per-consumer override path (`Drawer`'s own `className` prop only\nreaches the panel div, not this button). `Drawer` backs 7 call sites: `FeedbackSection.tsx`,\n`BottomTabs.tsx` (the More menu), `FeedbackDrawer.tsx`, `SessionQueue.tsx` (Up Next), the\nplayer's `AdjustDrawer.tsx`, `Recap.tsx`, `ShareSetlistDialog.tsx` — every one inherits the same\n32×32 target.\n\nFound while verifying #114's practice-session touch-target sweep (`a[href], button, select,\n[role=button]` ≥44×44 at 390px) — the Up Next sheet's Close button failed the sweep. Deliberately\n**not** fixed there: it's shared infrastructure with a much wider blast radius than #114's four\nnamed files, matching that issue's own precedent for \"elsewhere, out of scope.\"\n\n**Touches:** `src/components/ui/drawer.tsx`.\n\n**Fix (drafted):**\n```tsx\n// drawer.tsx:126 — 32×32 → 44×44\nstyle={{\n  width: 44, height: 44, borderRadius: 'var(--r-sm)', border: 'none',\n  background: 'none', color: 'var(--ink-3)', cursor: 'pointer',\n  fontSize: 20, lineHeight: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',\n}}\n```\nThe header row (`drawer.tsx:115-118`) doesn't set `alignItems`, so it defaults to `stretch` —\ngrowing the button will grow the header's rendered height slightly across all 7 consumers. Check\neach surface's header still reads fine after the bump (a `padding` trim on the header row, e.g.\n`'8px 16px 10px'`, may be enough to keep the overall proportions close to today's).\n\n**Acceptance:**\n- Every `Drawer` consumer's Close button measures ≥44×44 at 390px.\n- No layout breakage in any of the 7 call sites (spot-check at least Up Next, the player's Adjust\n  panel, and one Settings dialog).\n\n---\n_Found verifying #114's touch-target sweep, 2026-08-28._\n",
+      "intake_produced_title": "Give the shared Drawer Close button a 44×44 px touch target",
+      "intake_produced_issue": "**Why:** `src/components/ui/drawer.tsx` renders the shared Close button at 32×32 px, below the repository’s 44×44 px touch floor. This makes every Drawer harder to dismiss by touch.\n\n**Touches:** `src/components/ui/drawer.tsx`; a focused Drawer regression test; representative Drawer consumers spot-checked at a 390 px viewport.\n\n**Fix (drafted):** Increase the shared Close button’s touch target to at least 44×44 px, keep it non-shrinking beside long titles, and adjust header spacing so the larger target does not distort the header’s proportions. Preserve the existing icon, accessible name, click behavior, Escape behavior, backdrop behavior, and focus handling. Add a focused regression test covering target dimensions, resistance to flex shrink, and Close-button behavior.\n\n**Acceptance:**\n- The shared Drawer Close button has a rendered touch target of at least 44×44 CSS pixels.\n- Long Drawer titles cannot shrink the Close target below that floor.\n- Header proportions remain consistent with the current design.\n- Clicking Close still invokes `onClose`; existing Escape, backdrop, and focus behavior is unchanged.\n- A focused automated regression test protects the size, non-shrinking layout, and close behavior.\n- Representative Drawer consumers, including a long-title case, are spot-checked at a 390 px viewport with no clipping or overlap.",
+      "outputs": [
+        {
+          "output_label": "A",
+          "final_diff": "fixtures/09b7ef26a603e7dd-A.diff",
+          "final_diff_sha256": "649ccc39daaa0e89916136e66c804b78c3a7a2a1f256fbde118af8df29dae425",
+          "changed_paths": [
+            "src/components/ui/drawer.test.tsx",
+            "src/components/ui/drawer.tsx"
+          ],
+          "hidden_oracle": "pass",
+          "gate_evidence": []
+        },
+        {
+          "output_label": "B",
+          "final_diff": "fixtures/09b7ef26a603e7dd-B.diff",
+          "final_diff_sha256": "d7026313cb23d47e4846277d0a2c6f2e9692aeee7beb47fdc54017ecd477e668",
+          "changed_paths": [
+            "src/components/ui/drawer.test.tsx",
+            "src/components/ui/drawer.tsx"
+          ],
+          "hidden_oracle": "pass",
+          "gate_evidence": [
+            {
+              "command": "/usr/bin/zsh -c 'git diff -- src/components/ui/drawer.tsx src/components/ui/drawer.test.tsx && npm test -- --run src/components/ui/drawer.test.tsx'",
+              "exit_code": 0
+            },
+            {
+              "command": "/usr/bin/zsh -c 'npm test -- --run src/components/ui/drawer.test.tsx && npm test'",
+              "exit_code": 1
+            },
+            {
+              "command": "/usr/bin/zsh -c 'npm test -- --run src/components/ui/drawer.test.tsx && npm test'",
+              "exit_code": 1
+            },
+            {
+              "command": "/usr/bin/zsh -c 'npm test -- --run src/components/ui/drawer.test.tsx && npm run typecheck:app && npx eslint src/components/ui/drawer.tsx src/components/ui/drawer.test.tsx && git diff --check'",
+              "exit_code": 0
+            }
+          ]
+        },
+        {
+          "output_label": "C",
+          "final_diff": "fixtures/09b7ef26a603e7dd-C.diff",
+          "final_diff_sha256": "431145172b3f0037bb4d14326bd32ff394ca44c9b538db9d2bdea9af831acb1e",
+          "changed_paths": [
+            "src/components/ui/drawer.test.tsx",
+            "src/components/ui/drawer.tsx"
+          ],
+          "hidden_oracle": "pass",
+          "gate_evidence": [
+            {
+              "command": "/usr/bin/zsh -c \"sed -n '1,200p' .pipeline-eval/frozen-ignore && printf '%s\\\\n' '--- lint changed files ---' && npx eslint src/components/ui/drawer.tsx src/components/ui/drawer.test.tsx && printf '%s\\\\n' '--- remaining tests ---' && npm test\"",
+              "exit_code": 1
+            },
+            {
+              "command": "/usr/bin/zsh -c 'SONGSIKNOW_MODEL_CACHE=<workspace>/.pipeline-eval<host-path> npm run build'",
+              "exit_code": 0
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

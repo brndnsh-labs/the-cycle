@@ -1,0 +1,142 @@
+diff --git a/src/app/api/payments/webhook/route.ts b/src/app/api/payments/webhook/route.ts
+index 4032618328302d0ff412cf42a1718ba267f99ac7..43bfde00a4714dacaa924b8475791a16c164b554 100644
+--- a/src/app/api/payments/webhook/route.ts
++++ b/src/app/api/payments/webhook/route.ts
+@@ -4,12 +4,49 @@ import { createPayment } from '@/lib/db/queries/payments'
+ import { nanoid } from 'nanoid'
+ import type Stripe from 'stripe'
+ 
++const MAX_WEBHOOK_BODY_BYTES = 1_000_000
++
++async function readBodyWithLimit(req: NextRequest): Promise<Buffer | null> {
++  if (!req.body) return Buffer.alloc(0)
++
++  const reader = req.body.getReader()
++  const chunks: Buffer[] = []
++  let totalBytes = 0
++
++  while (true) {
++    const { done, value } = await reader.read()
++    if (done) break
++
++    totalBytes += value.byteLength
++    if (totalBytes > MAX_WEBHOOK_BODY_BYTES) {
++      void reader.cancel().catch(() => undefined)
++      return null
++    }
++
++    chunks.push(Buffer.from(value.buffer, value.byteOffset, value.byteLength))
++  }
++
++  return Buffer.concat(chunks, totalBytes)
++}
++
+ export async function POST(req: NextRequest) {
+-  const rawBody = await req.text()
+   const sig = req.headers.get('stripe-signature')
+ 
+   if (!sig) return NextResponse.json({ error: 'Missing signature' }, { status: 400 })
+ 
++  // Reject an honestly declared oversized request without reading it, while
++  // still enforcing the limit as the stream arrives when the header is absent
++  // or untrustworthy.
++  const contentLength = req.headers.get('content-length')
++  if (contentLength && /^\d+$/.test(contentLength) && Number(contentLength) > MAX_WEBHOOK_BODY_BYTES) {
++    return NextResponse.json({ error: 'Payload too large' }, { status: 413 })
++  }
++
++  const rawBody = await readBodyWithLimit(req)
++  if (rawBody === null) {
++    return NextResponse.json({ error: 'Payload too large' }, { status: 413 })
++  }
++
+   let event: Stripe.Event
+   try {
+     event = stripe.webhooks.constructEvent(rawBody, sig, process.env.STRIPE_WEBHOOK_SECRET!)
+diff --git a/src/app/api/payments/webhook/route.test.ts b/src/app/api/payments/webhook/route.test.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..b43ded475f6512478afbd0ac16dd6adda2f2e214
+--- /dev/null
++++ b/src/app/api/payments/webhook/route.test.ts
+@@ -0,0 +1,81 @@
++import { beforeEach, describe, expect, it, vi } from 'vitest'
++import { NextRequest } from 'next/server'
++
++const mocks = vi.hoisted(() => ({
++  constructEvent: vi.fn(),
++  createPayment: vi.fn(),
++}))
++
++vi.mock('@/lib/payments/stripe', () => ({
++  stripe: { webhooks: { constructEvent: mocks.constructEvent } },
++}))
++
++vi.mock('@/lib/db/queries/payments', () => ({
++  createPayment: mocks.createPayment,
++}))
++
++const { POST } = await import('@/app/api/payments/webhook/route')
++
++const URL = 'http://localhost:3000/api/payments/webhook'
++const MAX_WEBHOOK_BODY_BYTES = 1_000_000
++
++function request(body: BodyInit, headers: Record<string, string> = {}) {
++  return new NextRequest(URL, {
++    method: 'POST',
++    headers: { 'stripe-signature': 'test-signature', ...headers },
++    body,
++  })
++}
++
++beforeEach(() => {
++  vi.clearAllMocks()
++  mocks.constructEvent.mockReturnValue({ type: 'customer.created' })
++})
++
++describe('POST /api/payments/webhook body limit', () => {
++  it('passes the unmodified raw body to Stripe within the limit', async () => {
++    const rawBody = '{"type":"customer.created","name":"café"}'
++
++    const response = await POST(request(rawBody))
++
++    expect(response.status).toBe(200)
++    expect(mocks.constructEvent).toHaveBeenCalledOnce()
++    expect(mocks.constructEvent.mock.calls[0]![0]).toEqual(Buffer.from(rawBody))
++  })
++
++  it('rejects an oversized Content-Length without verifying the signature', async () => {
++    const response = await POST(request('{}', {
++      'content-length': String(MAX_WEBHOOK_BODY_BYTES + 1),
++    }))
++
++    expect(response.status).toBe(413)
++    await expect(response.json()).resolves.toEqual({ error: 'Payload too large' })
++    expect(mocks.constructEvent).not.toHaveBeenCalled()
++  })
++
++  it('stops and rejects a streamed body that exceeds the limit', async () => {
++    const chunk = new Uint8Array(600 * 1024)
++    const body = new ReadableStream<Uint8Array>({
++      start(controller) {
++        controller.enqueue(chunk)
++        controller.enqueue(chunk)
++        controller.close()
++      },
++    })
++
++    const response = await POST(request(body))
++
++    expect(response.status).toBe(413)
++    expect(mocks.constructEvent).not.toHaveBeenCalled()
++  })
++
++  it('accepts a body exactly at the limit', async () => {
++    const body = new Uint8Array(MAX_WEBHOOK_BODY_BYTES)
++
++    const response = await POST(request(body))
++
++    expect(response.status).toBe(200)
++    expect(mocks.constructEvent).toHaveBeenCalledOnce()
++    expect(mocks.constructEvent.mock.calls[0]![0]).toHaveLength(MAX_WEBHOOK_BODY_BYTES)
++  })
++})

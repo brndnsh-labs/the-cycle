@@ -1,0 +1,69 @@
+{
+  "scoring_input_sha256": "e0e99e72fc4afbb9498aafd67b7adce6ee3f636dd198d1667207defbd13a2cd4",
+  "score_schema_sha256": "5b837720daf02407e0a956d2224a1a245478557846dc1ace40ac4a074667d960",
+  "blinding_map_sha256": "41fdd37999206bbe5cc895499a2b193dc30de187c40b3568db0a2e3fc57a0589",
+  "packet_count": 4,
+  "output_count": 12,
+  "fixture_diffs": [
+    {
+      "packet_id": "d5dd193cc39dc0eb",
+      "output_label": "A",
+      "sha256": "9e8acb9046cdd7b8eb29382ac3b4ff20882017e5c481224bd519b9cd5973f91d"
+    },
+    {
+      "packet_id": "d5dd193cc39dc0eb",
+      "output_label": "B",
+      "sha256": "e8b9b7459390bcc1db1dd3b10f189fdb9e672bd44a1857981ce525578b437cec"
+    },
+    {
+      "packet_id": "d5dd193cc39dc0eb",
+      "output_label": "C",
+      "sha256": "f23f3f6ff0dc4ed32efb09965e01e2ea401b609463b6e983c26db1a881226e46"
+    },
+    {
+      "packet_id": "a82ed2174f8df4a1",
+      "output_label": "A",
+      "sha256": "901e21e49b6c9a1143085a178aa835e05149496645b1be2c15402f9d9619188b"
+    },
+    {
+      "packet_id": "a82ed2174f8df4a1",
+      "output_label": "B",
+      "sha256": "7a036bb1a7e74a6b46c461fbf74dd7adc6e7159de1eafbb1cec6253646a7300f"
+    },
+    {
+      "packet_id": "a82ed2174f8df4a1",
+      "output_label": "C",
+      "sha256": "46ec59b8737b7c95c10275f50d4db0b82e130380fa14a883125de29b75dcc302"
+    },
+    {
+      "packet_id": "3997904718867ebe",
+      "output_label": "A",
+      "sha256": "9d10b24c9ebc890b5dda212b36fd5c0ae42991e14b1d854272d5e308ddba8ded"
+    },
+    {
+      "packet_id": "3997904718867ebe",
+      "output_label": "B",
+      "sha256": "16a33fddab28c88ac58e42e22353d17f3c25b115bf94401b82bf7f24d806ba54"
+    },
+    {
+      "packet_id": "3997904718867ebe",
+      "output_label": "C",
+      "sha256": "ab6e09ba5d4d0121c9b6b80ea1eb9bd9dc343daa296c005cfcf9223a76bbb4b3"
+    },
+    {
+      "packet_id": "09b7ef26a603e7dd",
+      "output_label": "A",
+      "sha256": "649ccc39daaa0e89916136e66c804b78c3a7a2a1f256fbde118af8df29dae425"
+    },
+    {
+      "packet_id": "09b7ef26a603e7dd",
+      "output_label": "B",
+      "sha256": "d7026313cb23d47e4846277d0a2c6f2e9692aeee7beb47fdc54017ecd477e668"
+    },
+    {
+      "packet_id": "09b7ef26a603e7dd",
+      "output_label": "C",
+      "sha256": "431145172b3f0037bb4d14326bd32ff394ca44c9b538db9d2bdea9af831acb1e"
+    }
+  ]
+}

@@ -1,0 +1,330 @@
+diff --git a/src/components/layout/AppShell.tsx b/src/components/layout/AppShell.tsx
+index dbcf0717d669317b286c01e5a226d43f4c231235..1495979430164057fd95f2c21453d8891e765f24 100644
+--- a/src/components/layout/AppShell.tsx
++++ b/src/components/layout/AppShell.tsx
+@@ -11,6 +11,7 @@ import { OverridesSyncMount } from './OverridesSyncMount'
+ import { AnalysisDrainerMount } from './AnalysisDrainerMount'
+ import { DeletedSongsPurgerMount } from './DeletedSongsPurgerMount'
+ import { SyncToastMount } from './SyncToastMount'
++import { StemsStoreErrorToastMount } from './StemsStoreErrorToastMount'
+ import { SyncPresenceBanner } from './SyncPresenceBanner'
+ import { InstallListenerMount } from '@/components/pwa/InstallAffordance'
+ 
+@@ -45,6 +46,7 @@ export async function AppShell({ children }: { children: React.ReactNode }) {
+       <AnalysisDrainerMount />
+       <DeletedSongsPurgerMount />
+       <SyncToastMount />
++      <StemsStoreErrorToastMount />
+       {paid && <SyncPresenceBanner />}
+       <InstallListenerMount />
+       {/* Sidebar — hidden on mobile */}
+diff --git a/src/lib/stems/store.test.ts b/src/lib/stems/store.test.ts
+index 751d5ce84dd8cdacd93a548ca7531c10acec0f04..af560542d6cb3a95e5341d7ff41a588293779168 100644
+--- a/src/lib/stems/store.test.ts
++++ b/src/lib/stems/store.test.ts
+@@ -15,19 +15,22 @@ type FakeRequest = {
+   onsuccess: (() => void) | null
+   onerror: (() => void) | null
+   onupgradeneeded: (() => void) | null
++  onblocked: (() => void) | null
+   result: unknown
+   error: { name: string; message: string } | null
+ }
+ 
+ function fakeOpenRequest(): FakeRequest {
+-  return { onsuccess: null, onerror: null, onupgradeneeded: null, result: null, error: null }
++  return { onsuccess: null, onerror: null, onupgradeneeded: null, onblocked: null, result: null, error: null }
+ }
+ 
+ /** A fake IDBDatabase whose transaction()/objectStore()/get() chain always
+  *  resolves with `undefined` (song not found) — just enough for
+  *  getSongManifest() to complete its read path. */
+-function fakeDb() {
++function fakeDb(close = vi.fn()) {
+   return {
++    close,
++    onversionchange: null as (() => void) | null,
+     objectStoreNames: { contains: () => true },
+     transaction: () => ({
+       objectStore: () => ({
+@@ -68,6 +71,7 @@ function installFakeIndexedDB(behavior: (callCount: number, req: FakeRequest) =>
+ }
+ 
+ afterEach(() => {
++  vi.useRealTimers()
+   // @ts-expect-error - test-only cleanup of the fake global
+   delete globalThis.indexedDB
+ })
+@@ -156,4 +160,92 @@ describe('openDb (via getSongManifest)', () => {
+       ['analysis', 'artwork', 'manifests', 'overrides', 'pending-sources', 'stems', 'originals'].sort(),
+     )
+   })
++
++  it('waits five seconds after onblocked, then rejects concurrent callers with one recovery notification', async () => {
++    vi.useFakeTimers()
++    const getOpenCallCount = installFakeIndexedDB((_callCount, req) => {
++      req.onblocked?.()
++    })
++
++    const { getSongManifest, observeBlockedStemsStoreOpen } = await import('./store')
++    const notifications: Error[] = []
++    const unsubscribe = observeBlockedStemsStoreOpen((error) => notifications.push(error))
++
++    const first = getSongManifest('song-1')
++    const second = getSongManifest('song-2')
++    let settled = 0
++    void first.then(() => { settled += 1 }, () => { settled += 1 })
++    void second.then(() => { settled += 1 }, () => { settled += 1 })
++    await Promise.resolve()
++
++    vi.advanceTimersByTime(4_999)
++    await Promise.resolve()
++    expect(settled).toBe(0)
++    expect(notifications).toHaveLength(0)
++    expect(getOpenCallCount()).toBe(1)
++
++    vi.advanceTimersByTime(1)
++    await expect(first).rejects.toThrow(/close other Songs I Know tabs, then reload/i)
++    await expect(second).rejects.toThrow(/close other Songs I Know tabs, then reload/i)
++    expect(notifications).toHaveLength(1)
++    expect(notifications[0].message).toMatch(/close other Songs I Know tabs, then reload/i)
++    unsubscribe()
++  })
++
++  it('cancels the blocked timer when the upgrade clears during the grace period', async () => {
++    vi.useFakeTimers()
++    let blockedRequest: FakeRequest | null = null
++    installFakeIndexedDB((_callCount, req) => {
++      blockedRequest = req
++      req.onblocked?.()
++    })
++
++    const { getSongManifest, observeBlockedStemsStoreOpen } = await import('./store')
++    const notify = vi.fn()
++    const unsubscribe = observeBlockedStemsStoreOpen(notify)
++    const opening = getSongManifest('song-1')
++    await Promise.resolve()
++
++    vi.advanceTimersByTime(4_999)
++    const request = blockedRequest as FakeRequest | null
++    expect(request).not.toBeNull()
++    request!.result = fakeDb()
++    request!.onsuccess?.()
++
++    await expect(opening).resolves.toBeNull()
++    vi.advanceTimersByTime(10_000)
++    expect(notify).not.toHaveBeenCalled()
++    unsubscribe()
++  })
++
++  it('retries after a blocked timeout and closes a late connection without clobbering the fresh cache', async () => {
++    vi.useFakeTimers()
++    const requests: FakeRequest[] = []
++    const getOpenCallCount = installFakeIndexedDB((callCount, req) => {
++      requests.push(req)
++      if (callCount === 1) req.onblocked?.()
++    })
++
++    const { getSongManifest } = await import('./store')
++    const timedOut = getSongManifest('song-1')
++    await Promise.resolve()
++    vi.advanceTimersByTime(5_000)
++    await expect(timedOut).rejects.toThrow(/close other Songs I Know tabs, then reload/i)
++
++    const retry = getSongManifest('song-2')
++    await Promise.resolve()
++    expect(getOpenCallCount()).toBe(2)
++    const freshDb = fakeDb()
++    requests[1].result = freshDb
++    requests[1].onsuccess?.()
++    await expect(retry).resolves.toBeNull()
++
++    const closeLateConnection = vi.fn()
++    requests[0].result = fakeDb(closeLateConnection)
++    requests[0].onsuccess?.()
++    expect(closeLateConnection).toHaveBeenCalledOnce()
++
++    await expect(getSongManifest('song-3')).resolves.toBeNull()
++    expect(getOpenCallCount()).toBe(2)
++  })
+ })
+diff --git a/src/lib/stems/store.ts b/src/lib/stems/store.ts
+index 0b87d1e0fafd37d0fc65966f28d964a3b65134b8..f4ca83a5ead8f345bb787d87de464256684f4064 100644
+--- a/src/lib/stems/store.ts
++++ b/src/lib/stems/store.ts
+@@ -151,6 +151,32 @@ let dbPromise: Promise<IDBDatabase> | null = null
+ // replaced it) can't clobber that newer attempt's cache entry.
+ let dbGeneration = 0
+ 
++type BlockedOpenListener = (error: Error) => void
++const blockedOpenListeners = new Set<BlockedOpenListener>()
++
++/** Observe an IndexedDB schema upgrade that stayed blocked past its grace
++ * period. AppShell mounts one listener so callers sharing the cached open
++ * promise get one recovery toast for the generation, rather than each call
++ * presenting its own error. */
++export function observeBlockedStemsStoreOpen(listener: BlockedOpenListener): () => void {
++  blockedOpenListeners.add(listener)
++  return () => blockedOpenListeners.delete(listener)
++}
++
++function notifyBlockedOpen(error: Error): void {
++  for (const listener of blockedOpenListeners) {
++    try {
++      listener(error)
++    } catch {
++      // Recovery of the database cache must not depend on a UI observer.
++    }
++  }
++}
++
++const BLOCKED_OPEN_GRACE_MS = 5_000
++const BLOCKED_OPEN_MESSAGE =
++  'Songs I Know storage is still open in another tab. Close other Songs I Know tabs, then reload this page.'
++
+ function openDb(): Promise<IDBDatabase> {
+   if (typeof indexedDB === 'undefined') {
+     return Promise.reject(new Error('IndexedDB unavailable'))
+@@ -160,6 +186,15 @@ function openDb(): Promise<IDBDatabase> {
+   const myGeneration = ++dbGeneration
+   dbPromise = new Promise((resolve, reject) => {
+     const req = indexedDB.open(DB_NAME, DB_VERSION)
++    let settled = false
++    let blockedTimer: ReturnType<typeof setTimeout> | null = null
++
++    const clearBlockedTimer = () => {
++      if (blockedTimer === null) return
++      clearTimeout(blockedTimer)
++      blockedTimer = null
++    }
++
+     req.onupgradeneeded = () => {
+       const db = req.result
+       if (!db.objectStoreNames.contains(STORE_STEMS)) db.createObjectStore(STORE_STEMS)
+@@ -170,7 +205,32 @@ function openDb(): Promise<IDBDatabase> {
+       if (!db.objectStoreNames.contains(STORE_PENDING)) db.createObjectStore(STORE_PENDING)
+       if (!db.objectStoreNames.contains(STORE_OVERRIDES)) db.createObjectStore(STORE_OVERRIDES)
+     }
++    req.onblocked = () => {
++      // An ordinary open may legitimately take a moment. Start the recovery
++      // boundary only once the browser confirms that an older connection is
++      // preventing this schema upgrade from proceeding.
++      if (settled || blockedTimer !== null) return
++      blockedTimer = setTimeout(() => {
++        blockedTimer = null
++        if (settled) return
++        settled = true
++
++        const error = new Error(BLOCKED_OPEN_MESSAGE)
++        if (dbGeneration === myGeneration) dbPromise = null
++        reject(error)
++        notifyBlockedOpen(error)
++      }, BLOCKED_OPEN_GRACE_MS)
++    }
+     req.onsuccess = () => {
++      clearBlockedTimer()
++      // IDBOpenDBRequest cannot be cancelled. A request that succeeds after its
++      // blocked timeout must release that stale connection and leave any newer
++      // cached generation untouched.
++      if (settled) {
++        req.result.close()
++        return
++      }
++      settled = true
+       // Close on a version change requested elsewhere (e.g. another tab running
+       // a newer build) so its schema upgrade isn't blocked by this connection.
+       // Null the cached promise too — otherwise openDb() hands back a closed
+@@ -183,6 +243,9 @@ function openDb(): Promise<IDBDatabase> {
+       resolve(req.result)
+     }
+     req.onerror = () => {
++      clearBlockedTimer()
++      if (settled) return
++      settled = true
+       // Don't leave a rejected promise cached — a transient open failure
+       // (e.g. a momentary storage condition) would otherwise permanently
+       // reject every future store call until a full page reload. The one
+diff --git a/src/components/layout/StemsStoreErrorToastMount.test.tsx b/src/components/layout/StemsStoreErrorToastMount.test.tsx
+new file mode 100644
+index 0000000000000000000000000000000000000000..1ae7a1397d65f34eaec7a9af9271083b1b0ae811
+--- /dev/null
++++ b/src/components/layout/StemsStoreErrorToastMount.test.tsx
+@@ -0,0 +1,54 @@
++// @vitest-environment happy-dom
++
++import { act, cleanup, render } from '@testing-library/react'
++import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
++import { StemsStoreErrorToastMount } from './StemsStoreErrorToastMount'
++
++const mocks = vi.hoisted(() => ({
++  listener: null as ((error: Error) => void) | null,
++  observe: vi.fn(),
++  toastError: vi.fn(),
++  unsubscribe: vi.fn(),
++}))
++
++vi.mock('@/lib/stems/store', () => ({
++  observeBlockedStemsStoreOpen: mocks.observe,
++}))
++vi.mock('sonner', () => ({
++  toast: { error: mocks.toastError },
++}))
++
++describe('StemsStoreErrorToastMount', () => {
++  beforeEach(() => {
++    mocks.listener = null
++    mocks.observe.mockReset()
++    mocks.toastError.mockReset()
++    mocks.unsubscribe.mockReset()
++    mocks.observe.mockImplementation((listener: (error: Error) => void) => {
++      mocks.listener = listener
++      return mocks.unsubscribe
++    })
++  })
++
++  afterEach(cleanup)
++
++  it('surfaces blocked store recovery guidance through one app-wide error toast', () => {
++    const view = render(<StemsStoreErrorToastMount />)
++    expect(mocks.observe).toHaveBeenCalledOnce()
++
++    act(() => {
++      mocks.listener?.(new Error(
++        'Songs I Know storage is still open in another tab. Close other Songs I Know tabs, then reload this page.',
++      ))
++    })
++
++    expect(mocks.toastError).toHaveBeenCalledOnce()
++    expect(mocks.toastError).toHaveBeenCalledWith('Storage update blocked', {
++      description: expect.stringMatching(/close other Songs I Know tabs, then reload/i),
++      duration: 10_000,
++    })
++
++    view.unmount()
++    expect(mocks.unsubscribe).toHaveBeenCalledOnce()
++  })
++})
+diff --git a/src/components/layout/StemsStoreErrorToastMount.tsx b/src/components/layout/StemsStoreErrorToastMount.tsx
+new file mode 100644
+index 0000000000000000000000000000000000000000..11a1da57b40f37185f30b6a5f9d844a9c5c1d418
+--- /dev/null
++++ b/src/components/layout/StemsStoreErrorToastMount.tsx
+@@ -0,0 +1,18 @@
++'use client'
++
++import { useEffect } from 'react'
++import { toast } from 'sonner'
++import { observeBlockedStemsStoreOpen } from '@/lib/stems/store'
++
++/** Bridges the stems store's one-per-generation blocked-open signal into the
++ * app-wide Sonner mount. It renders nothing and is mounted once by AppShell. */
++export function StemsStoreErrorToastMount() {
++  useEffect(() => observeBlockedStemsStoreOpen((error) => {
++    toast.error('Storage update blocked', {
++      description: error.message,
++      duration: 10_000,
++    })
++  }), [])
++
++  return null
++}

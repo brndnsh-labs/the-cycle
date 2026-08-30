@@ -1,0 +1,287 @@
+diff --git a/src/app/api/payments/webhook/route.ts b/src/app/api/payments/webhook/route.ts
+index 4032618328302d0ff412cf42a1718ba267f99ac7..a95d4eb279984f3019c5773a46e62b3931b4d4d1 100644
+--- a/src/app/api/payments/webhook/route.ts
++++ b/src/app/api/payments/webhook/route.ts
+@@ -4,12 +4,69 @@ import { createPayment } from '@/lib/db/queries/payments'
+ import { nanoid } from 'nanoid'
+ import type Stripe from 'stripe'
+ 
++const MAX_WEBHOOK_BODY_BYTES = 1_000_000
++
++function declaredBodyLength(headers: Headers): number | undefined {
++  const value = headers.get('content-length')
++  if (value === null || !/^\d+$/.test(value)) return undefined
++
++  return Number(value)
++}
++
++async function readRawBody(body: ReadableStream<Uint8Array> | null): Promise<Uint8Array | null> {
++  if (!body) return new Uint8Array()
++
++  const reader = body.getReader()
++  let bytes = new Uint8Array()
++  let length = 0
++
++  try {
++    while (true) {
++      const { done, value } = await reader.read()
++      if (done) return bytes.subarray(0, length)
++
++      if (value.byteLength > MAX_WEBHOOK_BODY_BYTES - length) {
++        try {
++          await reader.cancel()
++        } catch {
++          // The response is still 413 if the request source rejects cancellation.
++        }
++        return null
++      }
++
++      const nextLength = length + value.byteLength
++      if (bytes.byteLength < nextLength) {
++        const nextCapacity = Math.min(
++          MAX_WEBHOOK_BODY_BYTES,
++          Math.max(nextLength, bytes.byteLength === 0 ? 16_384 : bytes.byteLength * 2),
++        )
++        const nextBytes = new Uint8Array(nextCapacity)
++        nextBytes.set(bytes.subarray(0, length))
++        bytes = nextBytes
++      }
++
++      bytes.set(value, length)
++      length = nextLength
++    }
++  } finally {
++    reader.releaseLock()
++  }
++}
++
+ export async function POST(req: NextRequest) {
+-  const rawBody = await req.text()
+   const sig = req.headers.get('stripe-signature')
+-
+   if (!sig) return NextResponse.json({ error: 'Missing signature' }, { status: 400 })
+ 
++  const contentLength = declaredBodyLength(req.headers)
++  if (contentLength !== undefined && contentLength > MAX_WEBHOOK_BODY_BYTES) {
++    return NextResponse.json({ error: 'Payload too large' }, { status: 413 })
++  }
++
++  const rawBody = await readRawBody(req.body)
++  if (rawBody === null) {
++    return NextResponse.json({ error: 'Payload too large' }, { status: 413 })
++  }
++
+   let event: Stripe.Event
+   try {
+     event = stripe.webhooks.constructEvent(rawBody, sig, process.env.STRIPE_WEBHOOK_SECRET!)
+diff --git a/src/app/api/payments/webhook/route.test.ts b/src/app/api/payments/webhook/route.test.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..b22a466abd513a0f4857402bf3961c117433b590
+--- /dev/null
++++ b/src/app/api/payments/webhook/route.test.ts
+@@ -0,0 +1,205 @@
++import { beforeEach, describe, expect, it, vi } from 'vitest'
++import { NextRequest } from 'next/server'
++import type Stripe from 'stripe'
++
++const mocks = vi.hoisted(() => ({
++  constructEvent: vi.fn(),
++  createPayment: vi.fn(),
++  nanoid: vi.fn(() => 'payment-id'),
++}))
++
++vi.mock('@/lib/payments/stripe', () => ({
++  stripe: { webhooks: { constructEvent: mocks.constructEvent } },
++}))
++vi.mock('@/lib/db/queries/payments', () => ({ createPayment: mocks.createPayment }))
++vi.mock('nanoid', () => ({ nanoid: mocks.nanoid }))
++
++process.env.STRIPE_WEBHOOK_SECRET = 'whsec_test'
++
++const { POST } = await import('@/app/api/payments/webhook/route')
++
++const URL = 'http://localhost:3000/api/payments/webhook'
++const MAX_BODY_BYTES = 1_000_000
++
++function request(
++  body: BodyInit | null,
++  options: { signature?: string; contentLength?: string } = {},
++): NextRequest {
++  const headers = new Headers()
++  if (options.signature !== undefined) headers.set('stripe-signature', options.signature)
++  if (options.contentLength !== undefined) headers.set('content-length', options.contentLength)
++
++  return new NextRequest(URL, { method: 'POST', headers, body })
++}
++
++function streamedRequest(chunks: Uint8Array[], contentLength?: string): NextRequest {
++  const stream = new ReadableStream<Uint8Array>({
++    start(controller) {
++      for (const chunk of chunks) controller.enqueue(chunk)
++      controller.close()
++    },
++  })
++
++  return request(stream, { signature: 'signature', contentLength })
++}
++
++function event(type: string, object: unknown = {}): Stripe.Event {
++  return { type, data: { object } } as Stripe.Event
++}
++
++beforeEach(() => {
++  vi.resetAllMocks()
++  mocks.nanoid.mockReturnValue('payment-id')
++  mocks.constructEvent.mockReturnValue(event('ignored.event'))
++})
++
++describe('POST /api/payments/webhook body bounds', () => {
++  it('returns 400 for a missing signature without accessing the body', async () => {
++    const req = {
++      headers: new Headers(),
++      get body(): never {
++        throw new Error('body must not be read')
++      },
++    } as unknown as NextRequest
++
++    const response = await POST(req)
++
++    expect(response.status).toBe(400)
++    expect(mocks.constructEvent).not.toHaveBeenCalled()
++  })
++
++  it('returns 413 for a declared body above the limit without accessing the body', async () => {
++    const req = {
++      headers: new Headers({
++        'stripe-signature': 'signature',
++        'content-length': String(MAX_BODY_BYTES + 1),
++      }),
++      get body(): never {
++        throw new Error('body must not be read')
++      },
++    } as unknown as NextRequest
++
++    const response = await POST(req)
++
++    expect(response.status).toBe(413)
++    expect(mocks.constructEvent).not.toHaveBeenCalled()
++  })
++
++  it.each([
++    ['an absent header', undefined],
++    ['an invalid header', 'not-a-number'],
++    ['a deceptively smaller header', '1'],
++  ])('returns 413 for streamed overflow with %s', async (_description, contentLength) => {
++    const response = await POST(streamedRequest([
++      new Uint8Array(MAX_BODY_BYTES),
++      new Uint8Array([1]),
++    ], contentLength))
++
++    expect(response.status).toBe(413)
++    expect(mocks.constructEvent).not.toHaveBeenCalled()
++  })
++
++  it('passes an exact-limit body to Stripe byte-for-byte without decoding it', async () => {
++    const body = new Uint8Array(MAX_BODY_BYTES)
++    for (let index = 0; index < body.length; index += 1) body[index] = index % 256
++
++    const response = await POST(streamedRequest([
++      body.subarray(0, 333_333),
++      body.subarray(333_333, 777_777),
++      body.subarray(777_777),
++    ], String(MAX_BODY_BYTES)))
++
++    expect(response.status).toBe(200)
++    expect(mocks.constructEvent).toHaveBeenCalledOnce()
++    const [payload, signature, secret] = mocks.constructEvent.mock.calls[0]
++    expect(payload).toBeInstanceOf(Uint8Array)
++    expect(payload).toEqual(body)
++    expect(signature).toBe('signature')
++    expect(secret).toBe('whsec_test')
++  })
++})
++
++describe('POST /api/payments/webhook payment behavior', () => {
++  it('returns 400 when Stripe rejects a malformed or invalidly signed body', async () => {
++    mocks.constructEvent.mockImplementation(() => {
++      throw new Error('invalid signature')
++    })
++
++    const response = await POST(request('{', { signature: 'signature' }))
++
++    expect(response.status).toBe(400)
++    expect(mocks.createPayment).not.toHaveBeenCalled()
++  })
++
++  it('does not create a payment for an unpaid completed session', async () => {
++    mocks.constructEvent.mockReturnValue(event('checkout.session.completed', {
++      payment_status: 'unpaid',
++      metadata: { userId: 'user-1' },
++      payment_intent: 'pi_123',
++      amount_total: 2500,
++    }))
++
++    const response = await POST(request('{}', { signature: 'signature' }))
++
++    expect(response.status).toBe(200)
++    expect(mocks.createPayment).not.toHaveBeenCalled()
++  })
++
++  it.each([
++    ['missing user metadata', { payment_intent: 'pi_123', amount_total: 2500 }],
++    ['missing payment intent', { metadata: { userId: 'user-1' }, amount_total: 2500 }],
++    ['a non-positive amount', { metadata: { userId: 'user-1' }, payment_intent: 'pi_123', amount_total: 0 }],
++  ])('does not create a payment for a paid session with %s', async (_description, fields) => {
++    mocks.constructEvent.mockReturnValue(event('checkout.session.completed', {
++      payment_status: 'paid',
++      ...fields,
++    }))
++
++    const response = await POST(request('{}', { signature: 'signature' }))
++
++    expect(response.status).toBe(200)
++    expect(mocks.createPayment).not.toHaveBeenCalled()
++  })
++
++  it('creates a succeeded payment for a valid paid session', async () => {
++    mocks.constructEvent.mockReturnValue(event('checkout.session.completed', {
++      payment_status: 'paid',
++      metadata: { userId: 'user-1' },
++      payment_intent: 'pi_123',
++      customer: 'cus_123',
++      amount_total: 2500,
++    }))
++
++    const response = await POST(request('{}', { signature: 'signature' }))
++
++    expect(response.status).toBe(200)
++    expect(mocks.createPayment).toHaveBeenCalledWith({
++      id: 'payment-id',
++      userId: 'user-1',
++      stripePaymentIntentId: 'pi_123',
++      stripeCustomerId: 'cus_123',
++      amountCents: 2500,
++      status: 'succeeded',
++      createdAt: expect.any(Number),
++    })
++  })
++
++  it('acknowledges a duplicate delivery when payment creation rejects it', async () => {
++    mocks.constructEvent.mockReturnValue(event('checkout.session.completed', {
++      payment_status: 'paid',
++      metadata: { userId: 'user-1' },
++      payment_intent: 'pi_123',
++      customer: null,
++      amount_total: 2500,
++    }))
++    mocks.createPayment.mockImplementation(() => {
++      throw new Error('unique constraint')
++    })
++
++    const response = await POST(request('{}', { signature: 'signature' }))
++
++    expect(response.status).toBe(200)
++    await expect(response.json()).resolves.toEqual({ received: true })
++    expect(mocks.createPayment).toHaveBeenCalledOnce()
++  })
++})

@@ -1,0 +1,24 @@
+{
+  "complete": true,
+  "completed_cases": 4,
+  "total_cases": 4,
+  "remaining_cases": 0,
+  "attempts": 5,
+  "invalid_attempts": 1,
+  "invalid_attempts_by_class": {
+    "behavioral": 1,
+    "infrastructure": 0
+  },
+  "model_turns_started": 43,
+  "model_turns_completed": 43,
+  "usage": {
+    "reported_turns": 43,
+    "totals": {
+      "input_tokens": 19938469,
+      "cached_input_tokens": 18231808,
+      "cache_write_input_tokens": 0,
+      "output_tokens": 172733,
+      "reasoning_output_tokens": 86400
+    }
+  }
+}

@@ -1,0 +1,156 @@
+diff --git a/src/lib/stems/store.test.ts b/src/lib/stems/store.test.ts
+index 751d5ce84dd8cdacd93a548ca7531c10acec0f04..51ff36da22aac0065827a1c83e3bd9af0b461934 100644
+--- a/src/lib/stems/store.test.ts
++++ b/src/lib/stems/store.test.ts
+@@ -15,12 +15,20 @@ type FakeRequest = {
+   onsuccess: (() => void) | null
+   onerror: (() => void) | null
+   onupgradeneeded: (() => void) | null
++  onblocked: (() => void) | null
+   result: unknown
+   error: { name: string; message: string } | null
+ }
+ 
+ function fakeOpenRequest(): FakeRequest {
+-  return { onsuccess: null, onerror: null, onupgradeneeded: null, result: null, error: null }
++  return {
++    onsuccess: null,
++    onerror: null,
++    onupgradeneeded: null,
++    onblocked: null,
++    result: null,
++    error: null,
++  }
+ }
+ 
+ /** A fake IDBDatabase whose transaction()/objectStore()/get() chain always
+@@ -68,6 +76,7 @@ function installFakeIndexedDB(behavior: (callCount: number, req: FakeRequest) =>
+ }
+ 
+ afterEach(() => {
++  vi.useRealTimers()
+   // @ts-expect-error - test-only cleanup of the fake global
+   delete globalThis.indexedDB
+ })
+@@ -77,6 +86,49 @@ describe('openDb (via getSongManifest)', () => {
+     vi.resetModules()
+   })
+ 
++  it('rejects a blocked upgrade after a bounded wait and allows a later retry', async () => {
++    vi.useFakeTimers()
++    const getOpenCallCount = installFakeIndexedDB((callCount, req) => {
++      if (callCount === 1) {
++        req.onblocked?.()
++      } else {
++        req.result = fakeDb()
++        req.onsuccess?.()
++      }
++    })
++
++    const { getSongManifest } = await import('./store')
++    const blocked = getSongManifest('song-1')
++    const rejection = expect(blocked).rejects.toThrow('IndexedDB upgrade blocked by another tab')
++    await vi.advanceTimersByTimeAsync(10_000)
++
++    await rejection
++    expect(getOpenCallCount()).toBe(1)
++
++    await expect(getSongManifest('song-1')).resolves.toBeNull()
++    expect(getOpenCallCount()).toBe(2)
++  })
++
++  it('cancels the blocked-upgrade timeout when the open succeeds in time', async () => {
++    vi.useFakeTimers()
++    let request: FakeRequest | undefined
++    const getOpenCallCount = installFakeIndexedDB((_callCount, req) => {
++      request = req
++      req.onblocked?.()
++    })
++
++    const { getSongManifest } = await import('./store')
++    const opening = getSongManifest('song-1')
++    await vi.advanceTimersByTimeAsync(9_999)
++    request!.result = fakeDb()
++    request!.onsuccess?.()
++
++    await expect(opening).resolves.toBeNull()
++    await vi.advanceTimersByTimeAsync(1)
++    await expect(getSongManifest('song-2')).resolves.toBeNull()
++    expect(getOpenCallCount()).toBe(1)
++  })
++
+   it('does not cache a failed open — a later call retries instead of replaying the old rejection', async () => {
+     const getOpenCallCount = installFakeIndexedDB((callCount, req) => {
+       if (callCount === 1) {
+diff --git a/src/lib/stems/store.ts b/src/lib/stems/store.ts
+index 0b87d1e0fafd37d0fc65966f28d964a3b65134b8..e40e1fe5c64aa5ade0efa96522c4c30095708f6a 100644
+--- a/src/lib/stems/store.ts
++++ b/src/lib/stems/store.ts
+@@ -19,6 +19,11 @@ import type { SongOverrides } from './overrides'
+ import { normalizeOriginalAudioMime } from '@/lib/import/audio-file-types'
+ 
+ const DB_NAME = 'songsiknow-stems'
++// A version upgrade cannot start while another tab still holds an older
++// connection. Browsers report that through `blocked`, but may then leave the
++// open request pending indefinitely (especially when the other tab is
++// backgrounded). Bound that wait so every store caller does not hang forever.
++const DB_UPGRADE_BLOCKED_TIMEOUT_MS = 10_000
+ // v2 adds the `analysis` store (tempo/key/chords); v3 adds `originals` (opt-in
+ // retained source audio, so a song can be re-separated by a newer model without
+ // re-importing); v4 adds `artwork` (locally-stored cover art thumbnails, sourced
+@@ -160,6 +165,16 @@ function openDb(): Promise<IDBDatabase> {
+   const myGeneration = ++dbGeneration
+   dbPromise = new Promise((resolve, reject) => {
+     const req = indexedDB.open(DB_NAME, DB_VERSION)
++    let settled = false
++    let blockedTimer: ReturnType<typeof setTimeout> | null = null
++
++    const clearBlockedTimer = () => {
++      if (blockedTimer !== null) {
++        clearTimeout(blockedTimer)
++        blockedTimer = null
++      }
++    }
++
+     req.onupgradeneeded = () => {
+       const db = req.result
+       if (!db.objectStoreNames.contains(STORE_STEMS)) db.createObjectStore(STORE_STEMS)
+@@ -170,7 +185,28 @@ function openDb(): Promise<IDBDatabase> {
+       if (!db.objectStoreNames.contains(STORE_PENDING)) db.createObjectStore(STORE_PENDING)
+       if (!db.objectStoreNames.contains(STORE_OVERRIDES)) db.createObjectStore(STORE_OVERRIDES)
+     }
++    req.onblocked = () => {
++      // There is no way to cancel an IDBOpenDBRequest. Reject our wrapper after
++      // a bounded wait; if the request eventually succeeds, onsuccess closes
++      // that now-orphaned connection below.
++      if (settled || blockedTimer !== null) return
++      blockedTimer = setTimeout(() => {
++        blockedTimer = null
++        if (settled) return
++        settled = true
++        if (dbGeneration === myGeneration) dbPromise = null
++        reject(new Error('IndexedDB upgrade blocked by another tab'))
++      }, DB_UPGRADE_BLOCKED_TIMEOUT_MS)
++    }
+     req.onsuccess = () => {
++      clearBlockedTimer()
++      if (settled) {
++        // The blocked request outlived its rejected wrapper. Do not leak a
++        // connection that could block a future version change.
++        req.result.close()
++        return
++      }
++      settled = true
+       // Close on a version change requested elsewhere (e.g. another tab running
+       // a newer build) so its schema upgrade isn't blocked by this connection.
+       // Null the cached promise too — otherwise openDb() hands back a closed
+@@ -183,6 +219,9 @@ function openDb(): Promise<IDBDatabase> {
+       resolve(req.result)
+     }
+     req.onerror = () => {
++      clearBlockedTimer()
++      if (settled) return
++      settled = true
+       // Don't leave a rejected promise cached — a transient open failure
+       // (e.g. a momentary storage condition) would otherwise permanently
+       // reject every future store call until a full page reload. The one

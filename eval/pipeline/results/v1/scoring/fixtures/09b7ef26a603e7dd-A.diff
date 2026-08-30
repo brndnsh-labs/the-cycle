@@ -1,0 +1,47 @@
+diff --git a/src/components/ui/drawer.tsx b/src/components/ui/drawer.tsx
+index f192c778ff9eaf598c4809e3171ab7cedd6548db..c37eb09027e07b4a0349779aa7be252e55c268ba 100644
+--- a/src/components/ui/drawer.tsx
++++ b/src/components/ui/drawer.tsx
+@@ -124,7 +124,7 @@ export function Drawer({
+             onClick={onClose}
+             aria-label="Close"
+             style={{
+-              width: 32, height: 32, borderRadius: 'var(--r-sm)', border: 'none',
++              width: 44, height: 44, borderRadius: 'var(--r-sm)', border: 'none',
+               background: 'none', color: 'var(--ink-3)', cursor: 'pointer',
+               fontSize: 20, lineHeight: 1, display: 'flex', alignItems: 'center', justifyContent: 'center',
+             }}
+diff --git a/src/components/ui/drawer.test.tsx b/src/components/ui/drawer.test.tsx
+new file mode 100644
+index 0000000000000000000000000000000000000000..bc6322d694b5e8d3f80bc7fd7a8d538294ecbcfe
+--- /dev/null
++++ b/src/components/ui/drawer.test.tsx
+@@ -0,0 +1,28 @@
++// @vitest-environment happy-dom
++
++import { cleanup, fireEvent, render, screen } from '@testing-library/react'
++import { afterEach, describe, expect, it, vi } from 'vitest'
++
++vi.mock('@/lib/use-mounted', () => ({ useMounted: () => true }))
++
++import { Drawer } from './drawer'
++
++afterEach(cleanup)
++
++describe('Drawer', () => {
++  it('gives the close button a 44px tap target', () => {
++    const onClose = vi.fn()
++    render(
++      <Drawer open onClose={onClose} title="Test drawer">
++        Drawer contents
++      </Drawer>,
++    )
++
++    const closeButton = screen.getByRole('button', { name: 'Close' })
++    expect(closeButton.style.width).toBe('44px')
++    expect(closeButton.style.height).toBe('44px')
++
++    fireEvent.click(closeButton)
++    expect(onClose).toHaveBeenCalledOnce()
++  })
++})

@@ -1,0 +1,198 @@
+diff --git a/src/components/library/FilterPopover.tsx b/src/components/library/FilterPopover.tsx
+index ad71f58d17d35eabb1866e4ce4fa1b3610adfe42..8dc7bd7dedf37836f250cb9f74755340d4f9f1f8 100644
+--- a/src/components/library/FilterPopover.tsx
++++ b/src/components/library/FilterPopover.tsx
+@@ -35,6 +35,9 @@ export function FilterPopover({
+   children: React.ReactNode
+ }) {
+   const showClear = active && !!onClear
++  const openLabel = active && summary
++    ? `Open ${label} filter, current selection: ${summary}`
++    : `Open ${label} filter`
+ 
+   return (
+     <Popover
+@@ -42,42 +45,56 @@ export function FilterPopover({
+       panelLabel={label}
+       panelStyle={{ minWidth: 184, maxWidth: 280, padding: 6 }}
+       trigger={({ open, toggle, close }) => (
+-        <button
+-          type="button"
+-          onClick={toggle}
+-          aria-expanded={open}
+-          aria-haspopup="true"
+-          className="siknow-press siknow-focus"
++        <div
+           style={{
+             height: 38,
+-            padding: showClear ? '0 6px 0 14px' : '0 11px 0 14px',
+-            display: 'inline-flex', alignItems: 'center', gap: 6,
+-            borderRadius: 'var(--r-full)', cursor: 'pointer',
+-            fontSize: 14, fontWeight: active ? 500 : 400, whiteSpace: 'nowrap',
++            display: 'inline-flex', alignItems: 'center',
++            position: 'relative',
++            // Why: Popover's z-30 backdrop otherwise intercepts Clear pointer events while open.
++            zIndex: open ? 31 : undefined,
++            borderRadius: 'var(--r-full)',
+             color: active ? 'var(--accent-ink)' : 'var(--ink-2)',
+             background: active ? 'var(--accent-soft)' : 'var(--surface)',
+             boxShadow: active ? '0 0 0 1px var(--accent)' : 'inset 0 0 0 1px var(--hairline-2)',
+-            border: 'none',
+           }}
+         >
+-          {icon && <Icon name={icon} size={14} />}
+-          {active && summary ? summary : label}
++          <button
++            type="button"
++            onClick={toggle}
++            aria-label={openLabel}
++            aria-expanded={open}
++            aria-haspopup="true"
++            className="siknow-press siknow-focus"
++            style={{
++              height: '100%',
++              padding: showClear ? '0 4px 0 14px' : '0 11px 0 14px',
++              display: 'inline-flex', alignItems: 'center', gap: 6,
++              borderRadius: showClear ? 'var(--r-full) 0 0 var(--r-full)' : 'var(--r-full)',
++              cursor: 'pointer', fontSize: 14, fontWeight: active ? 500 : 400,
++              whiteSpace: 'nowrap', color: 'inherit', border: 'none', background: 'transparent',
++            }}
++          >
++            {icon && <Icon name={icon} size={14} />}
++            {active && summary ? summary : label}
++            {!showClear && (
++              <span aria-hidden style={{ fontSize: 9, opacity: 0.6, marginLeft: 1 }}>▼</span>
++            )}
++          </button>
+           {showClear ? (
+             <button
+               type="button"
+               aria-label={`Clear ${label}`}
+-              onClick={e => { e.stopPropagation(); onClear!(); close() }}
++              onClick={() => { onClear!(); close() }}
++              className="siknow-press siknow-focus"
+               style={{
+                 display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+-                width: 20, height: 20, marginLeft: 1, borderRadius: '50%',
+-                fontSize: 15, lineHeight: 1, color: 'var(--accent-ink)',
++                width: 44, height: 44, borderRadius: '0 var(--r-full) var(--r-full) 0',
++                fontSize: 15, lineHeight: 1, color: 'inherit',
+                 border: 'none', background: 'transparent', padding: 0, cursor: 'pointer',
+               }}
+             >×</button>
+-          ) : (
+-            <span aria-hidden style={{ fontSize: 9, opacity: 0.6, marginLeft: 1 }}>▼</span>
+-          )}
+-        </button>
++          ) : null}
++        </div>
+       )}
+     >
+       {children}
+diff --git a/src/components/library/FilterPopover.test.tsx b/src/components/library/FilterPopover.test.tsx
+new file mode 100644
+index 0000000000000000000000000000000000000000..2529b26f58df2730876dbcf174bcde8d1d31a7ce
+--- /dev/null
++++ b/src/components/library/FilterPopover.test.tsx
+@@ -0,0 +1,101 @@
++// @vitest-environment happy-dom
++import { afterEach, describe, expect, it, vi } from 'vitest'
++import { cleanup, render, screen } from '@testing-library/react'
++import userEvent from '@testing-library/user-event'
++import { FilterPopover } from './FilterPopover'
++
++afterEach(cleanup)
++
++const ACTIVE_OPEN_NAME = 'Open Mastery filter, current selection: Mastery: Working'
++
++function renderFilter(onClear = vi.fn(), active = true) {
++  return {
++    onClear,
++    ...render(
++      <FilterPopover
++        label="Mastery"
++        active={active}
++        summary={active ? 'Mastery: Working' : undefined}
++        onClear={onClear}
++      >
++        <button type="button">Working option</button>
++      </FilterPopover>,
++    ),
++  }
++}
++
++describe('FilterPopover', () => {
++  it('renders the open trigger and Clear action as sibling buttons with distinct names', () => {
++    renderFilter()
++
++    const open = screen.getByRole('button', { name: ACTIVE_OPEN_NAME })
++    const clear = screen.getByRole('button', { name: 'Clear Mastery' })
++
++    expect(open.tagName).toBe('BUTTON')
++    expect(clear.tagName).toBe('BUTTON')
++    expect(open.contains(clear)).toBe(false)
++    expect(open.parentElement).toBe(clear.parentElement)
++  })
++
++  it('keeps pointer interactions independent', async () => {
++    const user = userEvent.setup()
++    const { onClear } = renderFilter()
++    const open = screen.getByRole('button', { name: ACTIVE_OPEN_NAME })
++    const clear = screen.getByRole('button', { name: 'Clear Mastery' })
++
++    await user.click(clear)
++    expect(onClear).toHaveBeenCalledTimes(1)
++    expect(screen.queryByRole('menu')).toBeNull()
++
++    await user.click(open)
++    expect(onClear).toHaveBeenCalledTimes(1)
++    const panel = screen.getByRole('menu', { name: 'Mastery' })
++    const backdrop = panel.previousElementSibling as HTMLElement
++    const pill = open.parentElement as HTMLElement
++    expect(Number(pill.style.zIndex)).toBeGreaterThan(Number(backdrop.style.zIndex))
++
++    await user.click(clear)
++    expect(onClear).toHaveBeenCalledTimes(2)
++    expect(screen.queryByRole('menu')).toBeNull()
++  })
++
++  it.each(['{Enter}', ' '])('clears with %s without opening the menu', async (key) => {
++    const user = userEvent.setup()
++    const { onClear } = renderFilter()
++    screen.getByRole('button', { name: 'Clear Mastery' }).focus()
++
++    await user.keyboard(key)
++
++    expect(onClear).toHaveBeenCalledTimes(1)
++    expect(screen.queryByRole('menu')).toBeNull()
++  })
++
++  it.each(['{Enter}', ' '])('opens with %s without clearing the filter', async (key) => {
++    const user = userEvent.setup()
++    const { onClear } = renderFilter()
++    screen.getByRole('button', { name: ACTIVE_OPEN_NAME }).focus()
++
++    await user.keyboard(key)
++
++    expect(onClear).not.toHaveBeenCalled()
++    expect(screen.queryByRole('menu', { name: 'Mastery' })).not.toBeNull()
++  })
++
++  it('keeps the visible pill height stable and gives Clear a 44px square target', () => {
++    const view = renderFilter(vi.fn(), false)
++    const inactivePill = screen.getByRole('button', { name: 'Open Mastery filter' }).parentElement as HTMLElement
++    expect(inactivePill.style.height).toBe('38px')
++
++    view.rerender(
++      <FilterPopover label="Mastery" active summary="Mastery: Working" onClear={view.onClear}>
++        <button type="button">Working option</button>
++      </FilterPopover>,
++    )
++
++    const open = screen.getByRole('button', { name: ACTIVE_OPEN_NAME })
++    const clear = screen.getByRole('button', { name: 'Clear Mastery' })
++    expect((open.parentElement as HTMLElement).style.height).toBe('38px')
++    expect(clear.style.width).toBe('44px')
++    expect(clear.style.height).toBe('44px')
++  })
++})
