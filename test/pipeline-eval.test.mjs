@@ -22,11 +22,13 @@ import {
     assertNoCredentialMaterial,
     buildPlan,
     candidateUntrackedPaths,
+    classifyAttemptInvalidation,
     clientEnvironment,
     loadProtocol,
     parseExecEvents,
     pipelineConfig,
     probePipelineConfig,
+    retryDisposition,
     sanitizeCandidateRepository,
     scriptedAnswer,
     sha256,
@@ -70,19 +72,24 @@ function assertPrivateTree(path) {
 test('pipeline protocol freezes the census, three arms, four cases, and local artifacts', () => {
     const { protocol } = loadProtocol(PROTOCOL_PATH);
     assert.deepEqual(protocol.schedule.case_order, ['sik-133', 'sik-131', 'sik-139', 'sik-123']);
-    assert.equal(protocol.revision, 2);
+    assert.equal(protocol.revision, 3);
     assert.equal(
         protocol.amends_protocol_sha256,
-        '02ccaf466a7c6a51eca54843c3ecd873d4a47dc51ecf867bc276c75a20f1130d',
+        'cc25080c15a3207d744fec461c6fd2e996aaf2b48b5aa2847bdfdbc591019d25',
     );
-    assert.equal(protocol.amendment.completed_cases_before_amendment, 0);
-    assert.equal(protocol.amendment.invalid_attempts_preserved, 2);
+    assert.equal(protocol.amendment.completed_cases_before_amendment, 1);
+    assert.equal(protocol.amendment.invalid_attempts_preserved, 4);
     assert.deepEqual(protocol.arms.map((arm) => arm.id), ['raw-direct', 'shaped-direct', 'full-cycle']);
     assert.equal(protocol.schedule.cases_per_batch, 1);
-    assert.equal(protocol.schedule.invalid_case_retry_limit, 1);
+    assert.deepEqual(protocol.schedule.retry_limits, {
+        behavioral: 1,
+        infrastructure: 1,
+        max_attempts_per_case: 3,
+    });
     assert.equal(protocol.execution.model, 'gpt-5.6-sol');
     assert.equal(protocol.execution.reasoning_effort, 'high');
-    assert.equal(protocol.execution.codex_version, 'codex-cli 0.150.1');
+    assert.equal(protocol.execution.codex_version, 'codex-cli 0.151.0');
+    assert.equal(protocol.execution.timeout_ms_per_turn, 1_800_000);
     assert.equal(protocol.execution.command_network, false);
     assert.equal(protocol.execution.subagents, false);
     assert.deepEqual(protocol.execution.preflight, {
@@ -92,6 +99,7 @@ test('pipeline protocol freezes the census, three arms, four cases, and local ar
     });
     assert.deepEqual(protocol.execution.full_cycle.resumed_stages, ['implement', 'review', 'patch', 'done']);
     assert.equal(buildPlan(protocol).minimum_model_turns_per_valid_case, 7);
+    assert.deepEqual(buildPlan(protocol).whole_case_retry_limits, protocol.schedule.retry_limits);
     const scoreSchema = json(join(PIPELINE_ROOT, protocol.scoring.schema_path));
     const scoreCase = scoreSchema.properties.cases.items.properties;
     assert.deepEqual(scoreCase.outcomes.required, ['A', 'B', 'C']);
@@ -297,6 +305,29 @@ test('turn parsing and frozen answer selection reject malformed lifecycle output
     ]);
 });
 
+test('attempt invalidation and retry accounting keep behavioral and infrastructure budgets separate', () => {
+    const limits = { behavioral: 1, infrastructure: 1, max_attempts_per_case: 3 };
+    const behavioral = { valid: false, invalidation_class: 'behavioral' };
+    const infrastructure = { valid: false, invalidation_class: 'infrastructure' };
+    const accepted = { valid: true, invalidation_class: null };
+
+    assert.equal(classifyAttemptInvalidation({
+        valid: false,
+        lifecycles: [{ turns: [{ infrastructure_failure: false }] }],
+    }), 'behavioral');
+    assert.equal(classifyAttemptInvalidation({
+        valid: false,
+        lifecycles: [{ turns: [{ infrastructure_failure: true }] }],
+    }), 'infrastructure');
+    assert.equal(classifyAttemptInvalidation({ valid: true, lifecycles: [] }), null);
+
+    assert.equal(retryDisposition(limits, [behavioral]), 'retry');
+    assert.equal(retryDisposition(limits, [behavioral, infrastructure]), 'retry');
+    assert.equal(retryDisposition(limits, [behavioral, infrastructure, accepted]), 'accepted');
+    assert.equal(retryDisposition(limits, [behavioral, behavioral]), 'terminal');
+    assert.equal(retryDisposition(limits, [infrastructure, infrastructure]), 'terminal');
+});
+
 test('fake Codex passes the strict model-free profile probe without authentication', () => {
     assert.deepEqual(probePipelineConfig(join(PIPELINE_ROOT, 'fake-codex.cjs')), {
         strict_config: 'pass',
@@ -358,7 +389,7 @@ test('candidate ignore edits cannot conceal new source files from evaluator capt
     }
 });
 
-test('model-free full pilot exercises follow-ups, retry, three arms, four resumed stages, and blinding', {
+test('model-free full pilot exercises class-separated retries, three arms, four resumed stages, and blinding', {
     timeout: 120_000,
 }, () => {
     const scratch = mkdtempSync(join(tmpdir(), 'cycle-pipeline-dry-test-'));
@@ -374,9 +405,13 @@ test('model-free full pilot exercises follow-ups, retry, three arms, four resume
             completed_cases: 4,
             total_cases: 4,
             remaining_cases: 0,
-            attempts: 5,
-            invalid_attempts: 1,
-            model_turns_started: 41,
+            attempts: 6,
+            invalid_attempts: 2,
+            invalid_attempts_by_class: {
+                behavioral: 1,
+                infrastructure: 1,
+            },
+            model_turns_started: 42,
             model_turns_completed: 41,
             usage: {
                 reported_turns: 41,
@@ -390,14 +425,25 @@ test('model-free full pilot exercises follow-ups, retry, three arms, four resume
         });
         const results = readFileSync(join(output, 'private', 'results.jsonl'), 'utf8')
             .trim().split('\n').map(JSON.parse);
-        assert.equal(results.length, 5);
-        assert.equal(results.filter((result) => !result.valid).length, 1);
+        assert.equal(results.length, 6);
+        assert.equal(results.filter((result) => !result.valid).length, 2);
         assert.deepEqual(results[0].invalid_reasons, [
             'shaped-direct: direct turn 1: final response is not JSON',
         ]);
+        assert.equal(results[0].invalidation_class, 'behavioral');
         assert.equal(results[1].attempt, 2);
-        assert.ok(results.slice(1).every((result) => result.valid));
-        for (const result of results.slice(1)) {
+        assert.equal(results[1].invalidation_class, 'infrastructure');
+        assert.deepEqual(results[1].invalid_reasons, [
+            'intake turn 1: Codex exited 86',
+            'intake turn 1: missing turn.completed',
+            'intake turn 1: missing final structured response',
+            'intake created 0 issues instead of exactly one',
+        ]);
+        assert.equal(results[2].attempt, 3);
+        assert.ok(results.slice(2).every(
+            (result) => result.valid && result.invalidation_class === null,
+        ));
+        for (const result of results.slice(2)) {
             assert.deepEqual(result.arms.map((arm) => arm.arm), [
                 'raw-direct', 'shaped-direct', 'full-cycle',
             ]);
@@ -448,7 +494,7 @@ test('one-case batches resume an exact prefix and reject artifact tampering', { 
         ], { cwd: ROOT, encoding: 'utf8', stdio: 'pipe' }));
         assert.equal(first.completed_cases, 1);
         assert.equal(first.remaining_cases, 3);
-        assert.equal(first.attempts, 2);
+        assert.equal(first.attempts, 3);
 
         const escape = join(scratch, 'escape-target');
         mkdirSync(escape);

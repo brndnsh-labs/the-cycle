@@ -1,12 +1,13 @@
 {
   "version": 1,
-  "revision": 2,
+  "revision": 3,
   "study_id": "songsiknow-full-pipeline-pilot-v1",
-  "amends_protocol_sha256": "02ccaf466a7c6a51eca54843c3ecd873d4a47dc51ecf867bc276c75a20f1130d",
+  "amends_protocol_sha256": "cc25080c15a3207d744fec461c6fd2e996aaf2b48b5aa2847bdfdbc591019d25",
   "amendment": {
-    "reason": "Revision 1 produced zero valid cases because the evaluator made disposable Git metadata read-only and could not run the repository's required build without local tsx and Next.js subprocess IPC, Google Fonts network access, or synthetic deployment inputs. Revision 2 corrects only the hermetic execution and capture boundary plus its model-free preflight; prompts, cases, answers, arms, order, model, effort, scoring, and retry rules remain frozen.",
-    "completed_cases_before_amendment": 0,
-    "invalid_attempts_preserved": 2
+    "reason": "Revision 2 produced one valid case, then stopped after one behavioral invalid attempt and one infrastructure-interrupted retry exhausted a shared retry allowance. Revision 3 restarts all four cases from scratch, raises the predeclared per-turn ceiling from 15 to 30 minutes, gives behavioral invalidation and infrastructure interruption separate bounded retry allowances, and records the installed Codex CLI advancing from 0.150.1 to 0.151.0 before the revision-3 freeze. Revision 1 and 2 artifacts remain preserved and excluded; prompts, cases, answers, arms, order, model, effort, and scoring remain frozen.",
+    "completed_cases_before_amendment": 1,
+    "invalid_attempts_preserved": 4,
+    "restart_scope": "all four cases from scratch in a new revision-3 output directory"
   },
   "claim": "For short, underspecified coding requests, a frozen intake-to-cycle workflow can improve verified task completion, decision handling, regression coverage, scope control, and evidence quality relative to direct implementation prompts.",
   "census_path": "CENSUS.md",
@@ -65,15 +66,19 @@
     "case_order": ["sik-133", "sik-131", "sik-139", "sik-123"],
     "arms_per_case": 3,
     "cases_per_batch": 1,
-    "invalid_case_retry_limit": 1,
+    "retry_limits": {
+      "behavioral": 1,
+      "infrastructure": 1,
+      "max_attempts_per_case": 3
+    },
     "resume_rule": "Each invocation completes exactly one case across intake and all three arms. Resume only from an exact validated prefix. An active-case marker stops before any repeated model turn.",
-    "retry_rule": "Preserve every invalid attempt and retry the entire case once. If the retry is invalid, stop incomplete and do not score either attempt."
+    "retry_rule": "Preserve every invalid attempt. A behavioral invalidation and an infrastructure interruption each have one independent whole-case retry allowance, with three total attempts as a hard ceiling. Two invalid attempts of the same class or any invalid third attempt stop the experiment incomplete; no invalid attempt is scored."
   },
   "execution": {
     "model": "gpt-5.6-sol",
     "reasoning_effort": "high",
-    "codex_version": "codex-cli 0.150.1",
-    "timeout_ms_per_turn": 900000,
+    "codex_version": "codex-cli 0.151.0",
+    "timeout_ms_per_turn": 1800000,
     "fixture_commit_time": "2026-08-30T12:00:00Z",
     "subagents": false,
     "command_network": false,
@@ -161,12 +166,16 @@
     "credential_rule": "Codex authentication remains an outer-client symlink in a mode-0700 disposable home. It is never copied into a candidate, inherited by model-generated commands, or persisted before credential-fingerprint scanning."
   },
   "invalidation": {
-    "turn": [
-      "nonzero exit or timeout",
-      "malformed JSONL or missing turn.started or turn.completed",
-      "missing or schema-invalid final response",
-      "unmatched question or follow-up limit exceeded"
-    ],
+    "turn": {
+      "infrastructure": [
+        "Codex process failed to start, exited nonzero, received a signal, or exceeded the frozen timeout"
+      ],
+      "behavioral": [
+        "malformed JSONL or missing turn.started or turn.completed after a zero exit",
+        "missing or schema-invalid final response",
+        "unmatched question or follow-up limit exceeded"
+      ]
+    },
     "case": [
       "intake did not create exactly one issue",
       "shaped-direct and full-cycle did not receive byte-identical issue title and body text",
@@ -249,8 +258,8 @@
     }
   ],
   "artifact_lock": {
-    "runner_sha256": "7653cea4d431d90adea8b4af54c3271ca12ed34c775cfd38a93884c5ed8351fe",
-    "fake_codex_sha256": "e65f1997e33c6f4a7736a7f2181d87c7279712027d85276ddf1c0f3964723204",
+    "runner_sha256": "9c84e7764745c33e01540250319299f513177588181034854552ad17918cdf7e",
+    "fake_codex_sha256": "8a482b40588d8e83ccc9ca396433703d0b723a4fe705b46d3282ac960efd91c4",
     "fake_tracker_sha256": "348839290d85bff664edef0474cb148d5b1c46410cb7c3830c45c16c3bb97f97",
     "fake_git_sha256": "47ec70403d0bf70dd6624d28d2ec9809eac2353a3fbac91b126cd3f0f7929c4f",
     "tsx_no_ipc_sha256": "4e07da3ba22f976ff458a565ba89a9214fdb15a0c7894503c1334ffbfb668c9e",
