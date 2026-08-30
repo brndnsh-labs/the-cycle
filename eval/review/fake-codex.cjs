@@ -65,8 +65,23 @@ for (const path of guidancePaths) {
             type: 'command_execution',
             command: `cat ${path}`,
             aggregated_output: fakeMode === 'guidance-mention-only'
+                || (fakeMode === 'guidance-one-file' && path.endsWith('DOCTRINE.md'))
                 ? 'mentioned a path without returning its contents\n'
                 : content,
+            exit_code: 0,
+            status: 'completed',
+        },
+    }));
+}
+
+if (process.env.CYCLE_REVIEW_ARM === 'baseline') {
+    console.log(JSON.stringify({
+        type: 'item.completed',
+        item: {
+            id: `item-${++item}`,
+            type: 'command_execution',
+            command: 'pwd && if [ -f .agents/skills/review/SKILL.md ]; then sed -n \'1,240p\' .agents/skills/review/SKILL.md; fi && if [ -f .agents/skills/DOCTRINE.md ]; then sed -n \'1,260p\' .agents/skills/DOCTRINE.md; fi',
+            aggregated_output: `${workspace}\n`,
             exit_code: 0,
             status: 'completed',
         },
@@ -91,12 +106,14 @@ console.log(JSON.stringify({
             : JSON.stringify({ findings: [], summary: 'No actionable findings in deterministic fake review.' }),
     },
 }));
-console.log(JSON.stringify({
-    type: 'turn.completed',
-    usage: {
-        input_tokens: 100,
-        cached_input_tokens: 25,
-        output_tokens: 20,
-        reasoning_output_tokens: 5,
-    },
-}));
+if (fakeMode !== 'turn-start-only') {
+    console.log(JSON.stringify({
+        type: 'turn.completed',
+        usage: {
+            input_tokens: 100,
+            cached_input_tokens: 25,
+            output_tokens: 20,
+            reasoning_output_tokens: 5,
+        },
+    }));
+}

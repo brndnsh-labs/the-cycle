@@ -65,9 +65,11 @@ or prevalence sample.
 
 The frozen protocol contains four flawed Release Relay changes, two named-target-clean controls,
 two arms, and three repetitions. That is 18 matched pairs and 36 valid scored cells. Model, effort,
-timeout, prompt, schema, permissions, ordering seed, fixture commit time, invalid-pair rule, captured
-original tasks, normalized tasks, guidance, source trees, candidate patches, repairs, hidden
-oracles, census, and score schema are all hashed before scoring.
+timeout, prompt, schema, permissions, ordering seed, fixture commit time, captured original tasks,
+normalized tasks, guidance, source trees, candidate patches, repairs, hidden oracles, census, and
+score schema are all hashed before scoring. Revision 3 preserves the study claim, cases, model,
+scoring, seed, repetitions, ordering, and batch size while replacing revision 2's path-mention
+guidance heuristic with content-backed evidence.
 
 ### Model-free validation
 
@@ -95,18 +97,25 @@ node eval/review/run.mjs preflight \
   --output /tmp/review-eval-preflight
 ```
 
-The fake run exercises the complete seeded schedule, a deliberately invalid cell and paired retry,
-successful content-backed reads of both guidance files, normalization, blinded scoring input, and
-private artifact writing. `dry-run-batch` exercises the same path one matched pair at a time and
-resumes from the same output directory:
+The fake run exercises the complete seeded schedule, an absent-file compound guidance check in
+every baseline, a deliberately invalid cell and paired retry, successful content-backed reads of
+both treatment guidance files, normalization, blinded scoring input, and private artifact writing.
+Focused synthetic modes also prove that either guide's returned content invalidates baseline, one
+returned treatment guide is insufficient, and proven baseline exposure stops before retry.
+`dry-run-batch` exercises the same path one matched pair at a time and resumes from the same output
+directory:
 
 ```sh
 node eval/review/run.mjs dry-run-batch --output /tmp/review-eval-dry-batched
 ```
 
-Repeat that command 18 times; each successful invocation prints a receipt with reviewer calls,
-invalid attempts, reported token usage, elapsed time, and completed/remaining pairs. The first fake
-pair deliberately retries both arms, so its receipt shows four calls; ordinary pairs show two.
+Repeat that command 18 times; each successful invocation prints a receipt that separately counts
+reviewer processes, model turns started, model turns completed, invalid cells, reported token
+usage, elapsed time, and completed/remaining pairs. Legacy `calls` and `invalid_attempts` aliases
+remain for existing receipt consumers. The first fake pair deliberately retries both arms, so its
+receipt shows four reviewer processes and model turns; ordinary pairs show two.
+Token usage is summed only from completed turn events. If a turn starts without completing, its
+usage is unavailable and is not inferred to be zero.
 Preflight
 reconstructs all six one-commit repositories, checks the artifact lock and history truncation,
 probes filesystem isolation, and proves every hidden oracle is green before insertion, red on the
@@ -136,8 +145,10 @@ node eval/review/run.mjs run \
 ```
 
 For quota-monitored execution, use `run-batch` with the same output directory and exact hash. Each
-invocation completes exactly one matched pair, including both arms of its single allowed retry, and
-then stops with a receipt:
+invocation completes exactly one matched pair and then stops with a receipt. Ordinary cell
+invalidity gets one paired retry. Successful command output containing the frozen content of either
+guide proves baseline contamination and instead stops the experiment immediately, preserving the
+first pair without spending a retry:
 
 ```sh
 node eval/review/run.mjs run-batch \

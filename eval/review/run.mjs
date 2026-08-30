@@ -113,20 +113,43 @@ export function validateProtocol(protocol, { requireLock = true } = {}) {
         fail('review protocol requires version 1, study_id, claim, and census_path');
     }
     const revision = protocol.revision;
-    if (!revision || revision.number !== 2
-        || revision.prior_protocol_sha256 !== 'fda4e27bd8186dad607e4c5f78a498f4e4096beed84447b866a3c82827a8b87a'
-        || revision.prior_runner_sha256 !== '46adf70d6dcce35dbefa51b8487cf55d10ff7525a8f4327e3e728c1f58c0a61d'
+    if (!revision || revision.number !== 3
+        || revision.prior_protocol_sha256 !== '0bb13d82827552e592018692c14edb661c9d0ab0752fda0c0458c76c1208e9f4'
+        || revision.prior_runner_sha256 !== '1084a8a10d75bbeeb70cf2c932c97d6a6bc086aec6f274b33a06d7e4cfdaa084'
         || !isNonEmptyString(revision.reason)
-        || revision.preserved_invalid_attempt?.issue !== 128
-        || revision.preserved_invalid_attempt?.results_sha256
+        || !Array.isArray(revision.preserved_invalid_attempts)
+        || revision.preserved_invalid_attempts.length !== 2
+        || revision.preserved_invalid_attempts[0]?.revision !== 1
+        || revision.preserved_invalid_attempts[0]?.issue !== 128
+        || revision.preserved_invalid_attempts[0]?.protocol_sha256
+            !== 'fda4e27bd8186dad607e4c5f78a498f4e4096beed84447b866a3c82827a8b87a'
+        || revision.preserved_invalid_attempts[0]?.runner_sha256
+            !== '46adf70d6dcce35dbefa51b8487cf55d10ff7525a8f4327e3e728c1f58c0a61d'
+        || revision.preserved_invalid_attempts[0]?.results_sha256
             !== '88139d34b4852acad61270bc05391640014bd1e9468366be116a190d9bfd4412'
-        || revision.preserved_invalid_attempt?.summary_sha256
+        || revision.preserved_invalid_attempts[0]?.summary_sha256
             !== 'b34ad05184e808e247613fa17683054096706954262cfd076c573d32fd8f9565'
-        || revision.preserved_invalid_attempt?.scored_model_calls !== 0
+        || revision.preserved_invalid_attempts[0]?.scored_model_calls !== 0
+        || revision.preserved_invalid_attempts[1]?.revision !== 2
+        || revision.preserved_invalid_attempts[1]?.issue !== 128
+        || revision.preserved_invalid_attempts[1]?.protocol_sha256
+            !== '0bb13d82827552e592018692c14edb661c9d0ab0752fda0c0458c76c1208e9f4'
+        || revision.preserved_invalid_attempts[1]?.runner_sha256
+            !== '1084a8a10d75bbeeb70cf2c932c97d6a6bc086aec6f274b33a06d7e4cfdaa084'
+        || revision.preserved_invalid_attempts[1]?.preflight_sha256
+            !== 'a4c427eebf2faba029c4a696a38a47e4f9519223fa900cb0659007ea5b8e8e62'
+        || revision.preserved_invalid_attempts[1]?.experiment_sha256
+            !== 'cc614c2f26d7642f926b90176a4c6b9870310d6c3298321147e41e979acde11a'
+        || revision.preserved_invalid_attempts[1]?.results_sha256
+            !== 'bea51a8734ba05e9791019f2b44cdaddfefba70c5ebe41c4c2779c88b58567a7'
+        || revision.preserved_invalid_attempts[1]?.summary_sha256
+            !== '9cec93f92c7672b63387daff64ffd8b2aa1164edc7b00a4b8b408e7dc34cdee2'
+        || revision.preserved_invalid_attempts[1]?.scored_model_calls !== 4
         || stableJson(revision.unchanged) !== stableJson([
-            'claim', 'cases', 'schedule', 'model', 'scoring', 'invalidation',
+            'claim', 'cases', 'model', 'scoring',
+            'schedule seed, repetitions, ordering, and batch size',
         ])) {
-        fail('review protocol is missing the frozen revision 2 compatibility record');
+        fail('review protocol is missing the frozen revision 3 compatibility record');
     }
     if (!protocol.source || !isNonEmptyString(protocol.source.repository)
         || !/^[0-9a-f]{40}$/.test(protocol.source.review_guidance_commit)
@@ -393,7 +416,8 @@ This repository is an isolated historical review fixture.
 - Review the current uncommitted diff against the task under \`.review-eval/task.md\`.
 - Do not modify files or use the network.
 - Do not inspect paths outside this repository or attempt to recover later history.
-- If \`.agents/skills/review/SKILL.md\` exists, read it before reviewing.
+- If they exist, read both \`.agents/skills/review/SKILL.md\` and
+  \`.agents/skills/DOCTRINE.md\` in full before reviewing.
 - Return findings using the requested structured output contract.
 `;
 
@@ -410,14 +434,21 @@ function writeFixtureMetadata(destination, protocol, protocolPath, item) {
     );
 }
 
-function writeTreatmentGuidance(destination, protocol, source) {
-    for (const rel of protocol.source.review_guidance_paths) {
+function frozenGuidance(protocol, source) {
+    return protocol.source.review_guidance_paths.map((path) => ({
+        path,
+        content: git(source, [
+            'show', `${protocol.source.review_guidance_commit}:${path}`,
+        ], { encoding: null }).stdout.toString('utf8'),
+    }));
+}
+
+function writeTreatmentGuidance(destination, guidance) {
+    for (const { path: rel, content } of guidance) {
         const path = resolve(destination, rel);
         ensureInside(destination, path);
         mkdirSync(dirname(path), { recursive: true });
-        writeFileSync(path, git(source, [
-            'show', `${protocol.source.review_guidance_commit}:${rel}`,
-        ], { encoding: null }).stdout);
+        writeFileSync(path, content);
     }
 }
 
@@ -504,7 +535,8 @@ export function materializeFixture({
     mkdirSync(workspace, { recursive: true });
     writeTree(workspace, treeEntries(root, item.base, protocol.source.excluded_fixture_paths));
     writeFixtureMetadata(workspace, protocol, protocolPath, item);
-    if (arm === 'treatment') writeTreatmentGuidance(workspace, protocol, root);
+    const guidance = frozenGuidance(protocol, root);
+    if (arm === 'treatment') writeTreatmentGuidance(workspace, guidance);
     initializeFixtureRepository(workspace, protocol.execution.fixture_commit_time);
     const candidatePatch = patchBetween(
         root,
@@ -520,7 +552,7 @@ export function materializeFixture({
     }
     run('git', ['add', '--intent-to-add', '--', '.'], { cwd: workspace });
     const history = assertHistoryTruncated(workspace);
-    return { workspace, item, history };
+    return { workspace, item, history, guidance };
 }
 
 function seededRank(seed, value) {
@@ -767,16 +799,16 @@ function guidanceMarkers(content) {
     return [...new Set([lines[0], lines[Math.floor(lines.length / 2)], lines.at(-1)])];
 }
 
-function guidanceEvidence(events, paths, workspace) {
+export function guidanceEvidence(events, guidance, workspace) {
     const completed = events
         .filter((event) => event.type === 'item.completed'
             && event.item?.type === 'command_execution'
             && event.item?.status === 'completed'
             && event.item?.exit_code === 0);
-    const touched = events.some((event) => event.type === 'item.completed'
-        && event.item?.type === 'command_execution'
-        && paths.some((path) => String(event.item.command ?? '').includes(path)));
-    const read = paths.every((path) => {
+    const allOutput = completed
+        .map((event) => String(event.item.aggregated_output ?? ''))
+        .join('\n');
+    const readPaths = guidance.filter(({ path, content }) => {
         const guidancePath = join(workspace, path);
         if (!existsSync(guidancePath)) return false;
         const output = completed
@@ -784,10 +816,18 @@ function guidanceEvidence(events, paths, workspace) {
             .map((event) => String(event.item.aggregated_output ?? ''))
             .join('\n');
         if (!output) return false;
-        return guidanceMarkers(readFileSync(guidancePath, 'utf8'))
+        return guidanceMarkers(content)
             .every((marker) => output.includes(marker));
-    });
-    return { read, touched };
+    }).map(({ path }) => path);
+    const exposedPaths = guidance
+        .filter(({ content }) => guidanceMarkers(content).every((marker) => allOutput.includes(marker)))
+        .map(({ path }) => path);
+    return {
+        read: readPaths.length === guidance.length,
+        exposed: exposedPaths.length > 0,
+        readPaths,
+        exposedPaths,
+    };
 }
 
 function finalAgentText(events) {
@@ -848,23 +888,30 @@ function commonPrompt(protocol, protocolPath, item) {
     }`;
 }
 
-function setupDryFixture(protocol, protocolPath, publicCase, arm, destination) {
+function setupDryFixture(protocol, protocolPath, publicCase, arm, destination, fakeMode) {
     mkdirSync(destination, { recursive: true });
     const item = sourceCase(protocol, publicCase);
+    const guidance = [
+        {
+            path: '.agents/skills/review/SKILL.md',
+            content: '# Frozen review guidance\nInspect concrete edge cases and report actionable evidence.\n',
+        },
+        {
+            path: '.agents/skills/DOCTRINE.md',
+            content: '# Frozen review doctrine\nPreserve trust boundaries and verify consequential claims.\n',
+        },
+    ];
     writeFileSync(join(destination, 'AGENTS.md'), NEUTRAL_AGENTS);
     mkdirSync(join(destination, '.review-eval'), { recursive: true });
     writeFileSync(join(destination, '.review-eval', 'task.md'), readFileSync(resolveProtocolAsset(protocolPath, item.task_path)));
     writeFileSync(join(destination, '.review-eval', 'findings.schema.json'), readFileSync(resolveProtocolAsset(protocolPath, protocol.prompt.output_schema_path)));
-    if (arm === 'treatment') {
-        mkdirSync(join(destination, '.agents', 'skills', 'review'), { recursive: true });
-        writeFileSync(join(destination, '.agents', 'skills', 'review', 'SKILL.md'), '# Frozen review guidance\n');
-        mkdirSync(join(destination, '.agents', 'skills'), { recursive: true });
-        writeFileSync(join(destination, '.agents', 'skills', 'DOCTRINE.md'), '# Frozen doctrine\n');
+    if (arm === 'treatment' || fakeMode === 'baseline-guidance-exposure') {
+        writeTreatmentGuidance(destination, guidance);
     }
     writeFileSync(join(destination, 'candidate.txt'), 'historical base\n');
     initializeFixtureRepository(destination, protocol.execution.fixture_commit_time);
     writeFileSync(join(destination, 'candidate.txt'), `uncommitted candidate for ${item.id}\n`);
-    return { workspace: destination, item, history: assertHistoryTruncated(destination) };
+    return { workspace: destination, item, history: assertHistoryTruncated(destination), guidance };
 }
 
 function codexVersion(codexBin, env) {
@@ -1071,8 +1118,9 @@ function executeCell({
     privateMkdir(runDir);
     let reviewerHome;
     try {
+        const fakeMode = dryRun ? process.env.CYCLE_REVIEW_FAKE_MODE ?? '' : '';
         const fixture = dryRun
-            ? setupDryFixture(protocol, protocolPath, publicCase, cell.arm, workspace)
+            ? setupDryFixture(protocol, protocolPath, publicCase, cell.arm, workspace, fakeMode)
             : materializeFixture({ protocol, protocolPath, source, caseId: cell.case_id, arm: cell.arm, destination: workspace });
         if (!dryRun) installOffline(workspace);
         const before = run('git', [
@@ -1094,7 +1142,7 @@ function executeCell({
             repetition: cell.repetition,
             pairIndex: cell.pair_index,
             attempt,
-            fakeMode: dryRun ? process.env.CYCLE_REVIEW_FAKE_MODE ?? '' : '',
+            fakeMode,
         });
         const args = [
             'exec', '--json', '--ephemeral', '--strict-config', '--ignore-rules',
@@ -1137,11 +1185,13 @@ function executeCell({
         if (schemaInvalid) invalid.push(schemaInvalid);
         const guidance = guidanceEvidence(
             parsed.events,
-            protocol.source.review_guidance_paths,
+            fixture.guidance,
             workspace,
         );
         if (cell.arm === 'treatment' && !guidance.read) invalid.push('treatment did not read pinned review guidance');
-        if (cell.arm === 'baseline' && guidance.touched) invalid.push('baseline discovered treatment review guidance');
+        if (cell.arm === 'baseline' && guidance.exposed) {
+            invalid.push('baseline received treatment review guidance content');
+        }
         if (!before.equals(after) || !statusBefore.equals(statusAfter)) {
             invalid.push('reviewer mutated the candidate fixture');
         }
@@ -1172,7 +1222,12 @@ function executeCell({
             elapsed_ms: processResult.elapsedMs,
             usage: parsed.usage,
             fixture: fixture.history,
+            model_turn_started: parsed.events.some((event) => event.type === 'turn.started'),
+            model_turn_completed: parsed.events.some((event) => event.type === 'turn.completed'),
             treatment_guidance_read: guidance.read,
+            guidance_files_read: guidance.readPaths.length,
+            guidance_files_exposed: guidance.exposedPaths.length,
+            baseline_guidance_exposed: cell.arm === 'baseline' && guidance.exposed,
             artifacts,
             artifact_sha256: artifactSha256,
         };
@@ -1253,7 +1308,13 @@ function validatePersistedResult({ output, experiment, pair, cell, attempt, resu
         }
     }
     if (typeof result.valid !== 'boolean' || !Array.isArray(result.invalid_reasons)
-        || !Number.isSafeInteger(result.elapsed_ms) || result.elapsed_ms < 0) {
+        || !Number.isSafeInteger(result.elapsed_ms) || result.elapsed_ms < 0
+        || typeof result.model_turn_started !== 'boolean'
+        || typeof result.model_turn_completed !== 'boolean'
+        || typeof result.treatment_guidance_read !== 'boolean'
+        || !Number.isSafeInteger(result.guidance_files_read) || result.guidance_files_read < 0
+        || !Number.isSafeInteger(result.guidance_files_exposed) || result.guidance_files_exposed < 0
+        || typeof result.baseline_guidance_exposed !== 'boolean') {
         fail(`resumable result has invalid status fields for pair ${pair.pair_index} ${cell.arm}`);
     }
     const artifacts = expectedArtifacts(pair, cell, result);
@@ -1311,6 +1372,10 @@ export function validateExperimentProgress({ protocol, output, experiment, resul
         if (first.every((result) => result.valid)) {
             completedPairs += 1;
             continue;
+        }
+        if (first.some((result) => result.arm === 'baseline' && result.baseline_guidance_exposed)) {
+            terminalInvalidPair = pair.pair_index;
+            break;
         }
         const retry = results.slice(cursor, cursor + 2);
         if (retry.length !== 2) fail(`resumable results split retry for pair ${pair.pair_index}`);
@@ -1577,7 +1642,9 @@ function runExperiment({
             codexHome,
         }));
         results.push(...pairResults);
-        if (pairResults.some((result) => !result.valid)) {
+        const baselineGuidanceExposed = pairResults.some((result) =>
+            result.arm === 'baseline' && result.baseline_guidance_exposed);
+        if (pairResults.some((result) => !result.valid) && !baselineGuidanceExposed) {
             pairResults = pair.cells.map((cell) => executeCell({
                 protocol,
                 protocolPath,
@@ -1606,6 +1673,10 @@ function runExperiment({
     const invocationResults = results.slice(beforeCount);
     const receipt = {
         pair_index: selectedPairs[0]?.pair_index ?? null,
+        reviewer_processes: invocationResults.length,
+        model_turns_started: invocationResults.filter((result) => result.model_turn_started).length,
+        model_turns_completed: invocationResults.filter((result) => result.model_turn_completed).length,
+        invalid_cells: invocationResults.filter((result) => !result.valid).length,
         calls: invocationResults.length,
         invalid_attempts: invocationResults.filter((result) => !result.valid).length,
         token_usage: usageTotals(invocationResults),
@@ -1615,7 +1686,7 @@ function runExperiment({
         complete: summary.complete,
     };
     if (progress.terminalInvalidPair !== null && !Number.isFinite(maxPairs)) {
-        fail(`experiment stopped after the retry for pair ${progress.terminalInvalidPair} stayed invalid`);
+        fail(`experiment stopped at terminally invalid pair ${progress.terminalInvalidPair}`);
     }
     if (progress.complete) writeScoringArtifacts({ protocol, protocolPath, output, results });
     return {
@@ -1896,7 +1967,7 @@ export function main(argv = process.argv.slice(2)) {
             });
             console.log(JSON.stringify(result.receipt, null, 2));
             if (result.terminalInvalidPair !== null) {
-                fail(`experiment stopped after the retry for pair ${result.terminalInvalidPair} stayed invalid`);
+                fail(`experiment stopped at terminally invalid pair ${result.terminalInvalidPair}`);
             }
             return 0;
         });
@@ -1951,7 +2022,7 @@ export function main(argv = process.argv.slice(2)) {
             if (command === 'run-batch') {
                 console.log(JSON.stringify(result.receipt, null, 2));
                 if (result.terminalInvalidPair !== null) {
-                    fail(`experiment stopped after the retry for pair ${result.terminalInvalidPair} stayed invalid`);
+                    fail(`experiment stopped at terminally invalid pair ${result.terminalInvalidPair}`);
                 }
             }
             return 0;

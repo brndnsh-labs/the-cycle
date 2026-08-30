@@ -3,23 +3,38 @@
   "study_id": "release-relay-review-v1",
   "claim": "Pre-existing repository-specific review guidance helps a single model identify consequential edge cases and produce more actionable review evidence than a strong generic review prompt.",
   "revision": {
-    "number": 2,
-    "prior_protocol_sha256": "fda4e27bd8186dad607e4c5f78a498f4e4096beed84447b866a3c82827a8b87a",
-    "prior_runner_sha256": "46adf70d6dcce35dbefa51b8487cf55d10ff7525a8f4327e3e728c1f58c0a61d",
-    "reason": "Before any scored model call, Codex CLI 0.150.1 rejected the frozen strict reviewer configuration. Revision 2 preserves the image-tool restriction in the supported feature namespace and adds a credential-free, no-transport strict-config preflight probe.",
-    "preserved_invalid_attempt": {
-      "issue": 128,
-      "results_sha256": "88139d34b4852acad61270bc05391640014bd1e9468366be116a190d9bfd4412",
-      "summary_sha256": "b34ad05184e808e247613fa17683054096706954262cfd076c573d32fd8f9565",
-      "scored_model_calls": 0
-    },
+    "number": 3,
+    "prior_protocol_sha256": "0bb13d82827552e592018692c14edb661c9d0ab0752fda0c0458c76c1208e9f4",
+    "prior_runner_sha256": "1084a8a10d75bbeeb70cf2c932c97d6a6bc086aec6f274b33a06d7e4cfdaa084",
+    "reason": "Revision 2 consumed four scored model turns before a path-mention heuristic falsely classified absent-file checks as baseline guidance exposure. Revision 3 requires content-backed guidance evidence, explicitly requests both frozen guides, stops without retry only for proven baseline contamination, and separates reviewer-process, model-turn, and invalid-cell counts.",
+    "preserved_invalid_attempts": [
+      {
+        "revision": 1,
+        "issue": 128,
+        "protocol_sha256": "fda4e27bd8186dad607e4c5f78a498f4e4096beed84447b866a3c82827a8b87a",
+        "runner_sha256": "46adf70d6dcce35dbefa51b8487cf55d10ff7525a8f4327e3e728c1f58c0a61d",
+        "results_sha256": "88139d34b4852acad61270bc05391640014bd1e9468366be116a190d9bfd4412",
+        "summary_sha256": "b34ad05184e808e247613fa17683054096706954262cfd076c573d32fd8f9565",
+        "scored_model_calls": 0
+      },
+      {
+        "revision": 2,
+        "issue": 128,
+        "protocol_sha256": "0bb13d82827552e592018692c14edb661c9d0ab0752fda0c0458c76c1208e9f4",
+        "runner_sha256": "1084a8a10d75bbeeb70cf2c932c97d6a6bc086aec6f274b33a06d7e4cfdaa084",
+        "preflight_sha256": "a4c427eebf2faba029c4a696a38a47e4f9519223fa900cb0659007ea5b8e8e62",
+        "experiment_sha256": "cc614c2f26d7642f926b90176a4c6b9870310d6c3298321147e41e979acde11a",
+        "results_sha256": "bea51a8734ba05e9791019f2b44cdaddfefba70c5ebe41c4c2779c88b58567a7",
+        "summary_sha256": "9cec93f92c7672b63387daff64ffd8b2aa1164edc7b00a4b8b408e7dc34cdee2",
+        "scored_model_calls": 4
+      }
+    ],
     "unchanged": [
       "claim",
       "cases",
-      "schedule",
       "model",
       "scoring",
-      "invalidation"
+      "schedule seed, repetitions, ordering, and batch size"
     ]
   },
   "census_path": "CENSUS.md",
@@ -60,7 +75,7 @@
     "pairs_per_batch": 1,
     "batch_unit": "matched_pair",
     "resume_rule": "Each batch invocation completes exactly one matched pair, including its paired retry if needed. Resume only from an exact validated prefix of the frozen schedule; a mid-pair marker or state drift stops before another reviewer call.",
-    "invalid_run_rule": "Invalidate and rerun both arms for the same case and repetition; preserve the invalid attempt."
+    "invalid_run_rule": "Preserve every invalid attempt. Retry both arms once for ordinary cell invalidity. If successful command output proves that baseline received either frozen guide's content, stop the experiment before a paired retry."
   },
   "execution": {
     "model": "gpt-5.6-sol",
@@ -97,7 +112,7 @@
       "missing or schema-invalid final findings",
       "candidate mutation",
       "treatment did not read pinned guidance",
-      "baseline discovered treatment guidance"
+      "baseline received treatment guidance content"
     ],
     "experiment": [
       "artifact-lock mismatch",
@@ -107,7 +122,7 @@
       "resume state, artifact content, model, effort, Codex version, protocol, or schedule mismatch",
       "authentication path or material in a fixture, reviewer command environment, or captured public artifact"
     ],
-    "pair_rule": "If either cell is invalid, retain both attempts and rerun the pair once. If either retry is invalid, stop incomplete and score neither attempt from that pair."
+    "pair_rule": "If either cell is ordinarily invalid, retain both attempts and rerun the pair once. If either retry is invalid, stop incomplete and score neither attempt from that pair. Proven baseline guidance-content exposure is an integrity stop: retain the first pair and stop incomplete without retrying it."
   },
   "privacy": {
     "public_allowlist": [
@@ -232,10 +247,10 @@
     }
   ],
   "artifact_lock": {
-    "runner_sha256": "1084a8a10d75bbeeb70cf2c932c97d6a6bc086aec6f274b33a06d7e4cfdaa084",
-    "fake_reviewer_sha256": "d9ce0ea2fc187ec9d5bb0a72524dfccfa77e54dcb01a1640ad5b83c35b773234",
+    "runner_sha256": "6e679ceba66a5a94ed6acc31cc7095b4d28c616b39a14bf0a345e1df5baca372",
+    "fake_reviewer_sha256": "437914f53b2357d7ce2804846ec1d4380b9cd77d289a8d79da59fd4b53bc9ad2",
     "census_sha256": "1eb2272dfdb5110663f277cf70d661dbbc487e73f0b71d6f3e9e8b3b7f20e603",
-    "common_prompt_sha256": "98bae734100e4316267052c0f466f8f75658be1ef4702edf1d6b1fc31076353e",
+    "common_prompt_sha256": "6dbba2b706777f1fad06a471c38a98f3a000880b0ed9718dd4786f8a9bdcf2e6",
     "output_schema_sha256": "8e3a76201d5a942e80a62245f6bb48bac06b97f6a9a55209eef1a7aaf96fee5d",
     "score_schema_sha256": "917bf21114333358b025ef55e9b2eeb9e2b26be29e4ba4c4c431950fd581b198",
     "review_guidance_sha256": "21dda26d26949cea99effd704c8c6b7fa7bfc8c1632d214f02a4146505a83178",
