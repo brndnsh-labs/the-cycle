@@ -2,7 +2,7 @@
 name: done
 description: Ship a the-cycle story — commit the reviewed work, push, open a PR that Closes #<n>, and (for a safe story) queue server-side auto-merge; a judgment-call story's PR is left for Brandon's manual merge. Done = the issue closes on merge. Plan-first. Usage `/done #<n>`. Use after /review (+ /patch) pass clean.
 ---
-<!-- cycle:rendered template=skills/done.md.tmpl hash=a7136d66726b — managed by the-cycle; edit the template, not this file -->
+<!-- cycle:rendered template=skills/done.md.tmpl hash=f84184b1ba35 — managed by the-cycle; edit the template, not this file -->
 
 # /done #<n> — ship a story
 
@@ -33,8 +33,12 @@ the exact commit, PR, CI, and merge commands governed by §6/§8.
    npm test
    node bin/cycle.mjs check
    ```
-3. **Confirm findings were actioned, not parked** (§5) — `/patch` fixed every real finding, or
-   each was an explicit escalation to a `finding` issue. Never a silent defer.
+3. **Confirm review freshness and finding closure** (§5). If nothing changed after the latest clean
+   normal review, proceed. If `/patch` changed the tree, require a clean finding-closure review from
+   after that latest patch: every original ID is fixed or explicitly escalated, with no remaining
+   or new finding. A patch report alone is not closure. If that evidence is missing from current
+   context, or the tree changed again afterward, run `/review` normally before continuing — never
+   reconstruct or self-attest it here.
 4. **Survey the diff** — `git status` + `git diff --stat`. Only expected files; flag drift.
 5. **Branch check** (§9) — inspect `git status --short` and the current branch before staging.
    - If an existing epic branch applies, switch to and reuse it as `/implement` does. Otherwise,
