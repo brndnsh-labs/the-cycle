@@ -1415,6 +1415,66 @@ describe('fast path & verification receipts (#24)', () => {
     });
 });
 
+// #141: a patch cannot grade its own repair and flow directly to delivery. Findings
+// carry stable in-context IDs, /patch reports each outcome, and /review owns a
+// targeted closure pass with a full-review fallback when the repair broadens.
+describe('finding-closure review (#141)', () => {
+    let dir;
+    const skill = (name) => readFileSync(join(dir, '.claude', 'skills', name, 'SKILL.md'), 'utf8');
+    const doctrine = () => readFileSync(join(dir, '.claude', 'skills', 'DOCTRINE.md'), 'utf8');
+
+    before(() => {
+        dir = scratchRepo('github');
+        dirs.push(dir);
+        cycle(dir, ['install', '--profile', 'lean', '--backend', 'github', '-y']);
+    });
+
+    test('DOCTRINE requires independent post-patch closure without persistent receipt state', () => {
+        const src = doctrine();
+        assert.match(src, /A patch needs closure, not self-attestation/);
+        assert.match(src, /stable\s+in-context ID/);
+        assert.match(src, /clean review outcome from \*after\* that latest patch/);
+        assert.match(src, /not a persistent\s+receipt or a second tracker/);
+    });
+
+    test('/review assigns finding IDs and owns targeted closure with bounded fallback', () => {
+        const src = skill('review');
+        assert.match(src, /finding-closure mode/);
+        assert.match(src, /assign every actionable finding a stable in-context ID/);
+        assert.match(src, /report every original ID as `fixed`, `remaining`, or\s+`escalated`/);
+        assert.match(src, /skip straight to step\s+4's routing/);
+        assert.match(src, /direct patch delta/);
+        assert.match(src, /undeclared file, broader behavior change,\s+missing original context, or newly discovered finding/s);
+        assert.match(src, /normal full review/);
+    });
+
+    test('/patch accounts for every ID and hands changed repairs to closure review', () => {
+        const src = skill('patch');
+        assert.match(src, /one row per original finding ID: `fixed`, `remaining`, or\s+`escalated`/);
+        assert.match(src, /Hand off to `\/review` in finding-closure mode/);
+        assert.match(src, /never hands its own repair directly to `\/done`/);
+        assert.doesNotMatch(src, /Re-spawn a specific reviewer if the patch landed in their lane/);
+        assert.doesNotMatch(src, /suggest `\/done` \(if green\)/);
+    });
+
+    test('/cycle loops patch through closure review before done', () => {
+        const src = skill('cycle');
+        assert.match(src, /\[\/patch → \/review \(finding closure\)\]\*/);
+        assert.match(src, /patch \| gates green → `\/review` in finding-closure mode/);
+        assert.match(src, /remaining mechanical finding → `\/patch` again/);
+        assert.match(src, /\| finding closure \|[^|\n]*scope expansion \/ new behavior \/ a new finding → normal full `\/review` \| any §5 judgment call \|/);
+        assert.match(src, /a patch report is not its own proof/);
+    });
+
+    test('/done rejects missing or stale post-patch closure evidence', () => {
+        const src = skill('done');
+        assert.match(src, /require a clean finding-closure review from\s+after that latest patch/);
+        assert.match(src, /A patch report alone is not closure/);
+        assert.match(src, /tree changed again afterward, run `\/review` normally/);
+        assert.match(src, /never\s+reconstruct or self-attest it here/);
+    });
+});
+
 // #75: loadBackend/loadProfile/loadHarness interpolated a registry name straight into a
 // path under CYCLE_HOME. Names come from .cycle/config.jsonc and flags, so a tampered
 // config could aim that path anywhere on disk and feed the renderer an attacker-chosen
