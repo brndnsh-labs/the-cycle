@@ -31,6 +31,11 @@ const ROOT = resolve(HERE, '..', '..');
 const DEFAULT_PROTOCOL = join(HERE, 'protocol.json');
 const DEFAULT_FAKE_CODEX = join(HERE, 'fake-codex.cjs');
 const FAKE_BIN = join(HERE, 'bin');
+const TSX_NO_IPC = join(FAKE_BIN, 'tsx-no-ipc');
+const NEXT_FONT_MOCKS = join(HERE, 'next-font-mocks.cjs');
+const CANDIDATE_CONTROL = '.pipeline-eval';
+const CANDIDATE_TMP = join(CANDIDATE_CONTROL, 'tmp');
+const CANDIDATE_IGNORE = join(CANDIDATE_CONTROL, 'frozen-ignore');
 const MAX_BUFFER = 128 * 1024 * 1024;
 const MAX_CAPTURE_FILE = 16 * 1024 * 1024;
 const MAX_GIT_CONTROL_ENTRIES = 100_000;
@@ -145,7 +150,12 @@ export function validateProtocol(protocol, { requireLock = true } = {}) {
     if (!protocol || typeof protocol !== 'object' || Array.isArray(protocol)) {
         fail('pipeline protocol must be an object');
     }
-    if (protocol.version !== 1 || protocol.study_id !== 'songsiknow-full-pipeline-pilot-v1'
+    if (protocol.version !== 1 || protocol.revision !== 2
+        || protocol.study_id !== 'songsiknow-full-pipeline-pilot-v1'
+        || protocol.amends_protocol_sha256 !== '02ccaf466a7c6a51eca54843c3ecd873d4a47dc51ecf867bc276c75a20f1130d'
+        || !isNonEmptyString(protocol.amendment?.reason)
+        || protocol.amendment?.completed_cases_before_amendment !== 0
+        || protocol.amendment?.invalid_attempts_preserved !== 2
         || !isNonEmptyString(protocol.claim) || protocol.census_path !== 'CENSUS.md') {
         fail('pipeline protocol has an invalid identity');
     }
@@ -167,6 +177,23 @@ export function validateProtocol(protocol, { requireLock = true } = {}) {
         || !Number.isSafeInteger(execution.timeout_ms_per_turn)
         || execution.timeout_ms_per_turn < 1
         || execution.subagents !== false || execution.command_network !== false
+        || execution.preflight?.case_id !== 'sik-133'
+        || execution.preflight?.required_gate !== 'npm run build'
+        || execution.preflight?.model_calls !== 0
+        || execution.hermetic_build_overlay?.package_script !== 'next build --webpack'
+        || execution.hermetic_build_overlay?.typescript_cli !== false
+        || execution.hermetic_build_overlay?.webpack_build_worker !== false
+        || execution.hermetic_build_overlay?.worker_threads !== true
+        || stableJson(execution.hermetic_build_overlay?.synthetic_environment)
+            !== stableJson([
+                'DATABASE_URL',
+                'RP_ID',
+                'SESSION_SECRET',
+                'STRIPE_PRICE_ID',
+                'STRIPE_SECRET_KEY',
+                'STRIPE_WEBHOOK_SECRET',
+                'WEBAUTHN_ORIGIN',
+            ])
         || stableJson(execution.full_cycle?.resumed_stages)
             !== stableJson(['implement', 'review', 'patch', 'done'])) {
         fail('pipeline protocol has an invalid execution contract');
@@ -323,6 +350,8 @@ export function computeArtifactLock(protocol, protocolPath, source) {
         fake_codex_sha256: sha256(readFileSync(DEFAULT_FAKE_CODEX)),
         fake_tracker_sha256: hashLocalFiles([join(FAKE_BIN, 'gh'), join(FAKE_BIN, 'fake-gh.cjs')]),
         fake_git_sha256: sha256(readFileSync(join(FAKE_BIN, 'git'))),
+        tsx_no_ipc_sha256: sha256(readFileSync(TSX_NO_IPC)),
+        next_font_mocks_sha256: sha256(readFileSync(NEXT_FONT_MOCKS)),
         census_sha256: sha256(readFileSync(protocolAsset(protocolPath, protocol.census_path))),
         direct_prompt_sha256: sha256(readFileSync(protocolAsset(protocolPath, protocol.prompts.direct_path))),
         stage_prompt_sha256: sha256(readFileSync(protocolAsset(protocolPath, protocol.prompts.stage_path))),
@@ -374,6 +403,8 @@ export function assertLocalArtifactLock(protocol, protocolPath) {
         fake_codex_sha256: sha256(readFileSync(DEFAULT_FAKE_CODEX)),
         fake_tracker_sha256: hashLocalFiles([join(FAKE_BIN, 'gh'), join(FAKE_BIN, 'fake-gh.cjs')]),
         fake_git_sha256: sha256(readFileSync(join(FAKE_BIN, 'git'))),
+        tsx_no_ipc_sha256: sha256(readFileSync(TSX_NO_IPC)),
+        next_font_mocks_sha256: sha256(readFileSync(NEXT_FONT_MOCKS)),
         census_sha256: sha256(readFileSync(protocolAsset(protocolPath, protocol.census_path))),
         direct_prompt_sha256: sha256(readFileSync(protocolAsset(protocolPath, protocol.prompts.direct_path))),
         stage_prompt_sha256: sha256(readFileSync(protocolAsset(protocolPath, protocol.prompts.stage_path))),
@@ -425,6 +456,40 @@ function writePipelineGuidance(destination, source, protocol) {
             git(source, ['show', `${protocol.source.pipeline_guidance_commit}:${rel}`], { encoding: null }).stdout,
         );
     }
+}
+
+export function applyHermeticBuildOverlay(destination) {
+    const packagePath = join(destination, 'package.json');
+    const packageJson = JSON.parse(readFileSync(packagePath, 'utf8'));
+    const build = packageJson.scripts?.build;
+    if (!isNonEmptyString(build) || !/(?:^|&&\s*)next build(?:\s|$)/.test(build)
+        || /next build\s+--webpack/.test(build)) {
+        fail('fixture package.json does not match the frozen Next.js build overlay premise');
+    }
+    packageJson.scripts.build = build.replace(/next build(?=\s|$)/, 'next build --webpack');
+    writeFileSync(packagePath, `${JSON.stringify(packageJson, null, 2)}\n`);
+
+    const configPath = join(destination, 'next.config.ts');
+    const config = readFileSync(configPath, 'utf8');
+    const marker = 'const nextConfig: NextConfig = {\n';
+    if (config.split(marker).length !== 2
+        || /webpackBuildWorker|useTypeScriptCli|workerThreads/.test(config)) {
+        fail('fixture next.config.ts does not match the frozen build-worker overlay premise');
+    }
+    writeFileSync(configPath, config.replace(
+        marker,
+        `${marker}  experimental: {\n`
+            + '    useTypeScriptCli: false,\n'
+            + '    webpackBuildWorker: false,\n'
+            + '    workerThreads: true,\n'
+            + '  },\n',
+    ));
+    return {
+        next_bundler: 'webpack',
+        typescript_cli: false,
+        webpack_build_worker: false,
+        worker_threads: true,
+    };
 }
 
 const NEUTRAL_AGENTS = `# Full-pipeline evaluation fixture
@@ -522,6 +587,10 @@ export function sanitizeCandidateRepository(workspace, expectedIdentity) {
     const config = join(gitDir, 'config');
     if (existsSync(config)) unlinkSync(config);
     writeFileSync(config, SAFE_CANDIDATE_GIT_CONFIG, { flag: 'wx', mode: 0o600 });
+    const exclude = join(gitDir, 'info', 'exclude');
+    mkdirSync(dirname(exclude), { recursive: true });
+    if (existsSync(exclude)) unlinkSync(exclude);
+    writeFileSync(exclude, '', { flag: 'wx', mode: 0o600 });
     return actual;
 }
 
@@ -555,10 +624,24 @@ export function assertHistoryTruncated(workspace, forbiddenCommits = [], {
     return { commits: commits.length, remotes: 0, tags: 0, alternates: false };
 }
 
-function writeFixtureMetadata(destination, protocol, protocolPath, mode) {
-    mkdirSync(join(destination, '.pipeline-eval'), { recursive: true });
+function writeCandidateRuntimeAssets(destination) {
+    mkdirSync(join(destination, CANDIDATE_TMP), { recursive: true });
     writeFileSync(
-        join(destination, '.pipeline-eval', 'turn.schema.json'),
+        join(destination, CANDIDATE_CONTROL, 'next-font-mocks.cjs'),
+        readFileSync(NEXT_FONT_MOCKS),
+    );
+}
+
+function writeFixtureMetadata(destination, protocol, protocolPath, mode) {
+    writeCandidateRuntimeAssets(destination);
+    const sourceIgnore = join(destination, '.gitignore');
+    const frozenIgnore = existsSync(sourceIgnore) ? readFileSync(sourceIgnore, 'utf8') : '';
+    writeFileSync(
+        join(destination, CANDIDATE_IGNORE),
+        `${frozenIgnore.trimEnd()}\n/${CANDIDATE_CONTROL}/\n`,
+    );
+    writeFileSync(
+        join(destination, CANDIDATE_CONTROL, 'turn.schema.json'),
         readFileSync(protocolAsset(protocolPath, protocol.prompts.turn_schema_path)),
     );
     if (mode === 'neutral') writeFileSync(join(destination, 'AGENTS.md'), NEUTRAL_AGENTS);
@@ -580,6 +663,7 @@ export function materializeFixture({
     writeTree(destination, entries);
     if (mode === 'pipeline') writePipelineGuidance(destination, source, protocol);
     writeFixtureMetadata(destination, protocol, protocolPath, mode);
+    const hermeticBuild = applyHermeticBuildOverlay(destination);
     const initialCommit = initializeRepository(destination, protocol.execution.fixture_commit_time);
     const history = assertHistoryTruncated(
         destination,
@@ -597,6 +681,7 @@ export function materializeFixture({
         base_tree_sha256: treeDigest(entries),
         history,
         dependency,
+        hermetic_build: hermeticBuild,
     };
 }
 
@@ -616,8 +701,14 @@ function cloneDependencies(source, destination) {
         fail('dependency tree is missing its npm lock manifest');
     }
     if (readlinkEscapes(to)) fail('dependency tree contains a symlink that escapes its physical root');
+    const candidateTsx = join(to, '.bin', 'tsx');
+    if (!existsSync(candidateTsx)) fail('dependency tree is missing the tsx launcher');
+    rmSync(candidateTsx, { force: true });
+    writeFileSync(candidateTsx, readFileSync(TSX_NO_IPC), { mode: 0o755 });
+    chmodSync(candidateTsx, 0o755);
     return {
         method: 'full physical copy',
+        tsx_launcher: 'node --import tsx',
         source_manifest_sha256: sha256(readFileSync(sourceManifest)),
         target_manifest_sha256: sha256(readFileSync(targetManifest)),
         root_inode_distinct: true,
@@ -718,6 +809,13 @@ function privateWrite(path, data) {
     chmodSync(path, 0o600);
 }
 
+function resetCandidateScratch(workspace) {
+    const path = join(workspace, CANDIDATE_TMP);
+    rmSync(path, { recursive: true, force: true });
+    mkdirSync(path, { recursive: true, mode: 0o700 });
+    chmodSync(path, 0o700);
+}
+
 function resolveAuthPath(codexHome) {
     return resolve(codexHome ?? process.env.CODEX_HOME ?? join(homedir(), '.codex'), 'auth.json');
 }
@@ -767,6 +865,17 @@ export function pipelineConfig({
         realpathSync(FAKE_BIN),
     ])].sort().map((path) => `${JSON.stringify(path)} = "read"`).join('\n');
     const commandPath = `${FAKE_BIN}:${sanitizedPath(pathValue)}`;
+    const gitPath = join(workspacePath, '.git');
+    const dependencyPath = join(workspacePath, 'node_modules');
+    const controlPath = join(workspacePath, CANDIDATE_CONTROL);
+    const commandTmp = join(workspacePath, CANDIDATE_TMP);
+    const fontMocks = join(controlPath, 'next-font-mocks.cjs');
+    const candidateEntries = [
+        existsSync(gitPath) ? `${JSON.stringify(gitPath)} = "write"` : '',
+        existsSync(dependencyPath) ? `${JSON.stringify(dependencyPath)} = "read"` : '',
+        existsSync(controlPath) ? `${JSON.stringify(controlPath)} = "read"` : '',
+        existsSync(commandTmp) ? `${JSON.stringify(commandTmp)} = "write"` : '',
+    ].filter(Boolean).join('\n');
     const trackerEnvironment = issueBody || issueTitle ? [
         `CYCLE_PIPELINE_ISSUE_BODY_BASE64 = ${JSON.stringify(Buffer.from(issueBody).toString('base64'))}`,
         `CYCLE_PIPELINE_ISSUE_TITLE = ${JSON.stringify(issueTitle)}`,
@@ -797,6 +906,7 @@ view_image = false
 ":root" = "deny"
 ":minimal" = "read"
 ${JSON.stringify(workspacePath)} = "write"
+${candidateEntries}
 ${readable}
 
 [permissions.pipeline-fixture.network]
@@ -809,10 +919,22 @@ ignore_default_excludes = false
 [shell_environment_policy.set]
 HOME = "/nonexistent"
 PATH = ${JSON.stringify(commandPath)}
+TMPDIR = ${JSON.stringify(commandTmp)}
+NPM_CONFIG_CACHE = ${JSON.stringify(join(commandTmp, 'npm-cache'))}
+XDG_CACHE_HOME = ${JSON.stringify(join(commandTmp, 'xdg-cache'))}
 LANG = "C.UTF-8"
 LC_ALL = "C.UTF-8"
 NO_COLOR = "1"
 CI = "1"
+NEXT_TELEMETRY_DISABLED = "1"
+NEXT_FONT_GOOGLE_MOCKED_RESPONSES = ${JSON.stringify(fontMocks)}
+DATABASE_URL = ":memory:"
+RP_ID = "pipeline.invalid"
+SESSION_SECRET = "pipeline-eval-not-a-real-session-secret-0001"
+STRIPE_PRICE_ID = "price_pipeline_eval"
+STRIPE_SECRET_KEY = "pipeline-eval-not-a-real-stripe-key"
+STRIPE_WEBHOOK_SECRET = "pipeline-eval-not-a-real-webhook-secret"
+WEBAUTHN_ORIGIN = "https://pipeline.invalid"
 GIT_CONFIG_NOSYSTEM = "1"
 GIT_CONFIG_GLOBAL = "/dev/null"
 GIT_AUTHOR_NAME = "Pipeline Candidate"
@@ -1087,6 +1209,9 @@ export function probePipelineConfig(codexBin = 'codex') {
     const scratch = join(root, 'scratch');
     mkdirSync(workspace);
     mkdirSync(scratch);
+    mkdirSync(join(workspace, '.git'));
+    mkdirSync(join(workspace, CANDIDATE_TMP), { recursive: true });
+    writeFileSync(join(workspace, CANDIDATE_CONTROL, 'next-font-mocks.cjs'), readFileSync(NEXT_FONT_MOCKS));
     let clientHome;
     try {
         clientHome = createClientHome({
@@ -1113,6 +1238,12 @@ export function probeIsolation(codexBin = 'codex') {
     try {
         mkdirSync(workspace);
         writeFileSync(join(workspace, 'allowed.txt'), 'allowed\n');
+        mkdirSync(join(workspace, CANDIDATE_TMP), { recursive: true });
+        writeFileSync(join(workspace, CANDIDATE_CONTROL, 'next-font-mocks.cjs'), readFileSync(NEXT_FONT_MOCKS));
+        writeFileSync(join(workspace, CANDIDATE_IGNORE), `/${CANDIDATE_CONTROL}/\n`);
+        mkdirSync(join(workspace, 'node_modules'));
+        writeFileSync(join(workspace, 'node_modules', 'read-only-probe'), 'dependency\n');
+        initializeRepository(workspace, '2026-08-30T12:00:00Z');
         clientHome = createClientHome({
             includeAuth: false,
             codexBin,
@@ -1137,6 +1268,19 @@ export function probeIsolation(codexBin = 'codex') {
             'test "$(cat allowed.txt)" = changed || exit 12',
             'git --version >/dev/null || exit 13',
             'gh --version >/dev/null || exit 14',
+            'git checkout -q -b eval/preflight || exit 16',
+            'git commit -q --allow-empty -m "probe candidate Git writes" || exit 17',
+            'git checkout -q main || exit 18',
+            'test -d "$TMPDIR" || exit 19',
+            'printf temporary > "$TMPDIR/write-probe" || exit 21',
+            'rm "$TMPDIR/write-probe" || exit 22',
+            'test -r node_modules/read-only-probe || exit 23',
+            'if printf denied > node_modules/read-only-probe 2>/dev/null; then exit 24; fi',
+            'test -r .pipeline-eval/next-font-mocks.cjs || exit 25',
+            'if printf denied > .pipeline-eval/rogue 2>/dev/null; then exit 26; fi',
+            'if rm .pipeline-eval/next-font-mocks.cjs 2>/dev/null; then exit 27; fi',
+            'if mv .pipeline-eval .pipeline-eval-moved 2>/dev/null; then exit 28; fi',
+            'if mv node_modules node_modules-moved 2>/dev/null; then exit 29; fi',
             `if printf denied > ${JSON.stringify(fakeWrite)} 2>/dev/null; then exit 15; fi`,
             `if /bin/bash -c 'exec 3<>/dev/tcp/127.0.0.1/${loopback.port}' 2>/dev/null; then exit 30; fi`,
             'shift',
@@ -1162,6 +1306,10 @@ export function probeIsolation(codexBin = 'codex') {
         }
         return {
             candidate_workspace_read_write: true,
+            candidate_git_metadata_write: true,
+            candidate_local_tmp_write: true,
+            candidate_dependencies_read_only: true,
+            candidate_runtime_controls_read_only: true,
             evaluator_assets_read_only: true,
             denied_host_loopback_listener: true,
             denied_host_sentinels: [...deniedNames, 'client-home'],
@@ -1180,6 +1328,53 @@ export function probeIsolation(codexBin = 'codex') {
         if (clientHome) rmSync(clientHome, { recursive: true, force: true });
         rmSync(root, { recursive: true, force: true });
         rmSync(scratch, { recursive: true, force: true });
+    }
+}
+
+function probeCandidateRuntime({ protocol, protocolPath, source, codexBin }) {
+    const item = protocol.cases.find((entry) => entry.id === protocol.execution.preflight.case_id);
+    const root = privateDirectory(`cycle-pipeline-runtime-${item.id}-`);
+    const workspace = join(root, 'workspace');
+    try {
+        const fixture = materializeFixture({
+            protocol,
+            protocolPath,
+            source,
+            caseId: item.id,
+            mode: 'pipeline',
+            destination: workspace,
+            dependencies: true,
+        });
+        const gitResult = sandboxedCommand({
+            codexBin,
+            workspace,
+            command: 'git checkout -q -b eval/preflight && git commit -q --allow-empty -m "probe candidate Git writes"',
+            timeoutMs: 30_000,
+        });
+        if (gitResult.status !== 0) {
+            fail(`candidate Git-write preflight failed (${gitResult.status})\n${gitResult.stdout ?? ''}${gitResult.stderr ?? ''}`.trimEnd());
+        }
+        const gate = protocol.execution.preflight.required_gate;
+        const gateResult = sandboxedCommand({
+            codexBin,
+            workspace,
+            command: gate,
+            timeoutMs: protocol.execution.timeout_ms_per_turn,
+        });
+        if (gateResult.status !== 0) {
+            fail(`candidate required-gate preflight failed (${gateResult.status})\n${gateResult.stdout ?? ''}${gateResult.stderr ?? ''}`.trimEnd());
+        }
+        return {
+            case_id: item.id,
+            candidate_git_branch_and_commit: 'pass',
+            required_gate: gate,
+            required_gate_status: 'pass',
+            dependency_instrumentation: fixture.dependency.tsx_launcher,
+            hermetic_build: fixture.hermetic_build,
+            model_calls: 0,
+        };
+    } finally {
+        rmSync(root, { recursive: true, force: true });
     }
 }
 
@@ -1402,8 +1597,15 @@ function runLifecycle({
     };
 }
 
-function untrackedPaths(workspace) {
-    return git(workspace, ['ls-files', '--others', '--exclude-standard', '-z']).stdout
+export function candidateUntrackedPaths(workspace) {
+    const frozenIgnore = join(workspace, CANDIDATE_IGNORE);
+    if (!existsSync(frozenIgnore) || !lstatSync(frozenIgnore).isFile()
+        || lstatSync(frozenIgnore).isSymbolicLink()) {
+        fail('candidate fixture lost its frozen ignore rules');
+    }
+    return git(workspace, [
+        'ls-files', '--others', `--exclude-from=${CANDIDATE_IGNORE}`, '-z',
+    ]).stdout
         .split('\0').filter(Boolean).sort();
 }
 
@@ -1412,7 +1614,7 @@ function combinedDiff(workspace, initialCommit) {
         'diff', '--binary', '--full-index', '--no-ext-diff', '--no-textconv', '--no-renames', initialCommit,
     ], { encoding: null }).stdout;
     const chunks = [tracked];
-    for (const rel of untrackedPaths(workspace)) {
+    for (const rel of candidateUntrackedPaths(workspace)) {
         const path = resolve(workspace, rel);
         ensureInside(workspace, path);
         const stat = lstatSync(path);
@@ -1436,10 +1638,11 @@ function combinedDiff(workspace, initialCommit) {
 function changedPaths(workspace, initialCommit) {
     const tracked = git(workspace, ['diff', '--name-only', '-z', initialCommit]).stdout
         .split('\0').filter(Boolean);
-    return [...new Set([...tracked, ...untrackedPaths(workspace)])].sort();
+    return [...new Set([...tracked, ...candidateUntrackedPaths(workspace)])].sort();
 }
 
 function snapshotWorkspace({ output, runDir, workspace, fixture, arm, stage }) {
+    resetCandidateScratch(workspace);
     sanitizeCandidateRepository(workspace, fixture.git_directory);
     const path = join(runDir, 'snapshots', arm, `${stage}.diff`);
     const diff = combinedDiff(workspace, fixture.initial_commit);
@@ -1470,8 +1673,9 @@ function applySourceFiles(source, revision, paths, destination) {
 }
 
 function candidateFiles(workspace) {
-    return git(workspace, ['ls-files', '--cached', '--others', '--exclude-standard', '-z']).stdout
-        .split('\0').filter(Boolean).sort();
+    const tracked = git(workspace, ['ls-files', '--cached', '-z']).stdout
+        .split('\0').filter(Boolean);
+    return [...new Set([...tracked, ...candidateUntrackedPaths(workspace)])].sort();
 }
 
 const VERIFIER_EXCLUDES = [
@@ -1514,6 +1718,7 @@ function restoreVerifierControls(source, base, destination) {
 
 function sandboxedCommand({ codexBin, workspace, command, timeoutMs }) {
     const scratch = privateDirectory('cycle-pipeline-verifier-tmp-');
+    writeCandidateRuntimeAssets(workspace);
     const clientHome = createClientHome({
         includeAuth: false,
         codexBin,
@@ -1673,7 +1878,17 @@ function scanChangedFilesForCredentials(workspace, initialCommit, authPath) {
     assertNoCredentialMaterial(values, authPath);
 }
 
-function verifyCandidateBoundary({ workspace, source, item, protocol, initialCommit, authPath }) {
+function verifyCandidateBoundary({
+    workspace,
+    source,
+    item,
+    protocol,
+    initialCommit,
+    gitDirectory,
+    authPath,
+}) {
+    resetCandidateScratch(workspace);
+    sanitizeCandidateRepository(workspace, gitDirectory);
     const history = assertHistoryTruncated(
         workspace,
         [item.repair, protocol.source.pipeline_guidance_commit],
@@ -1729,12 +1944,14 @@ function preflight({ protocol, protocolPath, source, output, codexBin, skipOracl
                 case_id: item.id,
                 base_tree_sha256: fixture.base_tree_sha256,
                 history: fixture.history,
+                hermetic_build: fixture.hermetic_build,
             });
         } finally {
             rmSync(root, { recursive: true, force: true });
         }
     }
     const isolation = probeIsolation(codexBin);
+    const candidateRuntime = probeCandidateRuntime({ protocol, protocolPath, source, codexBin });
     const oracles = skipOracles ? null : protocol.cases.map((item) => verifyFrozenOracle({
         protocol, protocolPath, source, item, codexBin,
     }));
@@ -1746,6 +1963,7 @@ function preflight({ protocol, protocolPath, source, output, codexBin, skipOracl
         config,
         fixtures,
         isolation,
+        candidate_runtime: candidateRuntime,
         oracles,
         scored_model_calls: 0,
     };
@@ -1865,6 +2083,7 @@ function finalizeArm({
             item,
             protocol,
             initialCommit: fixture.initial_commit,
+            gitDirectory: fixture.git_directory,
             authPath,
         });
     const oracle = dryRun

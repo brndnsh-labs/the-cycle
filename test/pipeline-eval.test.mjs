@@ -18,8 +18,10 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
+    applyHermeticBuildOverlay,
     assertNoCredentialMaterial,
     buildPlan,
+    candidateUntrackedPaths,
     clientEnvironment,
     loadProtocol,
     parseExecEvents,
@@ -68,6 +70,13 @@ function assertPrivateTree(path) {
 test('pipeline protocol freezes the census, three arms, four cases, and local artifacts', () => {
     const { protocol } = loadProtocol(PROTOCOL_PATH);
     assert.deepEqual(protocol.schedule.case_order, ['sik-133', 'sik-131', 'sik-139', 'sik-123']);
+    assert.equal(protocol.revision, 2);
+    assert.equal(
+        protocol.amends_protocol_sha256,
+        '02ccaf466a7c6a51eca54843c3ecd873d4a47dc51ecf867bc276c75a20f1130d',
+    );
+    assert.equal(protocol.amendment.completed_cases_before_amendment, 0);
+    assert.equal(protocol.amendment.invalid_attempts_preserved, 2);
     assert.deepEqual(protocol.arms.map((arm) => arm.id), ['raw-direct', 'shaped-direct', 'full-cycle']);
     assert.equal(protocol.schedule.cases_per_batch, 1);
     assert.equal(protocol.schedule.invalid_case_retry_limit, 1);
@@ -76,6 +85,11 @@ test('pipeline protocol freezes the census, three arms, four cases, and local ar
     assert.equal(protocol.execution.codex_version, 'codex-cli 0.150.1');
     assert.equal(protocol.execution.command_network, false);
     assert.equal(protocol.execution.subagents, false);
+    assert.deepEqual(protocol.execution.preflight, {
+        case_id: 'sik-133',
+        required_gate: 'npm run build',
+        model_calls: 0,
+    });
     assert.deepEqual(protocol.execution.full_cycle.resumed_stages, ['implement', 'review', 'patch', 'done']);
     assert.equal(buildPlan(protocol).minimum_model_turns_per_valid_case, 7);
     const scoreSchema = json(join(PIPELINE_ROOT, protocol.scoring.schema_path));
@@ -100,6 +114,14 @@ test('pipeline protocol freezes the census, three arms, four cases, and local ar
     assert.equal(
         sha256(readFileSync(join(PIPELINE_ROOT, 'bin', 'git'))),
         protocol.artifact_lock.fake_git_sha256,
+    );
+    assert.equal(
+        sha256(readFileSync(join(PIPELINE_ROOT, 'bin', 'tsx-no-ipc'))),
+        protocol.artifact_lock.tsx_no_ipc_sha256,
+    );
+    assert.equal(
+        sha256(readFileSync(join(PIPELINE_ROOT, 'next-font-mocks.cjs'))),
+        protocol.artifact_lock.next_font_mocks_sha256,
     );
     assert.equal(
         sha256(readFileSync(join(PIPELINE_ROOT, protocol.census_path))),
@@ -127,6 +149,9 @@ test('pipeline config grants one writable workspace and drops ambient credential
     try {
         const workspace = join(scratch, 'workspace');
         mkdirSync(workspace);
+        mkdirSync(join(workspace, '.git'));
+        mkdirSync(join(workspace, 'node_modules'));
+        mkdirSync(join(workspace, '.pipeline-eval', 'tmp'), { recursive: true });
         const config = pipelineConfig({
             workspace,
             codexBin: join(PIPELINE_ROOT, 'fake-codex.cjs'),
@@ -136,9 +161,23 @@ test('pipeline config grants one writable workspace and drops ambient credential
         assert.match(config, /":root" = "deny"/);
         assert.match(config, /":minimal" = "read"/);
         assert.match(config, new RegExp(`${workspace.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}" = "write"`));
+        assert.match(config, new RegExp(`${join(workspace, '.git').replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}" = "write"`));
+        assert.match(config, new RegExp(`${join(workspace, 'node_modules').replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}" = "read"`));
+        assert.match(config, new RegExp(`${join(workspace, '.pipeline-eval').replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}" = "read"`));
+        assert.match(config, new RegExp(`${join(workspace, '.pipeline-eval', 'tmp').replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}" = "write"`));
         assert.match(config, /\[permissions\.pipeline-fixture\.network\]\nenabled = false/);
         assert.match(config, /\[shell_environment_policy\]\ninherit = "none"/);
         assert.match(config, /multi_agent = false/);
+        assert.match(config, /TMPDIR = ".*\.pipeline-eval\/tmp"/);
+        assert.match(config, /NPM_CONFIG_CACHE = ".*\.pipeline-eval\/tmp\/npm-cache"/);
+        assert.match(config, /XDG_CACHE_HOME = ".*\.pipeline-eval\/tmp\/xdg-cache"/);
+        assert.match(config, /NEXT_TELEMETRY_DISABLED = "1"/);
+        assert.match(config, /NEXT_FONT_GOOGLE_MOCKED_RESPONSES = ".*next-font-mocks\.cjs"/);
+        assert.match(config, /DATABASE_URL = ":memory:"/);
+        assert.match(config, /RP_ID = "pipeline\.invalid"/);
+        assert.match(config, /SESSION_SECRET = "pipeline-eval-not-a-real-session-secret-0001"/);
+        assert.match(config, /STRIPE_SECRET_KEY = "pipeline-eval-not-a-real-stripe-key"/);
+        assert.match(config, /WEBAUTHN_ORIGIN = "https:\/\/pipeline\.invalid"/);
         assert.doesNotMatch(config, /OPENAI_API_KEY|GH_TOKEN|NPM_TOKEN/);
         const neutralConfig = pipelineConfig({
             workspace,
@@ -175,6 +214,41 @@ test('pipeline config grants one writable workspace and drops ambient credential
             () => assertNoCredentialMaterial([`accidental ${token} disclosure`], auth),
             /authentication material/,
         );
+    } finally {
+        rmSync(scratch, { recursive: true, force: true });
+    }
+});
+
+test('hermetic build overlay is frozen before candidates receive a fixture', () => {
+    const scratch = mkdtempSync(join(tmpdir(), 'cycle-pipeline-overlay-test-'));
+    try {
+        writeFileSync(join(scratch, 'package.json'), `${JSON.stringify({
+            scripts: { build: 'tsx scripts/check.ts && next build' },
+        }, null, 2)}\n`);
+        writeFileSync(join(scratch, 'next.config.ts'), [
+            "import type { NextConfig } from 'next'",
+            '',
+            'const nextConfig: NextConfig = {',
+            '}',
+            '',
+            'export default nextConfig',
+            '',
+        ].join('\n'));
+
+        assert.deepEqual(applyHermeticBuildOverlay(scratch), {
+            next_bundler: 'webpack',
+            typescript_cli: false,
+            webpack_build_worker: false,
+            worker_threads: true,
+        });
+        assert.equal(
+            JSON.parse(readFileSync(join(scratch, 'package.json'), 'utf8')).scripts.build,
+            'tsx scripts/check.ts && next build --webpack',
+        );
+        const config = readFileSync(join(scratch, 'next.config.ts'), 'utf8');
+        assert.match(config, /useTypeScriptCli: false/);
+        assert.match(config, /webpackBuildWorker: false/);
+        assert.match(config, /workerThreads: true/);
     } finally {
         rmSync(scratch, { recursive: true, force: true });
     }
@@ -240,8 +314,10 @@ test('candidate Git controls are pinned and sanitized before evaluator-side insp
         const original = lstatSync(join(workspace, '.git'));
         const identity = { dev: original.dev, ino: original.ino };
         execFileSync('/usr/bin/git', ['config', 'core.fsmonitor', '/bin/false'], { cwd: workspace });
+        writeFileSync(join(workspace, '.git', 'info', 'exclude'), 'hidden-by-candidate\n');
         sanitizeCandidateRepository(workspace, identity);
         assert.doesNotMatch(readFileSync(join(workspace, '.git', 'config'), 'utf8'), /fsmonitor/i);
+        assert.equal(readFileSync(join(workspace, '.git', 'info', 'exclude'), 'utf8'), '');
 
         const replacement = join(scratch, 'replacement.git');
         mkdirSync(replacement);
@@ -251,6 +327,32 @@ test('candidate Git controls are pinned and sanitized before evaluator-side insp
             () => sanitizeCandidateRepository(workspace, identity),
             /replaced its \.git control directory/,
         );
+    } finally {
+        rmSync(scratch, { recursive: true, force: true });
+    }
+});
+
+test('candidate ignore edits cannot conceal new source files from evaluator capture', () => {
+    const scratch = mkdtempSync(join(tmpdir(), 'cycle-pipeline-ignore-test-'));
+    try {
+        execFileSync('/usr/bin/git', ['init', '-q', '-b', 'main'], { cwd: scratch });
+        mkdirSync(join(scratch, '.pipeline-eval'));
+        writeFileSync(join(scratch, '.gitignore'), '/.next/\n');
+        writeFileSync(join(scratch, '.pipeline-eval', 'frozen-ignore'), [
+            '/.next/',
+            '/.pipeline-eval/',
+            '',
+        ].join('\n'));
+        execFileSync('/usr/bin/git', [
+            'add', '--', '.gitignore', '.pipeline-eval/frozen-ignore',
+        ], { cwd: scratch });
+
+        writeFileSync(join(scratch, '.gitignore'), '/.next/\nhidden.ts\n');
+        writeFileSync(join(scratch, 'hidden.ts'), 'export const visibleToEvaluator = true\n');
+        mkdirSync(join(scratch, '.next'));
+        writeFileSync(join(scratch, '.next', 'cache'), 'generated\n');
+
+        assert.deepEqual(candidateUntrackedPaths(scratch), ['hidden.ts']);
     } finally {
         rmSync(scratch, { recursive: true, force: true });
     }
