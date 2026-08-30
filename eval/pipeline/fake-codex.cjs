@@ -91,6 +91,11 @@ function finish(payload) {
 event({ type: 'thread.started', thread_id: threadId });
 event({ type: 'turn.started' });
 
+if (caseId === 'sik-133' && arm === 'intake' && attempt === 2 && turn === 1) {
+    console.error('synthetic infrastructure interruption');
+    process.exit(86);
+}
+
 if (caseId === 'sik-133' && arm === 'shaped-direct' && attempt === 1 && turn === 1) {
     event({ type: 'item.completed', item: { id: `item-${++item}`, type: 'agent_message', text: 'invalid fake response' } });
     event({ type: 'turn.completed', usage: { input_tokens: 10, output_tokens: 3 } });

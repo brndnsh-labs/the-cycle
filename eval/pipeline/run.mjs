@@ -150,12 +150,13 @@ export function validateProtocol(protocol, { requireLock = true } = {}) {
     if (!protocol || typeof protocol !== 'object' || Array.isArray(protocol)) {
         fail('pipeline protocol must be an object');
     }
-    if (protocol.version !== 1 || protocol.revision !== 2
+    if (protocol.version !== 1 || protocol.revision !== 3
         || protocol.study_id !== 'songsiknow-full-pipeline-pilot-v1'
-        || protocol.amends_protocol_sha256 !== '02ccaf466a7c6a51eca54843c3ecd873d4a47dc51ecf867bc276c75a20f1130d'
+        || protocol.amends_protocol_sha256 !== 'cc25080c15a3207d744fec461c6fd2e996aaf2b48b5aa2847bdfdbc591019d25'
         || !isNonEmptyString(protocol.amendment?.reason)
-        || protocol.amendment?.completed_cases_before_amendment !== 0
-        || protocol.amendment?.invalid_attempts_preserved !== 2
+        || protocol.amendment?.completed_cases_before_amendment !== 1
+        || protocol.amendment?.invalid_attempts_preserved !== 4
+        || !isNonEmptyString(protocol.amendment?.restart_scope)
         || !isNonEmptyString(protocol.claim) || protocol.census_path !== 'CENSUS.md') {
         fail('pipeline protocol has an invalid identity');
     }
@@ -167,15 +168,18 @@ export function validateProtocol(protocol, { requireLock = true } = {}) {
     if (!schedule || schedule.seed !== 'songsiknow-full-pipeline-pilot-v1-2026-08-30'
         || stableJson(schedule.case_order) !== stableJson(['sik-133', 'sik-131', 'sik-139', 'sik-123'])
         || schedule.arms_per_case !== 3 || schedule.cases_per_batch !== 1
-        || schedule.invalid_case_retry_limit !== 1) {
+        || stableJson(schedule.retry_limits) !== stableJson({
+            behavioral: 1,
+            infrastructure: 1,
+            max_attempts_per_case: 3,
+        })) {
         fail('pipeline protocol has an invalid frozen schedule');
     }
     const execution = protocol.execution;
     if (!execution || execution.model !== 'gpt-5.6-sol'
         || execution.reasoning_effort !== 'high'
-        || execution.codex_version !== 'codex-cli 0.150.1'
-        || !Number.isSafeInteger(execution.timeout_ms_per_turn)
-        || execution.timeout_ms_per_turn < 1
+        || execution.codex_version !== 'codex-cli 0.151.0'
+        || execution.timeout_ms_per_turn !== 1_800_000
         || execution.subagents !== false || execution.command_network !== false
         || execution.preflight?.case_id !== 'sik-133'
         || execution.preflight?.required_gate !== 'npm run build'
@@ -1466,7 +1470,13 @@ function invokeTurn({
     if (finalText !== null) privateWrite(join(turnDir, 'final.json'), `${finalText}\n`);
     const structured = validateTurnText(finalText);
     const invalid = [];
-    if (processResult.status !== 0) invalid.push(`Codex exited ${processResult.status}`);
+    const timedOut = processResult.error?.code === 'ETIMEDOUT';
+    const infrastructureFailure = Boolean(processResult.error)
+        || (processResult.signal !== null && processResult.signal !== undefined)
+        || processResult.status !== 0;
+    if (timedOut) invalid.push(`Codex timed out after ${timeoutMs}ms`);
+    else if (processResult.error) invalid.push(`Codex process failed: ${processResult.error.code ?? 'unknown error'}`);
+    else if (processResult.status !== 0) invalid.push(`Codex exited ${processResult.status}`);
     if (parsed.invalid) invalid.push(parsed.invalid);
     const started = parsed.events.some((event) => event.type === 'turn.started');
     const completed = parsed.events.some((event) => event.type === 'turn.completed');
@@ -1487,6 +1497,12 @@ function invokeTurn({
         finished_at: finishedAt,
         elapsed_ms: processResult.elapsedMs,
         exit_code: processResult.status,
+        infrastructure_failure: infrastructureFailure,
+        termination: {
+            timed_out: timedOut,
+            signal: processResult.signal ?? null,
+            error_code: processResult.error?.code ?? null,
+        },
         model_turn_started: started,
         model_turn_completed: completed,
         usage: parsed.usage,
@@ -2006,6 +2022,8 @@ function lifecycleSummary(lifecycle) {
             finished_at: turn.finished_at,
             elapsed_ms: turn.elapsed_ms,
             exit_code: turn.exit_code,
+            infrastructure_failure: turn.infrastructure_failure,
+            termination: turn.termination,
             model_turn_started: turn.model_turn_started,
             model_turn_completed: turn.model_turn_completed,
             usage: turn.usage,
@@ -2020,6 +2038,29 @@ function lifecycleSummary(lifecycle) {
 function lifecycleInvalid(lifecycle) {
     return lifecycle.turns.flatMap((turn) => turn.invalid_reasons
         .map((reason) => `${lifecycle.stage} turn ${turn.turn}: ${reason}`));
+}
+
+export function classifyAttemptInvalidation({ valid, lifecycles }) {
+    if (valid) return null;
+    const turns = lifecycles.flatMap((lifecycle) => lifecycle.turns ?? []);
+    return turns.some((turn) => turn.infrastructure_failure) ? 'infrastructure' : 'behavioral';
+}
+
+export function retryDisposition(retryLimits, attempts) {
+    if (!Array.isArray(attempts) || attempts.length === 0) fail('retry disposition requires an attempt');
+    const latest = attempts.at(-1);
+    if (latest.valid) return 'accepted';
+    if (!['behavioral', 'infrastructure'].includes(latest.invalidation_class)) {
+        fail('invalid attempt is missing its invalidation class');
+    }
+    const failuresOfClass = attempts.filter(
+        (attempt) => !attempt.valid && attempt.invalidation_class === latest.invalidation_class,
+    ).length;
+    if (attempts.length >= retryLimits.max_attempts_per_case
+        || failuresOfClass > retryLimits[latest.invalidation_class]) {
+        return 'terminal';
+    }
+    return 'retry';
 }
 
 function recursiveFiles(root) {
@@ -2360,12 +2401,18 @@ function executeCaseAttempt({
             if (arms.length !== 3) invalid.push(`captured ${arms.length} arms instead of three`);
         }
 
+        const valid = invalid.length === 0;
+        const invalidationClass = classifyAttemptInvalidation({
+            valid,
+            lifecycles: attemptedLifecycles,
+        });
         const result = {
             study_id: protocol.study_id,
             case_id: item.id,
             case_index: caseIndex,
             attempt,
-            valid: invalid.length === 0,
+            valid,
+            invalidation_class: invalidationClass,
             invalid_reasons: invalid,
             model,
             reasoning_effort: effort,
@@ -2494,8 +2541,16 @@ function validatePersistedResult({ protocol, output, experiment, result, expecte
         if (result[key] !== value) fail(`resumable result identity mismatch: ${key}`);
     }
     if (typeof result.valid !== 'boolean' || !Array.isArray(result.invalid_reasons)
+        || !Array.isArray(result.lifecycle)
         || !result.artifacts || typeof result.artifacts !== 'object') {
         fail(`resumable result for ${expectedItem.id} has invalid status fields`);
+    }
+    if (result.valid !== (result.invalid_reasons.length === 0)
+        || result.invalidation_class !== classifyAttemptInvalidation({
+            valid: result.valid,
+            lifecycles: result.lifecycle ?? [],
+        })) {
+        fail(`resumable result for ${expectedItem.id} has inconsistent invalidation fields`);
     }
     const runName = `${String(expectedIndex).padStart(2, '0')}-${expectedItem.id}-a${expectedAttempt}`;
     const expectedPrefix = `private/runs/${runName}/`;
@@ -2521,47 +2576,51 @@ export function validateProgress({ protocol, output, experiment, results }) {
     let cursor = 0;
     let completedCases = 0;
     let terminalInvalidCase = null;
+    let pendingCase = null;
+    cases:
     for (let index = 0; index < protocol.cases.length; index += 1) {
         const item = protocol.cases[index];
         const caseIndex = index + 1;
         if (cursor === results.length) break;
-        const first = results[cursor];
-        validatePersistedResult({
-            protocol,
-            output,
-            experiment,
-            result: first,
-            expectedItem: item,
-            expectedIndex: caseIndex,
-            expectedAttempt: 1,
-        });
-        cursor += 1;
-        if (first.valid) {
-            completedCases += 1;
-            continue;
+        const attempts = [];
+        for (let attempt = 1; attempt <= protocol.schedule.retry_limits.max_attempts_per_case; attempt += 1) {
+            if (cursor === results.length) {
+                pendingCase = item;
+                break cases;
+            }
+            const result = results[cursor];
+            validatePersistedResult({
+                protocol,
+                output,
+                experiment,
+                result,
+                expectedItem: item,
+                expectedIndex: caseIndex,
+                expectedAttempt: attempt,
+            });
+            cursor += 1;
+            attempts.push(result);
+            const disposition = retryDisposition(protocol.schedule.retry_limits, attempts);
+            if (disposition === 'accepted') {
+                completedCases += 1;
+                continue cases;
+            }
+            if (disposition === 'terminal') {
+                terminalInvalidCase = item.id;
+                break cases;
+            }
+            if (cursor === results.length) {
+                pendingCase = item;
+                break cases;
+            }
         }
-        if (cursor === results.length) break;
-        const retry = results[cursor];
-        validatePersistedResult({
-            protocol,
-            output,
-            experiment,
-            result: retry,
-            expectedItem: item,
-            expectedIndex: caseIndex,
-            expectedAttempt: 2,
-        });
-        cursor += 1;
-        if (retry.valid) completedCases += 1;
-        else terminalInvalidCase = item.id;
-        if (terminalInvalidCase) break;
     }
     if (cursor !== results.length) fail('resumable results are not an exact prefix of the frozen schedule');
     return {
         completedCases,
         terminalInvalidCase,
         complete: completedCases === protocol.cases.length,
-        nextCase: terminalInvalidCase ? null : protocol.cases[completedCases] ?? null,
+        nextCase: terminalInvalidCase ? null : pendingCase ?? protocol.cases[completedCases] ?? null,
     };
 }
 
@@ -2714,13 +2773,20 @@ function validateScoringArtifacts(output) {
 function summarize(protocol, results) {
     const valid = acceptedResults(protocol, results);
     const allTurns = results.flatMap((result) => result.lifecycle.flatMap((stage) => stage.turns));
+    const invalidAttempts = results.filter((result) => !result.valid);
     return {
         complete: valid.size === protocol.cases.length,
         completed_cases: valid.size,
         total_cases: protocol.cases.length,
         remaining_cases: protocol.cases.length - valid.size,
         attempts: results.length,
-        invalid_attempts: results.filter((result) => !result.valid).length,
+        invalid_attempts: invalidAttempts.length,
+        invalid_attempts_by_class: {
+            behavioral: invalidAttempts.filter((result) => result.invalidation_class === 'behavioral').length,
+            infrastructure: invalidAttempts.filter(
+                (result) => result.invalidation_class === 'infrastructure',
+            ).length,
+        },
         model_turns_started: allTurns.filter((turn) => turn.model_turn_started).length,
         model_turns_completed: allTurns.filter((turn) => turn.model_turn_completed).length,
         usage: usageSum(allTurns),
@@ -2776,10 +2842,12 @@ function runExperiment({
         const item = progress.nextCase;
         const caseIndex = protocol.cases.findIndex((entry) => entry.id === item.id) + 1;
         privateWrite(active, `${JSON.stringify({ case_id: item.id, case_index: caseIndex, attempt: 1 }, null, 2)}\n`);
-        let accepted = false;
         let caseCheckpointed = false;
         try {
-            for (let attempt = 1; attempt <= protocol.schedule.invalid_case_retry_limit + 1; attempt += 1) {
+            const attempts = [];
+            for (let attempt = 1;
+                attempt <= protocol.schedule.retry_limits.max_attempts_per_case;
+                attempt += 1) {
                 privateWrite(active, `${JSON.stringify({ case_id: item.id, case_index: caseIndex, attempt }, null, 2)}\n`);
                 const result = executeCaseAttempt({
                     protocol,
@@ -2799,10 +2867,8 @@ function runExperiment({
                 });
                 appendResult(output, result);
                 results.push(result);
-                if (result.valid) {
-                    accepted = true;
-                    break;
-                }
+                attempts.push(result);
+                if (retryDisposition(protocol.schedule.retry_limits, attempts) !== 'retry') break;
             }
             caseCheckpointed = true;
         } finally {
@@ -2810,7 +2876,7 @@ function runExperiment({
         }
         processed += 1;
         progress = validateProgress({ protocol, output, experiment, results });
-        if (!accepted || progress.terminalInvalidCase) break;
+        if (progress.terminalInvalidCase) break;
     }
     const summary = summarize(protocol, results);
     privateWrite(join(output, 'summary.json'), `${JSON.stringify(summary, null, 2)}\n`);
@@ -2827,6 +2893,7 @@ function runExperiment({
         remaining_cases: summary.remaining_cases,
         attempts: summary.attempts,
         invalid_attempts: summary.invalid_attempts,
+        invalid_attempts_by_class: summary.invalid_attempts_by_class,
         model_turns_started: summary.model_turns_started,
         model_turns_completed: summary.model_turns_completed,
         reported_token_usage: summary.usage,
@@ -2851,7 +2918,7 @@ export function buildPlan(protocol) {
         },
         minimum_model_turns_per_valid_case: 7,
         maximum_model_turns_per_attempt: 28,
-        whole_case_retry_limit: protocol.schedule.invalid_case_retry_limit,
+        whole_case_retry_limits: protocol.schedule.retry_limits,
         scored_model_calls_in_setup_issue: 0,
     };
 }
