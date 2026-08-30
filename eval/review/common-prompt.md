@@ -5,8 +5,9 @@ outside this repository, or attempt to recover later history. Inspect the implem
 and relevant repository documentation closely enough to identify consequential correctness,
 contract, safety, and edge-case defects.
 
-Before reviewing, read `.agents/skills/review/SKILL.md` if that repository-local guide exists.
-Otherwise perform a strong general code review using the same output contract.
+Before reviewing, if the repository-local guides exist, read both
+`.agents/skills/review/SKILL.md` and `.agents/skills/DOCTRINE.md` in full. If neither exists,
+perform a strong general code review using the same output contract.
 
 Return only findings that are actionable and caused by the uncommitted change. For each finding,
 provide:

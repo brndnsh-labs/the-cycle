@@ -20,6 +20,7 @@ import {
     assertNoCredentialMaterial,
     buildSchedule,
     createReviewerHome,
+    guidanceEvidence,
     loadProtocol,
     probeReviewerConfig,
     reviewerConfig,
@@ -72,10 +73,12 @@ test('review protocol freezes the balanced study and local artifact hashes', () 
     assert.equal(protocol.schedule.batch_unit, 'matched_pair');
     assert.equal(protocol.scoring.composite_score, false);
     assert.equal(protocol.scoring.scorers, 2);
-    assert.equal(protocol.revision.number, 2);
-    assert.equal(protocol.revision.preserved_invalid_attempt.scored_model_calls, 0);
+    assert.equal(protocol.revision.number, 3);
+    assert.deepEqual(protocol.revision.preserved_invalid_attempts.map((attempt) =>
+        attempt.scored_model_calls), [0, 4]);
     assert.deepEqual(protocol.revision.unchanged, [
-        'claim', 'cases', 'schedule', 'model', 'scoring', 'invalidation',
+        'claim', 'cases', 'model', 'scoring',
+        'schedule seed, repetitions, ordering, and batch size',
     ]);
 
     const reviewRoot = join(ROOT, 'eval', 'review');
@@ -277,9 +280,15 @@ test('fake reviewer exercises paired retry, guidance evidence, normalization, an
 
         const valid = results.filter((result) => result.valid);
         assert.ok(valid.filter((result) => result.arm === 'treatment')
-            .every((result) => result.treatment_guidance_read));
+            .every((result) => result.treatment_guidance_read
+                && result.guidance_files_read === 2
+                && result.guidance_files_exposed === 2));
         assert.ok(valid.filter((result) => result.arm === 'baseline')
-            .every((result) => !result.treatment_guidance_read));
+            .every((result) => !result.treatment_guidance_read
+                && result.guidance_files_read === 0
+                && result.guidance_files_exposed === 0
+                && !result.baseline_guidance_exposed));
+        assert.ok(results.every((result) => result.model_turn_started && result.model_turn_completed));
         const fixtureCommits = new Map();
         for (const result of results) {
             const key = `${result.case_id}:${result.arm}`;
@@ -371,6 +380,10 @@ test('fake reviewer resumes one complete matched pair per quota-monitored batch'
             assert.equal(receipt.pair_index, batch);
             assert.equal(receipt.calls, batch === 1 ? 4 : 2);
             assert.equal(receipt.invalid_attempts, batch === 1 ? 1 : 0);
+            assert.equal(receipt.reviewer_processes, receipt.calls);
+            assert.equal(receipt.model_turns_started, receipt.calls);
+            assert.equal(receipt.model_turns_completed, receipt.calls);
+            assert.equal(receipt.invalid_cells, receipt.invalid_attempts);
             assert.equal(receipt.token_usage.input_tokens, receipt.calls * 100);
             assert.equal(receipt.token_usage.cached_input_tokens, receipt.calls * 25);
             assert.equal(receipt.token_usage.output_tokens, receipt.calls * 20);
@@ -514,6 +527,9 @@ test('an early zero-call batch failure can retry from the same output', { timeou
         }));
         assert.equal(receipt.pair_index, 1);
         assert.equal(receipt.calls, 4);
+        assert.equal(receipt.reviewer_processes, 4);
+        assert.equal(receipt.model_turns_started, 4);
+        assert.equal(receipt.model_turns_completed, 4);
         assert.equal(receipt.completed_pairs, 1);
     } finally {
         rmSync(scratch, { recursive: true, force: true });
@@ -540,6 +556,10 @@ test('a terminally invalid batch still reports consumed calls and tokens', { tim
         assert.equal(receipt.pair_index, 1);
         assert.equal(receipt.calls, 4);
         assert.equal(receipt.invalid_attempts, 2);
+        assert.equal(receipt.reviewer_processes, 4);
+        assert.equal(receipt.model_turns_started, 4);
+        assert.equal(receipt.model_turns_completed, 4);
+        assert.equal(receipt.invalid_cells, 2);
         assert.equal(receipt.token_usage.input_tokens, 400);
         assert.equal(receipt.completed_pairs, 0);
         assert.equal(receipt.remaining_pairs, 18);
@@ -593,6 +613,146 @@ test('mentioning guidance paths without returning their contents is invalid', { 
         assert.ok(invalidTreatment.every((result) => result.invalid_reasons.includes(
             'treatment did not read pinned review guidance',
         )));
+    } finally {
+        rmSync(scratch, { recursive: true, force: true });
+    }
+});
+
+test('guidance exposure requires frozen content, not an absent-file compound command', () => {
+    const guidance = [
+        { path: '.agents/skills/review/SKILL.md', content: 'first distinctive frozen guidance marker for review evidence\n' },
+        { path: '.agents/skills/DOCTRINE.md', content: 'second distinctive frozen doctrine marker for review evidence\n' },
+    ];
+    const absentCheck = [{
+        type: 'item.completed',
+        item: {
+            type: 'command_execution',
+            status: 'completed',
+            exit_code: 0,
+            command: "pwd && if [ -f .agents/skills/review/SKILL.md ]; then sed -n '1,240p' .agents/skills/review/SKILL.md; fi && if [ -f .agents/skills/DOCTRINE.md ]; then sed -n '1,260p' .agents/skills/DOCTRINE.md; fi",
+            aggregated_output: '/isolated/workspace\n',
+        },
+    }];
+    assert.deepEqual(guidanceEvidence(absentCheck, guidance, '/isolated/workspace'), {
+        read: false,
+        exposed: false,
+        readPaths: [],
+        exposedPaths: [],
+    });
+
+    for (const exposed of guidance) {
+        const evidence = guidanceEvidence([{
+            type: 'item.completed',
+            item: {
+                type: 'command_execution',
+                status: 'completed',
+                exit_code: 0,
+                command: 'unexpected output',
+                aggregated_output: exposed.content,
+            },
+        }], guidance, '/isolated/workspace');
+        assert.equal(evidence.exposed, true);
+        assert.deepEqual(evidence.exposedPaths, [exposed.path]);
+    }
+});
+
+test('treatment must return content from both frozen guidance files', { timeout: 120_000 }, () => {
+    const scratch = mkdtempSync(join(tmpdir(), 'cycle-review-one-guide-test-'));
+    try {
+        const output = join(scratch, 'output');
+        assert.throws(() => execFileSync(process.execPath, [RUNNER, 'dry-run-batch', '--output', output], {
+            cwd: ROOT,
+            env: { ...process.env, CYCLE_REVIEW_FAKE_MODE: 'guidance-one-file' },
+            encoding: 'utf8',
+            stdio: 'pipe',
+        }));
+        const results = readFileSync(join(output, 'private', 'results.jsonl'), 'utf8')
+            .trim().split('\n').map(JSON.parse);
+        const treatment = results.filter((result) => result.arm === 'treatment');
+        assert.equal(treatment.length, 2);
+        assert.ok(treatment.every((result) => !result.valid
+            && !result.treatment_guidance_read
+            && result.guidance_files_read === 1));
+    } finally {
+        rmSync(scratch, { recursive: true, force: true });
+    }
+});
+
+test('proven baseline guidance exposure stops before the paired retry', { timeout: 120_000 }, () => {
+    const scratch = mkdtempSync(join(tmpdir(), 'cycle-review-baseline-exposure-test-'));
+    try {
+        const output = join(scratch, 'output');
+        let failure;
+        try {
+            execFileSync(process.execPath, [RUNNER, 'dry-run-batch', '--output', output], {
+                cwd: ROOT,
+                env: { ...process.env, CYCLE_REVIEW_FAKE_MODE: 'baseline-guidance-exposure' },
+                encoding: 'utf8',
+                stdio: 'pipe',
+            });
+        } catch (error) {
+            failure = error;
+        }
+        assert.ok(failure);
+        const receipt = JSON.parse(failure.stdout);
+        assert.deepEqual({
+            reviewer_processes: receipt.reviewer_processes,
+            model_turns_started: receipt.model_turns_started,
+            model_turns_completed: receipt.model_turns_completed,
+            invalid_cells: receipt.invalid_cells,
+        }, {
+            reviewer_processes: 2,
+            model_turns_started: 2,
+            model_turns_completed: 2,
+            invalid_cells: 1,
+        });
+        const results = readFileSync(join(output, 'private', 'results.jsonl'), 'utf8')
+            .trim().split('\n').map(JSON.parse);
+        assert.equal(results.length, 2);
+        assert.ok(results.every((result) => result.attempt === 1));
+        const baseline = results.find((result) => result.arm === 'baseline');
+        assert.equal(baseline.baseline_guidance_exposed, true);
+        assert.deepEqual(baseline.invalid_reasons, [
+            'baseline received treatment review guidance content',
+        ]);
+        assert.equal(json(join(output, 'summary.json')).completed_pairs, 0);
+        assert.equal(statSync(join(output, 'scoring'), { throwIfNoEntry: false }), undefined);
+    } finally {
+        rmSync(scratch, { recursive: true, force: true });
+    }
+});
+
+test('receipts distinguish reviewer processes from started and completed model turns', {
+    timeout: 120_000,
+}, () => {
+    const scratch = mkdtempSync(join(tmpdir(), 'cycle-review-turn-count-test-'));
+    try {
+        const output = join(scratch, 'output');
+        let failure;
+        try {
+            execFileSync(process.execPath, [RUNNER, 'dry-run-batch', '--output', output], {
+                cwd: ROOT,
+                env: { ...process.env, CYCLE_REVIEW_FAKE_MODE: 'turn-start-only' },
+                encoding: 'utf8',
+                stdio: 'pipe',
+            });
+        } catch (error) {
+            failure = error;
+        }
+        assert.ok(failure);
+        const receipt = JSON.parse(failure.stdout);
+        assert.deepEqual({
+            reviewer_processes: receipt.reviewer_processes,
+            model_turns_started: receipt.model_turns_started,
+            model_turns_completed: receipt.model_turns_completed,
+            invalid_cells: receipt.invalid_cells,
+        }, {
+            reviewer_processes: 4,
+            model_turns_started: 4,
+            model_turns_completed: 0,
+            invalid_cells: 4,
+        });
+        assert.deepEqual(receipt.token_usage, {});
     } finally {
         rmSync(scratch, { recursive: true, force: true });
     }
