@@ -1,0 +1,12 @@
+{
+  "case_id": "sik-123",
+  "max_followups_per_stage": 3,
+  "rules": [
+    {
+      "id": "approve-filing",
+      "question_regex": "((approve|file).*(draft|issue)|(draft|issue).*(approve|file)|ready to create)",
+      "answer": "Approved. File the drafted issue and proceed."
+    }
+  ],
+  "default_answer": "Use the repository's 44 by 44 pixel touch floor in the shared Drawer component. Preserve header proportions, prevent long titles from shrinking the target, keep close behavior unchanged, and add a focused regression test. Spot-check representative Drawer consumers at 390 pixels."
+}

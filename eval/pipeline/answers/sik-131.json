@@ -1,0 +1,12 @@
+{
+  "case_id": "sik-131",
+  "max_followups_per_stage": 3,
+  "rules": [
+    {
+      "id": "approve-filing",
+      "question_regex": "((approve|file).*(draft|issue)|(draft|issue).*(approve|file)|ready to create)",
+      "answer": "Approved. File the drafted issue and proceed."
+    }
+  ],
+  "default_answer": "The open-filter trigger and Clear action should be sibling native buttons with distinct accessible names and independent keyboard behavior. Clearing must not open the menu, and opening must not clear. Keep the visible pill height stable while providing at least a 44 by 44 pixel clear hit target; add focused regression coverage."
+}

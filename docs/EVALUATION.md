@@ -197,3 +197,108 @@ mappings, tool traces, and possibly host-local metadata. Public artifacts are li
 protocol/census, path-scrubbed preflight summary, normalized scoring packets and locked score files,
 and a reviewed aggregate report. The requested output root is also mode 0700 by default; copy only
 the allowlisted artifacts when sharing them.
+
+## Full intake-to-cycle pilot
+
+`eval/pipeline/` tests a different, broader claim: whether the complete intake, implementation,
+review, patch, and delivery structure improves work that begins as a short request. It is a
+four-case descriptive Songs I Know pilot, not a general benchmark. The census applies one fixed
+two-day eligibility rule and a deterministic hash rank before selecting #133, #131, #139, and #123.
+
+Each case begins with one resumable `$intake` session. A frozen answer sheet responds only when the
+model asks a question, and the GitHub double captures the one issue it files. The exact resulting
+title and body bytes then feed both shaped arms:
+
+```text
+raw request ──┬── intake + scripted answers ── exact issue bytes ─┬── shaped direct
+              │                                                   └── implement
+              └── raw direct                                           │
+                                                                        review
+                                                                          │
+                                                                        patch
+                                                                          │
+                                                                        done
+```
+
+The full-cycle stages are separate resumed turns in one Codex thread, so the patch stage retains the
+review context and the evaluator can capture deltas after all four stages. The raw-direct arm gets
+the same scripted responder if it asks a material question. All arms use the same frozen model and
+effort; implementation-arm ordering is fixed in the protocol.
+
+The candidate workspaces are physical one-commit repositories without remotes, tags, alternates, or
+later source objects. Current pipeline guidance is injected only into intake and full-cycle
+fixtures. Direct arms receive a neutral repository instruction. Dependency trees are full physical
+copies of the selected local Songs I Know checkout, never symlinks or hardlinks back to it. Completed
+arm workspaces are discarded before the next arm so the pilot does not retain several copies at
+once. Model commands get write access only to the exact candidate root, no network, no ambient
+credentials, and a stateless local `gh`/push double. Hidden regression tests are inserted later into
+a separate verifier copy; candidate-authored tests and test-runner configuration cannot replace or
+disable them. Before evaluator-side Git inspection, the runner verifies the original physical
+`.git` control directory, rejects links and special files, and restores a known-safe local Git
+configuration. Batch resume likewise rejects links or special files anywhere in the output tree
+before writing another artifact.
+
+### Model-free validation
+
+The local Songs I Know checkout supplies the frozen public Git objects and an installed physical
+`node_modules` tree. First exercise all resumable lifecycle and artifact paths with the fake client:
+
+```sh
+node eval/pipeline/run.mjs dry-run --output /tmp/pipeline-eval-dry
+```
+
+The fake run deliberately invalidates the first shaped-direct attempt, retries the whole case, and
+then completes all four cases. It covers intake follow-ups, raw-direct follow-ups, all three arms,
+the four resumed full-cycle stages, tracker and push doubles, stage snapshots, private artifacts,
+normalization, and scoring blinding without a scored model call.
+
+Quota-style batching completes one full case per invocation. Reuse the exact output path four times:
+
+```sh
+node eval/pipeline/run.mjs dry-run-batch --output /tmp/pipeline-eval-dry-batched
+```
+
+Every receipt separates process turns started/completed from token usage actually reported. Resume
+validates an exact result prefix and every artifact hash. A lock prevents concurrent batches, and
+an `active-case.json` marker fails closed after interruption so a partially spent case is never
+silently repeated.
+
+Then prove the real historical fixtures and hidden verifier:
+
+```sh
+node eval/pipeline/run.mjs preflight \
+  --source ../songsiknow \
+  --output /tmp/pipeline-eval-preflight
+```
+
+Preflight checks the artifact lock, exact Codex version, strict permission profile, physical
+history isolation, evaluator-asset write denial, command-network denial, and all four hidden
+oracles. Each oracle must fail on the historical base, pass after the accepted repair, and fail
+again when the accepted production repair is removed. It records `scored_model_calls: 0`.
+
+### Scored batch brake
+
+A scored batch authenticates the outer Codex client and can spend several resumed turns, but it
+completes only one case before returning control for quota inspection. Review the model-free output,
+calculate the exact frozen protocol bytes, and explicitly confirm them:
+
+```sh
+sha256sum eval/pipeline/protocol.json
+
+node eval/pipeline/run.mjs run-batch \
+  --source ../songsiknow \
+  --output /tmp/pipeline-eval-scored \
+  --confirm-protocol-sha256 EXACT_HASH_FROM_ABOVE
+```
+
+Repeat the same command and output directory for the remaining cases. Every invocation reruns the
+model-free preflight before authentication-backed turns. Authentication exists only as a symlink in
+a disposable mode-0700 client home; raw output is fingerprint-scanned before persistence and the
+candidate command environment cannot read that home.
+
+Do not commit scored output. Raw events, stderr, host paths, tracker transcripts, stage measures,
+arm order, and the blinding map remain under `private/`. Only the protocol/census, path-scrubbed
+preflight, normalized `scoring/` packet, locked score files, and reviewed aggregate report are
+shareable. Two independent scorers should lock their files before the private arm map is revealed.
+Report the four matched outcomes and qualitative mechanisms separately from turns, tokens, elapsed
+time, and stage evidence; do not claim significance, prevalence, or a composite score.

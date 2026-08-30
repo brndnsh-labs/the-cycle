@@ -1,0 +1,12 @@
+{
+  "case_id": "sik-133",
+  "max_followups_per_stage": 3,
+  "rules": [
+    {
+      "id": "approve-filing",
+      "question_regex": "((approve|file).*(draft|issue)|(draft|issue).*(approve|file)|ready to create)",
+      "answer": "Approved. File the drafted issue and proceed."
+    }
+  ],
+  "default_answer": "Use a hard ceiling of exactly 1,000,000 bytes. Check the Stripe signature header before reading the body; reject declared or streamed overflow with 413; preserve the exact raw bytes for signature verification; keep paid-session and idempotency behavior; add boundary and deceptive Content-Length regression coverage. Treat this as payment/security-sensitive and retain security review plus a human merge brake."
+}
