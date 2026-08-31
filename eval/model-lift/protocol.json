@@ -1,0 +1,210 @@
+{
+  "version": 1,
+  "study_id": "release-relay-sol-luna-model-lift-v1",
+  "claim": "A shaped specification and the-cycle review loop provide more reliable behavioral completion and process evidence than a raw implementation prompt, with a larger lift for GPT-5.6 Luna than GPT-5.6 Sol.",
+  "source": {
+    "repository": "https://github.com/brndnsh-labs/release-relay.git",
+    "base": "8aaf7fcb0b0c9ab6db0d82b49e5f403d3fc9634d",
+    "repair": "17e47abc5948b10aeeca403a16642c47b16d341e",
+    "pipeline_bindings_commit": "544ee8df83a575b1569500bea558f23a81164552",
+    "pipeline_renderer_commit": "98f02a090c462c0a1fee36f9364fe4e77266cd19",
+    "pipeline_binding_paths": [
+      ".cycle/config.jsonc",
+      ".cycle/overlays/doctrine-autonomy.md",
+      ".cycle/overlays/doctrine-gates.md",
+      ".cycle/overlays/doctrine-labels.md",
+      ".cycle/overlays/doctrine-preamble.md",
+      ".cycle/overlays/doctrine-routing.md",
+      ".cycle/overlays/doctrine-tracker-mechanics.md",
+      ".cycle/overlays/doctrine-tracker.md",
+      ".cycle/overlays/done.md",
+      ".cycle/overlays/implement.md",
+      ".cycle/overlays/review-routing.md",
+      ".cycle/overlays/scout-lenses.md"
+    ],
+    "pipeline_renderer_support_paths": ["package.json", "pnpm-lock.yaml"],
+    "repository_guidance_paths": ["AGENTS.md", "CLAUDE.md"],
+    "pipeline_guidance_paths": [
+      ".agents/skills/DOCTRINE.md",
+      ".agents/skills/DELIVERY.md",
+      ".agents/skills/FILING.md",
+      ".agents/skills/intake/SKILL.md",
+      ".agents/skills/implement/SKILL.md",
+      ".agents/skills/review/SKILL.md",
+      ".agents/skills/patch/SKILL.md",
+      ".agents/skills/done/SKILL.md",
+      ".agents/skills/cycle/SKILL.md"
+    ],
+    "excluded_fixture_paths": [
+      ".agents",
+      ".claude",
+      ".codex",
+      ".cycle",
+      ".git",
+      "AGENTS.md",
+      "CLAUDE.md",
+      "node_modules"
+    ]
+  },
+  "task": {
+    "id": "rr-76",
+    "title": "Reject excluded candidate citations in OpenAI draft validation",
+    "raw_prompt_path": "raw-prompt.md",
+    "canonical_issue_path": "canonical-issue.md",
+    "answer_sheet_path": "answers.json",
+    "repair_paths": ["packages/openai-integration/src/draft.ts"],
+    "historical_test_paths": ["packages/openai-integration/src/draft.test.ts"],
+    "oracle_path": "oracle/excluded-citation.test.ts",
+    "oracle_destination": "packages/openai-integration/src/model-lift-oracle.test.ts",
+    "alternative_patch_path": "oracle/alternative.patch"
+  },
+  "prompts": {
+    "direct_path": "direct-prompt.md",
+    "stage_path": "stage-prompt.md",
+    "turn_schema_path": "turn.schema.json"
+  },
+  "models": [
+    { "id": "luna", "model": "gpt-5.6-luna" },
+    { "id": "sol", "model": "gpt-5.6-sol" }
+  ],
+  "arms": [
+    {
+      "id": "raw-direct",
+      "input": "the short raw request",
+      "workflow": "generic direct implementation"
+    },
+    {
+      "id": "shaped-direct",
+      "input": "the frozen canonical issue title and body",
+      "workflow": "generic direct implementation"
+    },
+    {
+      "id": "full-cycle",
+      "input": "the same frozen canonical issue title and body",
+      "workflow": "implement, review, patch, finding-closure review, and done"
+    }
+  ],
+  "schedule": {
+    "seed": "release-relay-sol-luna-model-lift-v1-2026-08-31",
+    "model_order": ["luna", "sol"],
+    "models_per_batch": 1,
+    "retry_limits": {
+      "behavioral": 1,
+      "infrastructure": 1,
+      "max_attempts_per_model": 3
+    },
+    "resume_rule": "Each scored invocation completes one model across intake-only and all three implementation arms. Resume only from an exact validated model-order prefix; an active-model marker stops before repeated model calls.",
+    "retry_rule": "Preserve invalid attempts and repeat the entire model batch. One behavioral and one infrastructure retry are allowed, with three attempts as the hard ceiling."
+  },
+  "execution": {
+    "reasoning_effort": "high",
+    "codex_version": "codex-cli 0.151.0",
+    "node_version": "v26.8.1",
+    "pnpm_version": "11.24.0",
+    "verifier_sandbox": "bubblewrap 0.12.0",
+    "package_manager_policy": [
+      "pmOnFail: ignore",
+      "trustLockfile: true",
+      "storeDir: fixture-private scratch index"
+    ],
+    "timeout_ms_per_turn": 1800000,
+    "fixture_commit_time": "2026-08-31T04:00:00Z",
+    "subagents": false,
+    "command_network": false,
+    "inner_gate_matrix": [
+      "pnpm format:check",
+      "pnpm lint",
+      "pnpm typecheck",
+      "pnpm build",
+      "pnpm --filter @release-relay/openai-integration test"
+    ],
+    "intake_only": {
+      "fresh_session": true,
+      "max_followups_per_stage": 3,
+      "fed_to_implementation": false
+    },
+    "direct": {
+      "fresh_session": true,
+      "answer_responder": true
+    },
+    "full_cycle": {
+      "fresh_session": true,
+      "resumed_stages": ["implement", "review", "patch", "review", "done"],
+      "snapshot_labels": ["implement", "review", "patch", "finding-closure", "done"],
+      "answer_responder": true
+    }
+  },
+  "gates": {
+    "hidden_oracle": [
+      "pnpm --filter @release-relay/core build",
+      "pnpm --filter @release-relay/openai-integration build",
+      "node --test packages/openai-integration/dist/model-lift-oracle.test.js"
+    ],
+    "candidate_matrix": [
+      "pnpm check",
+      "pnpm build"
+    ]
+  },
+  "scoring": {
+    "schema_path": "score.schema.json",
+    "primary": "Whether the behavior-only hidden oracle passes against the final candidate source tree.",
+    "implementation_dimensions": [
+      "scope control",
+      "regression-test quality",
+      "evidence quality"
+    ],
+    "intake_dimensions": [
+      "acceptance completeness",
+      "scope precision"
+    ],
+    "paired_comparisons": [
+      "shaped-direct minus raw-direct within each model",
+      "full-cycle minus shaped-direct within each model",
+      "full-cycle minus raw-direct within each model",
+      "Luna lift minus Sol lift",
+      "full-cycle implement snapshot versus post-patch snapshot"
+    ],
+    "blinding": "Deterministically assign opaque labels across all six implementation outputs and two intake artifacts. Keep the model and arm map private until scores are locked.",
+    "analysis": "Report direct matched observations. Do not combine measures into one score, claim statistical significance, or generalize beyond this calibration."
+  },
+  "privacy": {
+    "public_allowlist": [
+      "protocol",
+      "path-scrubbed preflight summary",
+      "normalized scoring packet",
+      "reviewed aggregate report"
+    ],
+    "private_only": [
+      "raw events and stderr",
+      "host paths",
+      "per-turn records",
+      "model and arm blinding map",
+      "tracker transcripts",
+      "hidden-oracle source and output"
+    ],
+    "credential_rule": "Codex authentication remains an outer-client symlink in a private disposable home. It is never copied into candidates, inherited by candidate commands, or persisted before fingerprint scanning."
+  },
+  "artifact_lock": {
+    "shared_runner_sha256": "10fe07d84ee9373426a618687f4667de50686555ecab39eceb18af8a33aa2bfd",
+    "runner_sha256": "f7c894fe80ec5b83d89930fbe2e811050f1c5d7af5eb1ee796bf7182559fe091",
+    "fake_codex_sha256": "8a482b40588d8e83ccc9ca396433703d0b723a4fe705b46d3282ac960efd91c4",
+    "fake_tracker_sha256": "aecb340a653b8176d74b5549523f00efede0a7ebf72512db6f5072018092d25a",
+    "fake_git_sha256": "47ec70403d0bf70dd6624d28d2ec9809eac2353a3fbac91b126cd3f0f7929c4f",
+    "next_font_mocks_sha256": "2f5fb3f8e949b9462320a509f7db977542ccd5cad0e90d0097f98001ae7cb365",
+    "raw_prompt_sha256": "1826d4f1c7c31de275eb04ef41f25fb598b05783ef1dbd016041b10c89cf7044",
+    "canonical_issue_sha256": "28c7f52c9920879a5d51ff9d9efb268f58aeed9675547c02a65575c7bc69a9cd",
+    "answer_sheet_sha256": "c40bebbce23ca014483140bc379ce58e224cc34ddddf43bf4dfd747100ab7204",
+    "oracle_sha256": "1c2795a39a00277b5c28f1d480ce60bd8038091db3eae04b40e69c002e76f539",
+    "alternative_patch_sha256": "3e0736b10189bd0936d4bc72a66b8a4ccf4c9f0b07d2458e6a715eca7d3a08e2",
+    "direct_prompt_sha256": "2014a0f9580e37adff2dfbdfe2ba98a1364cc709c4b86a64a921ad22241aa4b0",
+    "stage_prompt_sha256": "a8f71d2cec514248e5114dc1b63505220c358d68cc3363159596fbd621022aa7",
+    "turn_schema_sha256": "0258402936b9cb061ef30d0370c089016ec4865529bbed9634857dfc26b979b0",
+    "score_schema_sha256": "5589a85f8812704638e0aec39cc8a9b544fae6c4e430acfd6c606ad54fceb704",
+    "base_tree_sha256": "c66927a3700c69a7bb7150f7782c359fb50889eb97a532de4d87e0875de35243",
+    "repair_patch_sha256": "7c8ca0c42f5b3ef43d2e1c974f859835c85cd8031cde3add2b7d433b4868d903",
+    "historical_test_patch_sha256": "4cb37363610838b878e4e4cd56d4b7fa430ca8d94951029e582b2663ea99bbc7",
+    "pipeline_bindings_sha256": "9f4e9e5bc8e543bfc8858d1d1a2af4388faadc54e1ce1c05ba743b47d149957a",
+    "pipeline_guidance_sha256": "e9ef9d271340d1d56282ad2608e84fa079a4b0c2b0587497fe80b84301b15d5c",
+    "source_dependency_lock_sha256": "f884dd7b428174069c7762f86fc93e0f3363404d32393211ce73e37f8915d638"
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["status", "question", "summary"],
+  "properties": {
+    "status": { "enum": ["needs-input", "complete"] },
+    "question": { "type": "string" },
+    "summary": { "type": "string" }
+  }
+}

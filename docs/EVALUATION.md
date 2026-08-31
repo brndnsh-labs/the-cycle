@@ -302,3 +302,103 @@ preflight, normalized `scoring/` packet, locked score files, and reviewed aggreg
 shareable. Two independent scorers should lock their files before the private arm map is revealed.
 Report the four matched outcomes and qualitative mechanisms separately from turns, tokens, elapsed
 time, and stage evidence; do not claim significance, prevalence, or a composite score.
+
+## Sol/Luna full-pipeline calibration
+
+`eval/model-lift/` is a one-task descriptive calibration for the question the broader pilot could
+not isolate: does shaping and the full work loop add more value for a smaller model? It runs GPT-5.6
+Luna and GPT-5.6 Sol, at high reasoning effort, through the same three implementation arms:
+
+```text
+short request ──┬── raw direct
+                ├── frozen shaped issue ── shaped direct
+                └── frozen shaped issue ── implement ─ review ─ patch ─ closure review ─ done
+```
+
+Each model also runs intake as a sidecar measurement. Its filed issue is scored for scope and
+acceptance quality but is not fed to any implementation arm; both shaped arms receive the same
+prewritten canonical issue bytes. This prevents a stronger intake result from silently changing
+the implementation task. The task is Release Relay #76 at one pinned historical root, with the
+historical repair, an independent alternative repair, and a repair-removal mutation used to prove
+the behavior-only hidden oracle before any model call. This is a calibration, not a representative
+sample: report the six matched implementation observations directly and do not claim significance.
+
+### Dependencies and model-free validation
+
+The evaluator installs the exact historical `pnpm-lock.yaml` tree into a disposable snapshot. It
+never reuses the current Release Relay `node_modules`. If the public pnpm cache is incomplete,
+populate it explicitly before preflight:
+
+```sh
+node eval/model-lift/run.mjs fetch-cache \
+  --source ../release-relay \
+  --allow-network
+```
+
+That is the only dependency-network command. It uses a private temporary home, fetches only the
+locked public artifacts, and runs no lifecycle scripts. Candidate and verifier commands remain
+offline.
+
+Exercise one fake model batch at a time, using the same output path twice to prove exact Luna-then-
+Sol resume and the final blinded packet:
+
+```sh
+node eval/model-lift/run.mjs dry-run-batch \
+  --output /tmp/model-lift-dry
+```
+
+Then run the zero-model-call real preflight:
+
+```sh
+node eval/model-lift/run.mjs preflight \
+  --source ../release-relay \
+  --output /tmp/model-lift-preflight
+```
+
+The current frozen runtime is Codex CLI 0.151.0, Node v26.8.1, pnpm 11.24.0, and Bubblewrap
+0.12.0. Model turns use Codex's root-denied, network-disabled permission profile. That inner Linux
+sandbox rejects Node's synchronous child-process API, which Release Relay's unrelated CLI tests
+exercise. Every arm therefore receives the same evaluation-only instruction to run formatting,
+lint, typechecking, the full build, and the OpenAI package test during its turn. The evaluator does
+not treat that subset as final proof: it reconstructs a fresh candidate from the pinned base and
+reruns the exact `pnpm check` and `pnpm build` commands in Bubblewrap.
+
+The Bubblewrap verifier unshares every namespace including the network, clears the environment,
+mounts no user home or `/etc`, mounts only the disposable fixture writable, and mounts `/usr` plus
+the Node/pnpm runtime read-only. Candidate changes to package-manager, compiler, formatter, or test
+configuration are rejected before verification. This preserves the real Release Relay gate while
+avoiding both a false sandbox failure and an unsandboxed execution of model-authored source.
+
+Preflight additionally proves the hidden oracle is red on the base, green on the historical and
+independent repairs, and red after repair removal; checks exact history, dependency, artifact, and
+guidance hashes; and records `scored_model_calls: 0`.
+
+### Scored batches and reveal
+
+After reviewing the preflight receipt, confirm the exact protocol bytes. Each invocation completes
+one model across intake and all three implementation arms, then returns for quota inspection:
+
+```sh
+sha256sum eval/model-lift/protocol.json
+
+node eval/model-lift/run.mjs run-batch \
+  --source ../release-relay \
+  --output /tmp/model-lift-scored \
+  --confirm-protocol-sha256 EXACT_HASH_FROM_ABOVE
+```
+
+Run the same command a second time for Sol. Resume accepts only the exact frozen model-order prefix;
+a batch lock prevents concurrency, and an active-model marker fails closed after interruption so a
+partially spent model is not silently repeated. One behavioral retry and one infrastructure retry
+are allowed, with three attempts as the hard ceiling.
+
+Do not reveal the private map until two independent scorers have locked schema-valid scores for the
+opaque six-output packet and two intake artifacts. Report hidden-oracle pass/fail, scope control,
+test quality, evidence quality, intake quality, stage deltas, turns, tokens, and elapsed time as
+separate observations. The comparisons of interest are shaped minus raw and full-cycle minus shaped
+within each model, followed by Luna's lift minus Sol's lift. Do not collapse them into a composite.
+
+Do not commit scored output. Raw event streams, stderr, host paths, tracker transcripts, per-turn
+records, and the model/arm map remain under the mode-0700 `private/` tree. Only the frozen protocol,
+path-scrubbed preflight summary, normalized scoring packet, locked score files, and a reviewed
+aggregate report are shareable.

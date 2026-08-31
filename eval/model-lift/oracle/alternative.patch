@@ -1,0 +1,15 @@
+diff --git a/packages/openai-integration/src/draft.ts b/packages/openai-integration/src/draft.ts
+--- a/packages/openai-integration/src/draft.ts
++++ b/packages/openai-integration/src/draft.ts
+@@ -222,7 +222,10 @@ export function createOpenAiDrafter(
+             timeSource: "provider-reported"
+           }
+         };
+-        const outcome = validateReleaseDraft(request.candidates, candidateDraft);
++        const outcome = validateReleaseDraft(
++          request.candidates.filter((candidate) => candidate.included),
++          candidateDraft
++        );
+         return outcome.ok
+           ? { kind: "validated-draft", draft: outcome.draft }
+           : { kind: outcome.reason, findings: outcome.findings };

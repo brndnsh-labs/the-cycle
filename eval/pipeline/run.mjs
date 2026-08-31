@@ -855,6 +855,8 @@ export function pipelineConfig({
     codexBin,
     issueBody = '',
     issueTitle = '',
+    readablePaths = [],
+    writablePaths = [],
     pathValue = process.env.PATH,
 }) {
     const workspacePath = existsSync(workspace) ? realpathSync(workspace) : resolve(workspace);
@@ -867,6 +869,7 @@ export function pipelineConfig({
         resolveExecutable(codexBin),
         nodeRuntimeRoot,
         realpathSync(FAKE_BIN),
+        ...readablePaths.map((path) => realpathSync(resolve(path))),
     ])].sort().map((path) => `${JSON.stringify(path)} = "read"`).join('\n');
     const commandPath = `${FAKE_BIN}:${sanitizedPath(pathValue)}`;
     const gitPath = join(workspacePath, '.git');
@@ -874,11 +877,14 @@ export function pipelineConfig({
     const controlPath = join(workspacePath, CANDIDATE_CONTROL);
     const commandTmp = join(workspacePath, CANDIDATE_TMP);
     const fontMocks = join(controlPath, 'next-font-mocks.cjs');
+    const writable = writablePaths.map((path) => realpathSync(resolve(path)));
     const candidateEntries = [
         existsSync(gitPath) ? `${JSON.stringify(gitPath)} = "write"` : '',
-        existsSync(dependencyPath) ? `${JSON.stringify(dependencyPath)} = "read"` : '',
+        existsSync(dependencyPath) && !writable.includes(realpathSync(dependencyPath))
+            ? `${JSON.stringify(dependencyPath)} = "read"` : '',
         existsSync(controlPath) ? `${JSON.stringify(controlPath)} = "read"` : '',
         existsSync(commandTmp) ? `${JSON.stringify(commandTmp)} = "write"` : '',
+        ...writable.map((path) => `${JSON.stringify(path)} = "write"`),
     ].filter(Boolean).join('\n');
     const trackerEnvironment = issueBody || issueTitle ? [
         `CYCLE_PIPELINE_ISSUE_BODY_BASE64 = ${JSON.stringify(Buffer.from(issueBody).toString('base64'))}`,
@@ -956,6 +962,8 @@ export function createClientHome({
     workspace,
     issueBody,
     issueTitle,
+    readablePaths = [],
+    writablePaths = [],
 }) {
     const home = privateDirectory('cycle-pipeline-codex-home-');
     writeFileSync(join(home, 'config.toml'), pipelineConfig({
@@ -963,6 +971,8 @@ export function createClientHome({
         codexBin,
         issueBody,
         issueTitle,
+        readablePaths,
+        writablePaths,
     }), { mode: 0o600 });
     if (includeAuth) {
         const source = resolveAuthPath(codexHome);
@@ -1139,15 +1149,15 @@ export function trackerCreates(turns) {
     return creates;
 }
 
-function issueEnvelope(title, body) {
+export function issueEnvelope(title, body) {
     return `Issue title:\n${title}\n\nIssue body:\n${body}`;
 }
 
-function issueEnvelopeHash(title, body) {
+export function issueEnvelopeHash(title, body) {
     return sha256(Buffer.concat([Buffer.from(title), Buffer.from([0]), Buffer.from(body)]));
 }
 
-function commandEvidence(turns, workspace) {
+export function commandEvidence(turns, workspace) {
     return turns.flatMap((turn) => turn.events
         .filter((event) => event.type === 'item.completed' && event.item?.type === 'command_execution')
         .map((event) => ({
@@ -1233,7 +1243,7 @@ export function probePipelineConfig(codexBin = 'codex') {
     }
 }
 
-export function probeIsolation(codexBin = 'codex') {
+export function probeIsolation(codexBin = 'codex', { writableDependencies = false } = {}) {
     const root = privateDirectory('cycle-pipeline-isolation-');
     const workspace = join(root, 'workspace');
     const scratch = privateDirectory('cycle-pipeline-isolation-tmp-');
@@ -1254,6 +1264,7 @@ export function probeIsolation(codexBin = 'codex') {
             workspace,
             issueBody: 'probe body',
             issueTitle: 'Probe',
+            writablePaths: writableDependencies ? [join(workspace, 'node_modules')] : [],
         });
         const deniedNames = ['source', 'evaluator', 'sibling', 'oracle'];
         const denied = deniedNames.map((name) => {
@@ -1279,7 +1290,9 @@ export function probeIsolation(codexBin = 'codex') {
             'printf temporary > "$TMPDIR/write-probe" || exit 21',
             'rm "$TMPDIR/write-probe" || exit 22',
             'test -r node_modules/read-only-probe || exit 23',
-            'if printf denied > node_modules/read-only-probe 2>/dev/null; then exit 24; fi',
+            writableDependencies
+                ? 'printf changed > node_modules/read-only-probe || exit 24'
+                : 'if printf denied > node_modules/read-only-probe 2>/dev/null; then exit 24; fi',
             'test -r .pipeline-eval/next-font-mocks.cjs || exit 25',
             'if printf denied > .pipeline-eval/rogue 2>/dev/null; then exit 26; fi',
             'if rm .pipeline-eval/next-font-mocks.cjs 2>/dev/null; then exit 27; fi',
@@ -1312,17 +1325,19 @@ export function probeIsolation(codexBin = 'codex') {
             candidate_workspace_read_write: true,
             candidate_git_metadata_write: true,
             candidate_local_tmp_write: true,
-            candidate_dependencies_read_only: true,
+            candidate_dependencies_read_only: !writableDependencies,
+            ...(writableDependencies ? { candidate_dependencies_writable_disposable_copy: true } : {}),
             candidate_runtime_controls_read_only: true,
             evaluator_assets_read_only: true,
             denied_host_loopback_listener: true,
             denied_host_sentinels: [...deniedNames, 'client-home'],
             command_network: false,
             filesystem_profile_sha256: sha256(pipelineConfig({
-                workspace: '/fixture',
+                workspace,
                 codexBin: resolveExecutable(codexBin),
                 issueBody: '',
                 issueTitle: 'Probe',
+                writablePaths: writableDependencies ? [join(workspace, 'node_modules')] : [],
             })
                 .replaceAll(realpathSync(FAKE_BIN), '/evaluator/bin')
                 .replaceAll(workspace, '/fixture')),
@@ -1382,7 +1397,7 @@ function probeCandidateRuntime({ protocol, protocolPath, source, codexBin }) {
     }
 }
 
-function turnPrompt(protocol, protocolPath, { stage, rawRequest, shapedIssue }) {
+export function turnPrompt(protocol, protocolPath, { stage, rawRequest, shapedIssue }) {
     if (stage === 'intake') {
         return [
             `$intake ${rawRequest.trim()}`,
@@ -1517,7 +1532,7 @@ function invokeTurn({
     };
 }
 
-function runLifecycle({
+export function runLifecycle({
     protocol,
     protocolPath,
     output,
@@ -1540,12 +1555,21 @@ function runLifecycle({
     threadId = null,
     sessionId,
     sessionContext = null,
+    readablePaths = [],
+    writablePaths = [],
 }) {
     const ownsSession = sessionContext === null;
     const scratch = sessionContext?.scratch ?? privateDirectory('cycle-pipeline-client-tmp-');
     const authPath = sessionContext?.authPath ?? (dryRun ? null : resolveAuthPath(codexHome));
     const clientHome = sessionContext?.clientHome ?? createClientHome({
-        codexHome, includeAuth: !dryRun, codexBin, workspace, issueBody, issueTitle,
+        codexHome,
+        includeAuth: !dryRun,
+        codexBin,
+        workspace,
+        issueBody,
+        issueTitle,
+        readablePaths,
+        writablePaths,
     });
     const sheet = answerSheet(protocolPath, item);
     const turns = [];
@@ -1625,7 +1649,7 @@ export function candidateUntrackedPaths(workspace) {
         .split('\0').filter(Boolean).sort();
 }
 
-function combinedDiff(workspace, initialCommit) {
+export function combinedDiff(workspace, initialCommit) {
     const tracked = git(workspace, [
         'diff', '--binary', '--full-index', '--no-ext-diff', '--no-textconv', '--no-renames', initialCommit,
     ], { encoding: null }).stdout;
@@ -1651,13 +1675,13 @@ function combinedDiff(workspace, initialCommit) {
     return Buffer.concat(chunks);
 }
 
-function changedPaths(workspace, initialCommit) {
+export function changedPaths(workspace, initialCommit) {
     const tracked = git(workspace, ['diff', '--name-only', '-z', initialCommit]).stdout
         .split('\0').filter(Boolean);
     return [...new Set([...tracked, ...candidateUntrackedPaths(workspace)])].sort();
 }
 
-function snapshotWorkspace({ output, runDir, workspace, fixture, arm, stage }) {
+export function snapshotWorkspace({ output, runDir, workspace, fixture, arm, stage }) {
     resetCandidateScratch(workspace);
     sanitizeCandidateRepository(workspace, fixture.git_directory);
     const path = join(runDir, 'snapshots', arm, `${stage}.diff`);
@@ -1987,7 +2011,16 @@ function preflight({ protocol, protocolPath, source, output, codexBin, skipOracl
     return result;
 }
 
-function persistentSession({ codexHome, dryRun, codexBin, workspace, issueBody, issueTitle }) {
+export function persistentSession({
+    codexHome,
+    dryRun,
+    codexBin,
+    workspace,
+    issueBody,
+    issueTitle,
+    readablePaths = [],
+    writablePaths = [],
+}) {
     const scratch = privateDirectory('cycle-pipeline-client-tmp-');
     const clientHome = createClientHome({
         codexHome,
@@ -1996,6 +2029,8 @@ function persistentSession({ codexHome, dryRun, codexBin, workspace, issueBody, 
         workspace,
         issueBody,
         issueTitle,
+        readablePaths,
+        writablePaths,
     });
     return {
         clientHome,
@@ -2008,7 +2043,7 @@ function persistentSession({ codexHome, dryRun, codexBin, workspace, issueBody, 
     };
 }
 
-function lifecycleSummary(lifecycle) {
+export function lifecycleSummary(lifecycle) {
     return {
         stage: lifecycle.stage,
         thread_id: lifecycle.thread_id,
@@ -2035,7 +2070,7 @@ function lifecycleSummary(lifecycle) {
     };
 }
 
-function lifecycleInvalid(lifecycle) {
+export function lifecycleInvalid(lifecycle) {
     return lifecycle.turns.flatMap((turn) => turn.invalid_reasons
         .map((reason) => `${lifecycle.stage} turn ${turn.turn}: ${reason}`));
 }
@@ -2063,7 +2098,7 @@ export function retryDisposition(retryLimits, attempts) {
     return 'retry';
 }
 
-function recursiveFiles(root) {
+export function recursiveFiles(root) {
     const files = [];
     const queue = [root];
     while (queue.length) {
@@ -2441,7 +2476,7 @@ function executeCaseAttempt({
     }
 }
 
-function ensureNewOutput(path) {
+export function ensureNewOutput(path) {
     const output = resolve(path);
     if (existsSync(output)) fail(`output already exists: ${output}`);
     privateMkdir(output);
@@ -2449,7 +2484,7 @@ function ensureNewOutput(path) {
     return realpathSync(output);
 }
 
-function prepareBatchOutput(path) {
+export function prepareBatchOutput(path) {
     let output = resolve(path);
     if (!existsSync(output)) return { output: ensureNewOutput(output), resume: false };
     if (!statSync(output).isDirectory() || lstatSync(output).isSymbolicLink()) {
@@ -2516,7 +2551,7 @@ function loadOrCreateExperiment({ protocol, protocolPath, output, model, effort,
     return actual;
 }
 
-function validateArtifactFile(output, rel, expectedHash) {
+export function validateArtifactFile(output, rel, expectedHash) {
     const path = resolve(output, rel);
     ensureInside(output, path);
     if (!existsSync(path) || !lstatSync(path).isFile() || lstatSync(path).isSymbolicLink()) {
@@ -2793,7 +2828,7 @@ function summarize(protocol, results) {
     };
 }
 
-function withBatchLock(output, callback) {
+export function withBatchLock(output, callback) {
     const lock = join(output, '.batch.lock');
     let descriptor;
     try {
