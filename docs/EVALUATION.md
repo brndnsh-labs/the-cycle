@@ -309,6 +309,9 @@ time, and stage evidence; do not claim significance, prevalence, or a composite 
 not isolate: does shaping and the full work loop add more value for a smaller model? It runs GPT-5.6
 Luna and GPT-5.6 Sol, at high reasoning effort, through the same three implementation arms:
 
+The reviewed results and routing interpretation are published in
+[`docs/evaluations/model-lift-calibration-v1.md`](evaluations/model-lift-calibration-v1.md).
+
 ```text
 short request ──┬── raw direct
                 ├── frozen shaped issue ── shaped direct
