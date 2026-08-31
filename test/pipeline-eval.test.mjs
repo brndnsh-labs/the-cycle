@@ -160,11 +160,14 @@ test('pipeline config grants one writable workspace and drops ambient credential
         mkdirSync(join(workspace, '.git'));
         mkdirSync(join(workspace, 'node_modules'));
         mkdirSync(join(workspace, '.pipeline-eval', 'tmp'), { recursive: true });
+        const publicPackageStore = join(scratch, 'public-package-store');
+        mkdirSync(publicPackageStore);
         const config = pipelineConfig({
             workspace,
             codexBin: join(PIPELINE_ROOT, 'fake-codex.cjs'),
             issueBody: 'body',
             issueTitle: 'title',
+            readablePaths: [publicPackageStore],
         });
         assert.match(config, /":root" = "deny"/);
         assert.match(config, /":minimal" = "read"/);
@@ -173,6 +176,7 @@ test('pipeline config grants one writable workspace and drops ambient credential
         assert.match(config, new RegExp(`${join(workspace, 'node_modules').replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}" = "read"`));
         assert.match(config, new RegExp(`${join(workspace, '.pipeline-eval').replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}" = "read"`));
         assert.match(config, new RegExp(`${join(workspace, '.pipeline-eval', 'tmp').replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}" = "write"`));
+        assert.match(config, new RegExp(`${publicPackageStore.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}" = "read"`));
         assert.match(config, /\[permissions\.pipeline-fixture\.network\]\nenabled = false/);
         assert.match(config, /\[shell_environment_policy\]\ninherit = "none"/);
         assert.match(config, /multi_agent = false/);
@@ -192,6 +196,14 @@ test('pipeline config grants one writable workspace and drops ambient credential
             codexBin: join(PIPELINE_ROOT, 'fake-codex.cjs'),
         });
         assert.doesNotMatch(neutralConfig, /CYCLE_PIPELINE_ISSUE_(?:BODY|TITLE|LABEL)/);
+        const writableDependenciesConfig = pipelineConfig({
+            workspace,
+            codexBin: join(PIPELINE_ROOT, 'fake-codex.cjs'),
+            writablePaths: [join(workspace, 'node_modules')],
+        });
+        const dependencyRule = join(workspace, 'node_modules').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        assert.match(writableDependenciesConfig, new RegExp(`${dependencyRule}" = "write"`));
+        assert.doesNotMatch(writableDependenciesConfig, new RegExp(`${dependencyRule}" = "read"`));
 
         const env = clientEnvironment({
             clientHome: '/private/client',

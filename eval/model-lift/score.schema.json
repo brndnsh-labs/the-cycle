@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["packet_id", "outputs", "intake"],
+  "properties": {
+    "packet_id": { "type": "string" },
+    "outputs": {
+      "type": "array",
+      "minItems": 6,
+      "maxItems": 6,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["label", "scope_control", "test_quality", "evidence_quality", "notes"],
+        "properties": {
+          "label": { "type": "string" },
+          "scope_control": { "type": "integer", "minimum": 0, "maximum": 2 },
+          "test_quality": { "type": "integer", "minimum": 0, "maximum": 2 },
+          "evidence_quality": { "type": "integer", "minimum": 0, "maximum": 2 },
+          "notes": { "type": "string" }
+        }
+      }
+    },
+    "intake": {
+      "type": "array",
+      "minItems": 2,
+      "maxItems": 2,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["label", "completeness", "scope_precision", "notes"],
+        "properties": {
+          "label": { "type": "string" },
+          "completeness": { "type": "integer", "minimum": 0, "maximum": 2 },
+          "scope_precision": { "type": "integer", "minimum": 0, "maximum": 2 },
+          "notes": { "type": "string" }
+        }
+      }
+    }
+  }
+}

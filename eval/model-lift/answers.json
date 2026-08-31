@@ -1,0 +1,22 @@
+{
+  "case_id": "rr-76",
+  "max_followups_per_stage": 3,
+  "rules": [
+    {
+      "id": "approve-filing",
+      "question_regex": "(approve|approval|file|draft|look right|confirm)",
+      "answer": "Approved. File exactly one actionable issue with the agreed behavior, scope, non-goals, and gates."
+    },
+    {
+      "id": "excluded-citation-behavior",
+      "question_regex": "(excluded|citation|source|candidate|behavior|acceptance|boundary)",
+      "answer": "Treat an excluded candidate exactly like an unknown source: return unsupported-claims with an unknown-source finding for that identity. Included citations must continue to validate, provider input must remain bounded to included safe fields, and all tests must stay offline with an injected client."
+    },
+    {
+      "id": "scope-and-gates",
+      "question_regex": "(scope|files|test|gate|provider|network|credential|live|non-goal)",
+      "answer": "Keep this to packages/openai-integration/src/draft.ts and its focused regression test. Do not change core validation, configuration, docs, oracle truth, or make a live provider call. Run pnpm check and pnpm build."
+    }
+  ],
+  "default_answer": "Use the narrow behavior and scope in the request: excluded citations are unknown-source unsupported claims, included citations still pass, tests stay injected and offline, and pnpm check plus pnpm build must pass."
+}
