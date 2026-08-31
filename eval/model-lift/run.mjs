@@ -1053,11 +1053,11 @@ function bwrapDirectoryArgs(path) {
     return directories.flatMap((directory) => ['--dir', directory]);
 }
 
-export function verifierSandboxArgs(workspace, command) {
+export function verifierSandboxArgs(workspace, command, executables = null) {
     const workspacePath = realpathSync(workspace);
     ensureInside(realpathSync(tmpdir()), workspacePath);
-    const node = executablePath('node');
-    const pnpm = executablePath('pnpm');
+    const node = executables?.node ?? executablePath('node');
+    const pnpm = executables?.pnpm ?? executablePath('pnpm');
     const runtimeRoots = [...new Set([runtimeRoot(node), runtimeRoot(pnpm)].filter(Boolean))];
     const scratch = join(workspacePath, CONTROL_TMP);
     const args = [

@@ -112,7 +112,10 @@ test('model-lift protocol freezes the two models, three arms, five stages, and l
 test('verifier sandbox unshares the network and mounts no user home', () => {
     const workspace = mkdtempSync(join(tmpdir(), 'cycle-model-lift-bwrap-'));
     try {
-        const args = verifierSandboxArgs(workspace, 'pnpm check');
+        const args = verifierSandboxArgs(workspace, 'pnpm check', {
+            node: '/usr/bin/node',
+            pnpm: '/usr/bin/node',
+        });
         assert.ok(args.includes('--unshare-all'));
         assert.ok(args.includes('--unshare-user'));
         assert.ok(args.includes('--disable-userns'));
