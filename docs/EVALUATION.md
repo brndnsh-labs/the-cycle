@@ -368,6 +368,8 @@ mounts no user home or `/etc`, mounts only the disposable fixture writable, and 
 the Node/pnpm runtime read-only. Candidate changes to package-manager, compiler, formatter, or test
 configuration are rejected before verification. This preserves the real Release Relay gate while
 avoiding both a false sandbox failure and an unsandboxed execution of model-authored source.
+The verifier commits the frozen base and control files as a one-root, no-remote repository before
+applying the candidate delta uncommitted; preflight runs its gate matrix through that same path.
 
 Preflight additionally proves the hidden oracle is red on the base, green on the historical and
 independent repairs, and red after repair removal; checks exact history, dependency, artifact, and
