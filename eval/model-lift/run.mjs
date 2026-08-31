@@ -1014,12 +1014,13 @@ export function prepareVerifier({
     ));
     applyOfflinePackageManagerOverlay(destination, PNPM_RUNTIME_STORE);
     writeGuidance(destination, source, protocol);
+    writeControlAssets(destination, protocol, protocolPath);
+    initializeRepository(destination, protocol.execution.fixture_commit_time);
     if (candidate && fixture) copyCandidateDelta(candidate, fixture.initial_commit, destination);
     const oracleTarget = resolve(destination, protocol.task.oracle_destination);
     ensureInside(destination, oracleTarget);
     mkdirSync(dirname(oracleTarget), { recursive: true });
     writeFileSync(oracleTarget, readFileSync(protocolAsset(protocolPath, protocol.task.oracle_path)));
-    writeControlAssets(destination, protocol, protocolPath);
     cloneDependencies(dependencySource, destination);
     preparePnpmRuntime(destination, dependencyStore);
     return destination;
@@ -1592,7 +1593,7 @@ function preflight({
     let fixture;
     let gateMatrix;
     try {
-        const workspace = join(fixtureRoot, 'workspace');
+        const fixtureWorkspace = join(fixtureRoot, 'fixture');
         fixture = materializeFixture({
             protocol,
             protocolPath,
@@ -1600,8 +1601,17 @@ function preflight({
             dependencySource,
             dependencyStore,
             mode: 'pipeline',
-            destination: workspace,
+            destination: fixtureWorkspace,
             dryRun: false,
+        });
+        const workspace = join(fixtureRoot, 'verifier');
+        prepareVerifier({
+            protocol,
+            protocolPath,
+            source,
+            dependencySource,
+            dependencyStore,
+            destination: workspace,
         });
         const packageManager = verifierCommand({
             protocol,

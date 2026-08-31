@@ -186,7 +186,7 @@
   },
   "artifact_lock": {
     "shared_runner_sha256": "10fe07d84ee9373426a618687f4667de50686555ecab39eceb18af8a33aa2bfd",
-    "runner_sha256": "a02cb1172b7d3b2ebe0d636bee2d54398adb87b354e5692ea7f4f1f8793f9f34",
+    "runner_sha256": "55aba9e61ba6d5038b9386e874653cb1f4284708ce93d422c84f103171a9eebf",
     "fake_codex_sha256": "8a482b40588d8e83ccc9ca396433703d0b723a4fe705b46d3282ac960efd91c4",
     "fake_tracker_sha256": "aecb340a653b8176d74b5549523f00efede0a7ebf72512db6f5072018092d25a",
     "fake_git_sha256": "47ec70403d0bf70dd6624d28d2ec9809eac2353a3fbac91b126cd3f0f7929c4f",

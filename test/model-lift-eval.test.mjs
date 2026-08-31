@@ -132,6 +132,24 @@ test('verifier sandbox unshares the network and mounts no user home', () => {
     }
 });
 
+test('candidate verifier initializes Git before applying an uncommitted candidate delta', () => {
+    const runner = readFileSync(RUNNER, 'utf8');
+    const body = runner.match(/export function prepareVerifier\([\s\S]+?\n}\n\nfunction executablePath/)?.[0];
+    assert.ok(body, 'prepareVerifier body must remain discoverable');
+    const control = body.indexOf('writeControlAssets(destination, protocol, protocolPath)');
+    const initialize = body.indexOf('initializeRepository(destination, protocol.execution.fixture_commit_time)');
+    const candidate = body.indexOf('copyCandidateDelta(candidate, fixture.initial_commit, destination)');
+    const oracle = body.indexOf('writeFileSync(oracleTarget');
+    assert.ok(control >= 0 && control < initialize, 'control assets must be frozen into the verifier root');
+    assert.ok(initialize < candidate, 'candidate delta must remain uncommitted');
+    assert.ok(candidate < oracle, 'the evaluator-owned oracle must overwrite any candidate path');
+
+    const preflight = runner.match(/function preflight\([\s\S]+?\n}\n\nfunction resultIndexPath/)?.[0];
+    assert.ok(preflight, 'preflight body must remain discoverable');
+    assert.match(preflight, /prepareVerifier\([\s\S]+?candidate_matrix/,
+        'preflight gates must exercise the final verifier constructor');
+});
+
 test('model-free batches resume an exact model prefix and produce a private blinded packet', {
     timeout: 120_000,
 }, () => {
