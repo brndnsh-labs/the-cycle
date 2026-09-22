@@ -1,12 +1,12 @@
 {
-  "upstream": "f9177ec-dirty",
+  "upstream": "a81d8dc-dirty",
   "files": {
     ".claude/skills/DOCTRINE.md": "4e8fad46c380",
     ".claude/skills/DELIVERY.md": "9632608acf87",
     ".claude/skills/FILING.md": "aa4a62ecee9c",
     ".claude/skills/cycle/SKILL.md": "7f01a9da78c5",
     ".claude/skills/implement/SKILL.md": "cf203f5d5482",
-    ".claude/skills/review/SKILL.md": "98cbe85ce922",
+    ".claude/skills/review/SKILL.md": "57bf5ab87641",
     ".claude/skills/patch/SKILL.md": "3c19e8254658",
     ".claude/skills/done/SKILL.md": "c54722539bb9",
     ".claude/skills/next/SKILL.md": "0afc40565e46",
@@ -21,7 +21,7 @@
     ".agents/skills/FILING.md": "aa4a62ecee9c",
     ".agents/skills/cycle/SKILL.md": "10242c49cc7b",
     ".agents/skills/implement/SKILL.md": "c9ea4d7d4f0f",
-    ".agents/skills/review/SKILL.md": "ec92da7b2ac5",
+    ".agents/skills/review/SKILL.md": "e7f6db0071de",
     ".agents/skills/patch/SKILL.md": "293336aec69b",
     ".agents/skills/done/SKILL.md": "f84184b1ba35",
     ".agents/skills/next/SKILL.md": "f49c75d042fd",

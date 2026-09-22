@@ -2,7 +2,7 @@
 name: review
 description: Review the current uncommitted the-cycle diff. Inspects git status + diff --stat to route reviewers — an inline correctness pass for any non-trivial change, plus `/security-review` whenever the diff touches an always-brake surface (auth / tokens / secrets, schema / data migration, anything destructive or irreversible), and optionally a second-model angle on a meaty diff. Presents the reviewer plan before running. Does NOT change Status — review happens within status:in-progress. Use after /implement, before /done.
 ---
-<!-- cycle:rendered template=skills/review.md.tmpl hash=ec92da7b2ac5 — managed by the-cycle; edit the template, not this file -->
+<!-- cycle:rendered template=skills/review.md.tmpl hash=e7f6db0071de — managed by the-cycle; edit the template, not this file -->
 
 # /review — review the uncommitted tree
 
@@ -127,9 +127,9 @@ story stays `status:in-progress` through review and patch.
 6. **Run them immediately** in the same turn — no "Run them?" wait.
 7. **Present the result.** In normal mode, assign every actionable finding a stable in-context ID
    (`F1`, `F2`, …) and include severity (P0/P1/P2) + `file:line` + a **verbatim quote** of the
-   offending line, with `[spec]` on any the spec axis raised. In finding-closure mode, report
-   every original ID as `fixed`, `remaining`, or `escalated`, plus any new finding. Then give the
-   matching recommendation:
+   offending line, with `[spec]` on any the spec axis raised. In finding-closure mode,
+   report every original ID as `fixed`, `remaining`, or `escalated`, plus any new finding. Then
+   give the matching recommendation:
 
    ```
    ### Recommendation
