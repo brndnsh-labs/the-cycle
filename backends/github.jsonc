@@ -38,7 +38,7 @@
     "issue_list_closed": "gh issue list --state closed --limit 20 --json number,title,closedAt,url",
     "issue_list_label": "gh issue list --state open --label $1 --json number,title,labels,milestone,url",
     "issue_list_milestone": "gh issue list --state open --milestone $1 --json number,title,labels,milestone,url",
-    "issue_view": "gh issue view $1 --json number,title,state,url,labels,milestone,body",
+    "issue_view": "gh issue view $1 --json number,title,state,url,labels,milestone,body,comments",
     "issue_create": "gh issue create --title $1 --body $2 --label $3",
     "issue_edit_label": "gh issue edit $1 --add-label $2",
     "issue_unlabel": "gh issue edit $1 --remove-label $2",

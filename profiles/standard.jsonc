@@ -1,22 +1,17 @@
-// standard — lean, plus the session and decision-batching layer.
+// standard — lean, plus /unblock for repos that accumulate decisions and hands-on checks.
 {
   "name": "standard",
   "skills": [
     "cycle",
-    "implement",
-    "review",
-    "patch",
-    "done",
-    "next",
     "intake",
+    "review",
+    "next",
     "scout",
-    "burndown",
-    "dep-update",
-    "deploy-test",
-    "deploy-prod",
-
-    "unblock",
     "wrap-up",
-    "pre-compact"
+    { "skill": "dep-update", "when": "deps.has_manager" },
+    { "skill": "deploy-test", "when": "deploy.test" },
+    { "skill": "deploy-prod", "when": "deploy.prod" },
+
+    "unblock"
   ]
 }

@@ -22,8 +22,6 @@ same procedure, same overlays, only the output root and the harness-conditional 
 
 ```
 .claude/skills/DOCTRINE.md        .agents/skills/DOCTRINE.md
-.claude/skills/DELIVERY.md        .agents/skills/DELIVERY.md
-.claude/skills/FILING.md          .agents/skills/FILING.md
 .claude/skills/cycle/SKILL.md     .agents/skills/cycle/SKILL.md
 ...                                ...
 ```
@@ -42,7 +40,7 @@ frontmatter and no `SKILL.md`). Nothing executable is rendered alongside the tre
 | `harness.doctrine_path` | `.claude/skills/DOCTRINE.md` | `.agents/skills/DOCTRINE.md` | `.github/skills/DOCTRINE.md` | `.opencode/skills/DOCTRINE.md` | `.pi/skills/DOCTRINE.md` | computed (`root/DOCTRINE.md`) — every skill's "Shared rules in `…`" line |
 | `harness.has_menus` | `true` | `false` | `true` | `true` | `false` | a structured choice tool is callable in normal skill execution |
 | `harness.has_subagents` | `true` | `true` | `true` | `true` | `false` | a native parallel-subagent spawn tool exists |
-| `harness.attribution` | `🤖 Generated with [Claude Code](…)` | `🤖 Generated with [Codex CLI](…)` | `🤖 Generated with [Copilot CLI](…)` | `🤖 Generated with [OpenCode](…)` | `🤖 Generated with [Pi](…)` | the §8 PR-body trailer |
+| `harness.attribution` | `🤖 Generated with [Claude Code](…)` | `🤖 Generated with [Codex CLI](…)` | `🤖 Generated with [Copilot CLI](…)` | `🤖 Generated with [OpenCode](…)` | `🤖 Generated with [Pi](…)` | the §6 PR-body trailer |
 | `harness.ask` | `` `AskUserQuestion` `` | `plain chat` | `` `ask_user` `` | `` `question` `` | `plain chat` | how a workflow asks a discrete question |
 
 `doctrine_path` is computed by the engine (`buildHarnessContext` in `bin/cycle.mjs`) from `root` —

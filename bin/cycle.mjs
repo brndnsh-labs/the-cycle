@@ -15,7 +15,7 @@
 // .cycle/state.json, and "upstream drift" is computed the useful way: by re-rendering
 // and reporting which files would actually change.
 
-import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
+import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, realpathSync, rmdirSync, unlinkSync, writeFileSync } from 'node:fs';
 import { createInterface } from 'node:readline/promises';
 import { execFileSync } from 'node:child_process';
 import { homedir } from 'node:os';
@@ -153,6 +153,40 @@ function truthy(v) {
     if (Array.isArray(v)) return v.length > 0;
     if (typeof v === 'string') return v.trim() !== '';
     return Boolean(v);
+}
+
+/**
+ * Normalize a profile's `skills` array. An entry is either a skill name, or
+ * `{ "skill": "name", "when": "dotted.path" }` — installed only when that path in the
+ * render context is truthy (`"!dotted.path"` negates). Anything else fails loudly: a
+ * typo'd key silently ignored would install the skill unconditionally.
+ */
+export function profileEntries(profile, where = 'profile') {
+    const skills = profile.skills ?? [];
+    if (!Array.isArray(skills)) fail(`${where}: "skills" must be an array`);
+    return skills.map((entry, i) => {
+        if (typeof entry === 'string' && entry.trim()) return { skill: entry, when: null };
+        const bad = (why) => fail(`${where}: skills[${i}] ${why}`, 'an entry is a skill name or { "skill": "name", "when": "dotted.path" }');
+        if (entry === null || typeof entry !== 'object' || Array.isArray(entry)) return bad('is not a skill name or { skill, when } object');
+        const unknown = Object.keys(entry).filter((k) => k !== 'skill' && k !== 'when');
+        if (unknown.length) return bad(`has unknown key(s): ${unknown.join(', ')}`);
+        if (typeof entry.skill !== 'string' || !entry.skill.trim()) return bad('needs a non-empty string "skill"');
+        if (typeof entry.when !== 'string' || !/^!?[\w-]+(\.[\w-]+)*$/.test(entry.when)) {
+            return bad('needs a "when" dotted path such as "deploy.test" (or "!deploy.test")');
+        }
+        return { skill: entry.skill, when: entry.when };
+    });
+}
+
+/** The skills this profile installs for a render context (conditional entries evaluated). */
+export function profileSkills(profile, ctx, where = 'profile') {
+    return profileEntries(profile, where)
+        .filter(({ when }) => {
+            if (when === null) return true;
+            const negate = when.startsWith('!');
+            return truthy(resolvePath(ctx, negate ? when.slice(1) : when)) !== negate;
+        })
+        .map(({ skill }) => skill);
 }
 
 /**
@@ -319,6 +353,7 @@ export function renderTemplate(src, ctx, opts = {}) {
                 where: file,
                 depth: depth + 1,
             });
+            opts.injected?.add(name);
             if (span.standalone) out += '\n';
             i = resume;
             continue;
@@ -685,6 +720,36 @@ function validateConfig(root, cfg, backend) {
     }
 }
 
+/**
+ * An overlay file whose injection point no template declares would be silently dropped
+ * from every render — repo-specific content vanishing without a word. Judged against the
+ * registry (templates/overlays.jsonc), not per-profile usage, so an overlay for a skill
+ * this profile doesn't install is fine.
+ */
+/**
+ * Fails on an overlay file no template can inject, and returns which overlays the repo
+ * supplies — exposed to templates as `overlay.<name>` so a heading around an optional
+ * overlay renders only when there is content under it.
+ */
+function checkOverlayFiles(root) {
+    const present = {};
+    const registryFile = templatePath('overlays.jsonc');
+    const dir = overlayDir(root);
+    if (!existsSync(repositoryPath(root, dir))) return present;
+    const known = existsSync(registryFile) ? new Set(Object.keys(readJsonc(registryFile))) : null;
+    for (const file of readdirSync(dir).sort()) {
+        if (!file.endsWith('.md')) continue;
+        repositoryPath(root, join(dir, file));
+        present[file.slice(0, -3)] = true;
+        if (!known || known.has(file.slice(0, -3))) continue;
+        fail(
+            `overlay ${relative(root, join(dir, file))} has no injection point: "${file.slice(0, -3)}" is not a registered overlay, so its content would be silently dropped`,
+            `move its content into a current overlay point (${[...known].join(', ')}), or delete the file; see docs/AUTHORING.md`,
+        );
+    }
+    return present;
+}
+
 function planRender(root, cfg) {
     const backend = loadBackend(cfg.backend);
     const profile = loadProfile(cfg.profile);
@@ -693,6 +758,8 @@ function planRender(root, cfg) {
     const verbs = backend.verbs ?? {};
     const overlays = overlayDir(root);
     const plan = [];
+    ctx.overlay = checkOverlayFiles(root);
+    const injected = new Set();
     const sharedReferences = ['DELIVERY', 'FILING'];
     const availableReferences = sharedReferences.filter((name) =>
         existsSync(templatePath(join('references', `${name}.md.tmpl`))));
@@ -709,6 +776,7 @@ function planRender(root, cfg) {
             overlays,
             repositoryRoot: root,
             verbs,
+            injected,
         });
         // An absent optional overlay or a false {{#if}} leaves its blank lines
         // behind; collapse them so output doesn't depend on which sections applied.
@@ -740,7 +808,7 @@ function planRender(root, cfg) {
                 harnessCtx,
             );
         }
-        for (const skill of profile.skills ?? []) {
+        for (const skill of profileSkills(profile, harnessCtx, `profile ${cfg.profile}`)) {
             render(join('skills', `${skill}.md.tmpl`), join(harness.root, skill, harness.skill_file), undefined, harnessCtx);
         }
     }
@@ -749,7 +817,17 @@ function planRender(root, cfg) {
     // executables rendered into the repo to reach a canonical script in the-cycle's
     // helpers/ — but that existed only for the Projects v2 board, and retiring the
     // board retired the whole mechanism along with helpers/ and shim.mjs.tmpl.
+    // A registered overlay whose only host skill this repo doesn't render (a conditional
+    // deploy skill, a standard-only skill on lean) is legitimate but invisible — say so.
+    plan.unusedOverlays = Object.keys(ctx.overlay).filter((name) => !injected.has(name)).sort();
     return plan;
+}
+
+function printUnusedOverlays(plan) {
+    if (!plan.unusedOverlays?.length) return;
+    console.log(yellow(`! ${plan.unusedOverlays.length} overlay(s) no rendered skill uses — their content reaches no agent:`));
+    for (const name of plan.unusedOverlays) console.log(`    .cycle/overlays/${name}.md`);
+    console.log(dim('    → configure the skill that hosts it (e.g. deploy.prod for the deploy overlay), move the content, or delete it'));
 }
 
 // ---------------------------------------------------------------------------
@@ -826,11 +904,62 @@ const upstreamSha = () => {
     return 'unknown';
 };
 
-function writeState(root, plan) {
-    const files = {};
+// Write state.json in the indentation it already has, so a repo whose formatter wants tabs
+// doesn't fail its own lint on every `cycle update`.
+function saveState(root, state) {
+    const p = repositoryPath(root, statePath(root));
+    let indent = 2;
+    try {
+        const ws = readFileSync(p, 'utf8').match(/\n([ \t]+)\S/)?.[1];
+        if (ws) indent = ws.startsWith('\t') ? '\t' : ws.length;
+    } catch {
+        /* no state yet: default */
+    }
+    writeFileSync(p, `${JSON.stringify(state, null, indent)}\n`);
+}
+
+function writeState(root, plan, retained = {}) {
+    const files = { ...retained };
     for (const f of plan) files[f.rel] = readProvenance(f.content)?.hash ?? '';
-    const state = { upstream: upstreamSha(), files };
-    writeFileSync(repositoryPath(root, statePath(root)), `${JSON.stringify(state, null, 2)}\n`);
+    saveState(root, { upstream: upstreamSha(), files });
+}
+
+/**
+ * Files state.json records that the current plan no longer renders. Each is classified
+ * as 'missing' (gone from disk), 'clean' (unedited, safe to delete) or 'edited' (no
+ * provenance, hash mismatch, or not a regular file). Only paths inside a registered
+ * harness root are ever returned for deletion — state.json is repo-controlled input —
+ * and every path goes through repositoryPath like any write would.
+ */
+function findOrphans(root, plan, state) {
+    const planned = new Set(plan.map((f) => f.rel));
+    const roots = registryNames('harnesses').map((n) => resolve(root, loadHarness(n).root));
+    const out = [];
+    for (const rel of Object.keys(state?.files ?? {})) {
+        if (planned.has(rel)) continue;
+        const abs = resolve(root, rel);
+        if (isAbsolute(rel) || !roots.some((r) => abs !== r && pathIsInside(r, abs))) {
+            console.error(stderrDim(`ignoring state entry outside the harness roots: ${rel}`));
+            out.push({ rel, status: 'foreign' });
+            continue;
+        }
+        const path = repositoryPath(root, abs);
+        const harnessRoot = roots.find((r) => pathIsInside(r, abs));
+        let st;
+        try { st = lstatSync(path); } catch (e) {
+            if (e?.code === 'ENOENT') { out.push({ rel, path, status: 'missing' }); continue; }
+            throw e;
+        }
+        // Not a file the engine wrote (a directory, a symlink): never ours to delete. Drop it
+        // from state, the same as an entry outside the harness roots.
+        if (!st.isFile()) { out.push({ rel, path, status: 'foreign' }); continue; }
+        const text = readFileSync(path, 'utf8');
+        const prov = readProvenance(text);
+        if (!prov) out.push({ rel, path, harnessRoot, status: 'edited', why: 'no provenance header — not managed by the-cycle' });
+        else if (hashContent(stripProvenance(text)) !== prov.hash) out.push({ rel, path, harnessRoot, status: 'edited', why: 'hand-edited since render' });
+        else out.push({ rel, path, harnessRoot, status: 'clean' });
+    }
+    return out;
 }
 
 function readState(root) {
@@ -1130,7 +1259,7 @@ function printFormatterGuidance(blocks) {
 // the close — which is exactly what went stale on the board this replaced.
 const DEFAULT_STATUSES = {
     github: [
-        { name: 'status:ready', meaning: 'scoped + pickable', action: '`/next` ranks & picks; `/implement`/`/cycle` build' },
+        { name: 'status:ready', meaning: 'scoped + pickable', action: '`/next` ranks & picks; `/cycle` builds' },
         { name: 'status:in-progress', meaning: 'being built', action: "don't re-pick" },
         { name: 'status:in-review', meaning: 'built, under review / PR open', action: "don't re-pick" },
         { name: 'status:blocked', meaning: 'blocked on a dependency', action: 'skip; name the blocker' },
@@ -1520,6 +1649,7 @@ function cmdCheck(args) {
     const cfg = loadConfig(root);
     const plan = planRender(root, cfg);
     const state = readState(root);
+    if (!values.quiet) printUnusedOverlays(plan);
 
     const local = [];
     const upstream = [];
@@ -1539,7 +1669,7 @@ function cmdCheck(args) {
         }
     }
 
-    const orphans = Object.keys(state?.files ?? {}).filter((rel) => !plan.some((f) => f.rel === rel));
+    const orphans = findOrphans(root, plan, state).filter((o) => o.status === 'clean' || o.status === 'edited');
 
     if (!values.quiet) {
         console.log(`${bold('the-cycle')} ${dim(`profile=${cfg.profile} backend=${cfg.backend} harnesses=${harnessNames(cfg).join(',')}`)}`);
@@ -1564,9 +1694,11 @@ function cmdCheck(args) {
         console.log(dim('    → `cycle update` to apply, `cycle update --dry-run` to see the diff'));
     }
     if (orphans.length) {
-        console.log(dim(`· ${orphans.length} file(s) no longer in this profile: ${orphans.join(', ')}`));
+        console.log(cyan(`↑ ${orphans.length} stale file(s) no longer rendered by this profile (still discoverable by agents)`));
+        for (const o of orphans) console.log(`    ${o.rel}${o.why ? `  ${dim(`${o.why} — update will refuse without --prune-edited`)}` : ''}`);
+        console.log(dim('    → `cycle update` removes them'));
     }
-    if (!missing.length && !local.length && !upstream.length) {
+    if (!missing.length && !local.length && !upstream.length && !orphans.length) {
         console.log(green('✓ clean — every managed file matches its template'));
     }
 
@@ -1587,18 +1719,26 @@ function cmdCheck(args) {
         }
     }
 
-    process.exitCode = missing.length || local.length || upstream.length || forgeProblems.length ? 1 : 0;
+    process.exitCode = missing.length || local.length || upstream.length || orphans.length || forgeProblems.length ? 1 : 0;
 }
+
+/** State entries to keep across an update: orphans we refused to remove stay tracked so check keeps flagging them. */
+const retainedState = (refused) => Object.fromEntries(refused.map((o) => {
+    let hash = '';
+    try { hash = readProvenance(readFileSync(o.path, 'utf8'))?.hash ?? ''; } catch { /* unreadable: keep tracking it */ }
+    return [o.rel, hash];
+}));
 
 function cmdUpdate(args) {
     const root = findRepoRoot();
     const { values } = parseArgs({
         args,
-        options: { 'dry-run': { type: 'boolean' }, force: { type: 'boolean' } },
+        options: { 'dry-run': { type: 'boolean' }, force: { type: 'boolean' }, 'prune-edited': { type: 'boolean' } },
         allowPositionals: true,
     });
     const cfg = loadConfig(root);
     const plan = planRender(root, cfg);
+    printUnusedOverlays(plan);
     const guidance = formatterGuidance(root, cfg);
 
     const writes = [];
@@ -1618,16 +1758,34 @@ function cmdUpdate(args) {
         writes.push({ ...f, current });
     }
 
-    if (conflicts.length) {
-        console.log(yellow(`! refusing to overwrite ${conflicts.length} locally-edited file(s):`));
-        for (const f of conflicts) console.log(`    ${f.rel}`);
-        console.log(dim('  fold the edits into the template, `cycle eject <skill>`, or re-run with --force\n'));
-    }
+    // Managed files this plan no longer renders (a skill dropped from the profile, or
+    // upstream deleted it). Left behind they stay discoverable by agents forever.
+    const orphans = findOrphans(root, plan, readState(root));
+    // Deleting a hand-edited orphan destroys content no template holds, so it takes its own
+    // flag: --force (overwrite drifted files) must never also mean "delete my edits".
+    const prune = values['prune-edited'];
+    const removals = orphans.filter((o) => o.status === 'clean' || (o.status === 'edited' && prune));
+    const refusedOrphans = orphans.filter((o) => o.status === 'edited' && !prune);
+    const stateOnly = orphans.filter((o) => o.status === 'missing' || o.status === 'foreign');
 
-    if (!writes.length) {
-        console.log(conflicts.length ? dim('nothing else to update.') : green('✓ already up to date — nothing to write'));
+    if (conflicts.length || refusedOrphans.length) {
+        const n = conflicts.length + refusedOrphans.length;
+        console.log(yellow(`! refusing to overwrite or remove ${n} locally-edited file(s):`));
+        for (const f of conflicts) console.log(`    ${f.rel}`);
+        for (const o of refusedOrphans) console.log(`    ${o.rel}  ${dim('(no longer rendered; hand-edited)')}`);
+        if (conflicts.length) console.log(dim('  drifted: fold the edits into the template or an overlay, `cycle eject <skill>`, or re-run with --force'));
+        if (refusedOrphans.length) console.log(dim('  orphaned: move anything worth keeping into an overlay, then re-run with --prune-edited to delete them'));
+        console.log();
+    }
+    const refused = conflicts.length + refusedOrphans.length;
+
+    if (!writes.length && !removals.length) {
+        if (stateOnly.length && !values['dry-run']) {
+            writeState(root, plan, retainedState(refusedOrphans));
+        }
+        console.log(refused ? dim('nothing else to update.') : green('✓ already up to date — nothing to write'));
         printFormatterGuidance(guidance);
-        process.exitCode = conflicts.length ? 1 : 0;
+        process.exitCode = refused ? 1 : 0;
         return;
     }
 
@@ -1636,10 +1794,11 @@ function cmdUpdate(args) {
         else console.log(`${bold(f.rel)}  ${green('new')}`);
     }
 
-    process.exitCode = conflicts.length ? 1 : 0;
+    process.exitCode = refused ? 1 : 0;
 
     if (values['dry-run']) {
-        console.log(dim(`\n(dry run — ${writes.length} file(s) would change)`));
+        for (const o of removals) console.log(`would remove ${bold(o.rel)}`);
+        console.log(dim(`\n(dry run — ${writes.length} file(s) would change, ${removals.length} would be removed)`));
         printFormatterGuidance(guidance);
         return;
     }
@@ -1649,8 +1808,21 @@ function cmdUpdate(args) {
         mkdirSync(dirname(f.path), { recursive: true });
         writeFileSync(f.path, f.content);
     }
-    writeState(root, plan);
-    console.log(`${green('✓')} updated ${bold(String(writes.length))} file(s) to the-cycle@${upstreamSha()}`);
+    for (const o of removals) {
+        repositoryPath(root, o.path);
+        unlinkSync(o.path);
+        // Drop the skill directory it leaves empty — but only a directory directly under
+        // a harness root, never the root itself, and never one that still has content.
+        const dir = dirname(o.path);
+        if (dirname(dir) === o.harnessRoot) {
+            try { rmdirSync(dir); } catch (e) { if (e?.code !== 'ENOTEMPTY' && e?.code !== 'ENOENT') throw e; }
+        }
+        console.log(`removed ${bold(o.rel)}`);
+    }
+    writeState(root, plan, retainedState(refusedOrphans));
+    const parts = [`updated ${bold(String(writes.length))} file(s)`];
+    if (removals.length) parts.push(`removed ${bold(String(removals.length))}`);
+    console.log(`${green('✓')} ${parts.join(', ')} to the-cycle@${upstreamSha()}`);
     printFormatterGuidance(guidance);
 }
 
@@ -1686,7 +1858,7 @@ function cmdEject(args) {
         console.log(`${green('✓')} ejected ${dim(relative(root, path))}`);
     }
     if (!ejected) fail(`${name} is already unmanaged in every configured harness`);
-    writeFileSync(repositoryPath(root, statePath(root)), `${JSON.stringify(state, null, 2)}\n`);
+    saveState(root, state);
 
     console.log(`${bold(name)} is now yours to maintain in this repo`);
     console.log(dim(`  remove it from the "${cfg.profile}" profile, or it will be re-rendered by \`cycle update\``));
@@ -1720,8 +1892,9 @@ const USAGE = `${bold('cycle')} — render the-cycle's work pipeline into a repo
       forge (backend_overrides.auto_merge) against the live repo. Opt-in
       because it needs network + auth; without it, check stays offline.
 
-  ${bold('cycle update')} [--dry-run] [--force]
+  ${bold('cycle update')} [--dry-run] [--force] [--prune-edited]
       Re-render. Shows a diff; refuses to clobber hand-edited files without --force.
+      Removes skills no longer rendered; a hand-edited one needs --prune-edited.
 
   ${bold('cycle lint')} [-q]
       Check the-cycle's own consistency: §N citations, verb bindings, overlay

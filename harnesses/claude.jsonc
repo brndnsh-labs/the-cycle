@@ -16,7 +16,7 @@
     // A structured, recommendation-first multiple-choice tool (AskUserQuestion).
     "has_menus": true,
     // A native tool for spawning parallel subagents (the Agent tool) — what
-    // /fan-out and /cover's per-unit spawn rely on.
+    // /review's fresh-context reviewer and /scout's parallel sweep use.
     "has_subagents": true
   },
 

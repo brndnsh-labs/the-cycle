@@ -26,7 +26,7 @@
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { basename, join } from 'node:path';
 
-import { readJsonc } from './cycle.mjs';
+import { profileEntries, readJsonc } from './cycle.mjs';
 
 const ERROR = 'error';
 const WARN = 'warn';
@@ -91,7 +91,7 @@ export function lint({ CYCLE_HOME }) {
     const referenceDir = join(tmplDir, 'references');
     const templates = new Map(); // rel → text
     templates.set('DOCTRINE.md.tmpl', readFileSync(join(tmplDir, 'DOCTRINE.md.tmpl'), 'utf8'));
-    for (const f of readdirSync(referenceDir).filter((x) => x.endsWith('.md.tmpl')).sort()) {
+    for (const f of (existsSync(referenceDir) ? readdirSync(referenceDir) : []).filter((x) => x.endsWith('.md.tmpl')).sort()) {
         templates.set(join('references', f), readFileSync(join(referenceDir, f), 'utf8'));
     }
     for (const f of readdirSync(skillDir).filter((x) => x.endsWith('.md.tmpl')).sort()) {
@@ -277,6 +277,13 @@ export function lint({ CYCLE_HOME }) {
         for (const o of used) {
             if (!manifest[o]) add(ERROR, 'overlays', `overlay "${o}" is injected but absent from overlays.jsonc`, 'templates/overlays.jsonc');
         }
+        // `overlay.<name>` (the engine's presence flag) is false for any unknown name, so a
+        // typo would silently drop the guarded heading and its content in every repo.
+        for (const [rel, text] of templates) {
+            for (const m of text.matchAll(/\{\{[#\/]?(?:if|unless)\s+overlay\.([\w-]+)\s*\}\}/g)) {
+                if (!manifest[m[1]]) add(ERROR, 'overlays', `branches on overlay "${m[1]}", which overlays.jsonc does not define`, rel);
+            }
+        }
         for (const o of Object.keys(manifest)) {
             if (!used.has(o)) add(ERROR, 'overlays', `overlays.jsonc describes "${o}", which no template injects`, 'templates/overlays.jsonc');
             else for (const field of ['into', 'purpose', 'shape', 'value']) {
@@ -302,12 +309,23 @@ export function lint({ CYCLE_HOME }) {
     }
 
     // --- profiles ----------------------------------------------------------
-    const inAnyProfile = new Set([...profiles.values()].flatMap((p) => p.skills ?? []));
+    // A conditional entry counts as installed: whether `when` holds is a per-repo fact
+    // lint cannot know, and the skill is reachable from the profile either way.
+    const profileSkillNames = new Map();
+    for (const [name, p] of profiles) {
+        try {
+            profileSkillNames.set(name, profileEntries(p, `profiles/${name}.jsonc`).map((e) => e.skill));
+        } catch (e) {
+            add(ERROR, 'profiles', e.message, `profiles/${name}.jsonc`);
+            profileSkillNames.set(name, []);
+        }
+    }
+    const inAnyProfile = new Set([...profileSkillNames.values()].flat());
     for (const skill of skillNames) {
         if (!inAnyProfile.has(skill)) add(WARN, 'profiles', `template exists but no profile installs it`, `templates/skills/${skill}.md.tmpl`);
     }
-    for (const [name, p] of profiles) {
-        for (const skill of p.skills ?? []) {
+    for (const [name] of profiles) {
+        for (const skill of profileSkillNames.get(name)) {
             if (!skillNames.has(skill)) add(ERROR, 'profiles', `lists "${skill}", which has no template`, `profiles/${name}.jsonc`);
         }
     }
@@ -315,14 +333,26 @@ export function lint({ CYCLE_HOME }) {
     // --- cross-references ---------------------------------------------------
     // Only /names that are actually skills here; anything else is a Claude Code
     // built-in or a path, and not ours to judge.
+    // Skills that once shipped and were retired. A template naming one points agents at a
+    // command that no longer exists — and since it isn't in skillNames, the check below
+    // would otherwise wave it through.
+    const RETIRED = ['implement', 'patch', 'done', 'burndown', 'nightly', 'fan-out', 'cover', 'flake', 'pre-compact'];
+    for (const [rel, text] of templates) {
+        for (const m of text.matchAll(/(?<![\w/.-])\/([a-z][a-z-]+)\b/g)) {
+            if (RETIRED.includes(m[1]) && !skillNames.has(m[1])) {
+                add(ERROR, 'cross-refs', `mentions /${m[1]}, a retired skill`, rel);
+            }
+        }
+    }
+
     for (const [rel, text] of templates) {
         if (!rel.startsWith('skills/')) continue;
         const self = basename(rel, '.md.tmpl');
         const refs = new Set([...text.matchAll(/(?<![\w/])\/([a-z][a-z-]+)\b/g)].map((m) => m[1]));
         for (const ref of refs) {
             if (ref === self || !skillNames.has(ref)) continue;
-            for (const [pname, p] of profiles) {
-                const skills = p.skills ?? [];
+            for (const pname of profiles.keys()) {
+                const skills = profileSkillNames.get(pname);
                 if (skills.includes(self) && !skills.includes(ref)) {
                     add(WARN, 'cross-refs', `mentions /${ref}, absent from the "${pname}" profile that installs it`, rel);
                 }

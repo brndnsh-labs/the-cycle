@@ -12,8 +12,8 @@
 //     but there's no reason to court it).
 //   - subagents: a `task` tool exists for general-purpose delegation in normal/default
 //     sessions (it survives even Plan mode's stripped-to-4-tools set), plus a `/fleet`
-//     user command for larger multi-agent decomposition — so /fan-out and /cover's
-//     per-unit spawn apply here too.
+//     user command for larger multi-agent decomposition — so /review's fresh-context
+//     reviewer and /scout's parallel sweep apply here too.
 //   - structured questions: an `ask_user` tool exists with predefined choices plus an
 //     auto-appended "Other" freeform escape hatch, functionally equivalent to
 //     AskUserQuestion, and available in normal/default sessions (unlike Codex's

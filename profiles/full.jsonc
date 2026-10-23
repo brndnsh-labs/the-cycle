@@ -1,27 +1,18 @@
-// full — everything: unattended operation, parallel batches, and test health.
+// full — identical to standard. The skills that once set it apart (nightly, fan-out,
+// cover, flake) were retired as unused; the name stays so existing configs resolve.
 {
   "name": "full",
   "skills": [
     "cycle",
-    "implement",
-    "review",
-    "patch",
-    "done",
-    "next",
     "intake",
+    "review",
+    "next",
     "scout",
-    "burndown",
-    "dep-update",
-    "deploy-test",
-    "deploy-prod",
-
-    "unblock",
     "wrap-up",
-    "pre-compact",
+    { "skill": "dep-update", "when": "deps.has_manager" },
+    { "skill": "deploy-test", "when": "deploy.test" },
+    { "skill": "deploy-prod", "when": "deploy.prod" },
 
-    "nightly",
-    "fan-out",
-    "cover",
-    "flake"
+    "unblock"
   ]
 }

@@ -5,7 +5,7 @@ this historical filename remains the detailed canonical guide.
 
 ## What this is
 
-the-cycle renders a shared work-pipeline (`/cycle`, `/implement`, `/review`, `/patch`, `/done`, a
+the-cycle renders a shared work-pipeline (`/intake`, `/cycle`, `/review`, `/next`, `/scout`, a
 `DOCTRINE.md` rule spine, and more) into consuming repos, adapted to each repo's tracker, gates,
 and risk surfaces. It replaces three hand-copied, silently-diverged pipelines with one templated
 source; `cycle update` propagates improvements outward, `cycle check` makes drift visible. Full
@@ -24,14 +24,16 @@ the live proof that the `github` backend works.
 Every file under either harness skill tree carries a provenance comment and must never be hand-edited
 — `cycle check` will flag it as drifted.
 
-- To change pipeline **behavior/procedure**: edit `templates/DOCTRINE.md.tmpl`,
-  `templates/references/<name>.md.tmpl`, or `templates/skills/<name>.md.tmpl`, then `cycle update`
+- To change pipeline **behavior/procedure**: edit `templates/DOCTRINE.md.tmpl` or
+  `templates/skills/<name>.md.tmpl`, then `cycle update`
   to re-render this repo's own copy (and eventually every other consuming repo).
 - To change **this repo's bindings** (gates, brakes, tracker fields): edit `.cycle/config.jsonc`,
   then `cycle update`.
 - Read the `DOCTRINE.md` in your harness tree once per session — it is the compact shared rule spine
-  every skill cites as `§N`. Load `DELIVERY.md` or `FILING.md` only when the active skill directs
-  you there; they expand procedure without displacing DOCTRINE's authority.
+  every skill cites as `§N`.
+- **The design stance** (README "Design stance"): a template line earns its place only if it tells
+  the model something it can't infer — a repo binding, a human-authority boundary, or a hard-won
+  landmine. Instructions to behave like a competent engineer get cut, not added.
 
 ## Commands
 

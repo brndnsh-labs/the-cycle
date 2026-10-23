@@ -54,8 +54,8 @@ to prevent.
   (see `docs/BACKENDS.md`), so there is nothing to confirm. If this repo's issues genuinely live
   somewhere else, there is no backend for that yet — **stop and say so** rather than rendering
   GitHub verbs over the wrong tracker.
-- **Profile** — `lean` unless the repo already does the thing a bigger profile assumes. Don't
-  install `/nightly` because it sounds useful; install it when there's an overnight lane.
+- **Profile** — `lean` unless the repo accumulates decisions and hands-on checks worth batching
+  (`standard` adds `/unblock`). Deploy and dependency skills follow the config, not the profile.
 - **Harnesses** — which AI coding tool(s) actually run here. Detect before asking: a `.claude/`
   tree means Claude Code, `AGENTS.md` or a `.agents/` tree means Codex CLI, a `.github/` skills
   convention means Copilot CLI. More than one can be configured together — each gets its own

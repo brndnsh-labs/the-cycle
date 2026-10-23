@@ -10,7 +10,7 @@
 //     is used here as the dedicated root — reusing `.claude/skills` or `.agents/skills`
 //     would collide with the claude/codex harness roots if a repo configured both.
 //   - subagents: a `task` tool spawns subagents with model/prompt/description params,
-//     matching the shape /fan-out and /cover's per-unit spawn rely on.
+//     matching the shape /review's fresh-context reviewer and /scout's sweep rely on.
 //   - structured questions: a `question` tool presents multiple-choice options with an
 //     optional custom-text answer, single/multi-select, pausing execution for the
 //     response — functionally equivalent to AskUserQuestion. Gated by a `permission`

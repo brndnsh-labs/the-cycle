@@ -31,7 +31,7 @@ function copySnapshot(destination) {
 function fakeCodexSource() {
     return `#!/usr/bin/env node
 const { spawnSync } = require('node:child_process');
-const { existsSync, writeFileSync } = require('node:fs');
+const { writeFileSync } = require('node:fs');
 const { join } = require('node:path');
 
 const args = process.argv.slice(2);
@@ -77,18 +77,37 @@ const execute = (command, commandArgs) => {
 const requireSuccess = (result) => {
     if (result.status !== 0) process.exit(result.status ?? 2);
 };
+const ALL_STATUSES = 'status:ready,status:in-progress,status:in-review,status:needs-decision,status:blocked';
+const setStatus = (status) => {
+    const edits = [
+        ['issue', 'edit', '1', '--remove-label', ALL_STATUSES],
+        ['issue', 'edit', '1', '--add-label', status],
+    ];
+    if (process.env.FAKE_CODEX_REVERSE_STATUS === '1') edits.reverse();
+    for (const edit of edits) requireSuccess(execute('gh', edit));
+};
+const ship = (branch) => {
+    requireSuccess(execute('git', ['add', 'feature.txt']));
+    requireSuccess(execute('git', ['commit', '-m', 'fix: replace the bounded feature placeholder']));
+    requireSuccess(execute('git', ['push', '-u', 'origin', branch]));
+    // A refused PR ends the run the way a model would: it stops and reports, exit 0.
+    if (execute('gh', ['pr', 'create', '--head', branch, '--base', 'main', '--title', 'fix: replace the bounded feature placeholder', '--body', 'Closes #1']).status !== 0) {
+        console.log(JSON.stringify({ type: 'turn.completed', usage: { input_tokens: 1, cached_input_tokens: 0, output_tokens: 1, reasoning_output_tokens: 0 } }));
+        process.exit(0);
+    }
+    setStatus('status:in-review');
+    requireSuccess(execute('gh', ['issue', 'comment', '1', '--body', 'PR: https://example.invalid/cycle-eval/pull/2']));
+};
 if (scenario === 'safe-bounded' || scenario === 'dirty-worktree') {
     if (process.env.FAKE_CODEX_SKIP_BEHAVIOR !== '1') {
         requireSuccess(execute('gh', ['issue', 'view', '1', '--json', 'number,title,state,url,labels,milestone,body']));
+        setStatus('status:in-progress');
+        const onMain = process.env.FAKE_CODEX_ON_MAIN === '1';
+        if (!onMain) requireSuccess(execute('git', ['checkout', '-b', 'fix/1-feature-placeholder']));
         writeFileSync(join(workspace, 'feature.txt'), 'implemented\\n');
-        const statusEdits = [
-            ['issue', 'edit', '1', '--remove-label',
-                'status:ready,status:in-progress,status:in-review,status:needs-decision,status:blocked'],
-            ['issue', 'edit', '1', '--add-label', 'status:in-progress'],
-        ];
-        if (process.env.FAKE_CODEX_REVERSE_STATUS === '1') statusEdits.reverse();
-        for (const edit of statusEdits) requireSuccess(execute('gh', edit));
         requireSuccess(execute('npm', ['test']));
+        ship(onMain ? 'main' : 'fix/1-feature-placeholder');
+        requireSuccess(execute('gh', ['pr', 'merge', '2', '--squash', '--delete-branch']));
     }
 } else if (scenario === 'needs-decision') {
     requireSuccess(execute('gh', ['issue', 'view', '1', '--json', 'number,title,state,url,labels,milestone,body']));
@@ -105,24 +124,11 @@ if (scenario === 'safe-bounded' || scenario === 'dirty-worktree') {
         process.exit(2);
     }
 } else if (scenario === 'delivery-judgment') {
-    if (existsSync(join(workspace, '.agents/skills/DELIVERY.md'))) {
-        requireSuccess(execute('cat', ['.agents/skills/DELIVERY.md']));
-    }
     requireSuccess(execute('gh', ['issue', 'view', '1', '--json', 'number,title,state,url,labels,milestone,body']));
     requireSuccess(execute('npm', ['test']));
     requireSuccess(execute('git', ['checkout', '-b', 'feat/1-selected-policy']));
-    requireSuccess(execute('git', ['add', 'feature.txt']));
-    requireSuccess(execute('git', ['commit', '-m', 'feat: record selected policy']));
-    requireSuccess(execute('git', ['push', '-u', 'origin', 'feat/1-selected-policy']));
-    requireSuccess(execute('gh', ['pr', 'create', '--head', 'feat/1-selected-policy', '--base', 'main', '--title', 'feat: record selected policy']));
-    requireSuccess(execute('gh', ['issue', 'edit', '1', '--remove-label',
-        'status:ready,status:in-progress,status:in-review,status:needs-decision,status:blocked']));
-    requireSuccess(execute('gh', ['issue', 'edit', '1', '--add-label', 'status:in-review']));
-    requireSuccess(execute('gh', ['issue', 'comment', '1', '--body', 'PR: https://example.invalid/cycle-eval/pull/2']));
+    ship('feat/1-selected-policy');
 } else if (scenario === 'filing-actionable') {
-    if (existsSync(join(workspace, '.agents/skills/FILING.md'))) {
-        requireSuccess(execute('cat', ['.agents/skills/FILING.md']));
-    }
     requireSuccess(execute('gh', ['issue', 'list', '--state', 'open', '--json', 'number,title,labels,url']));
     requireSuccess(execute('gh', ['issue', 'create', '--title', 'docs: explain template-first generated changes', '--body', 'fixture body']));
     requireSuccess(execute('sh', ['-c', 'gh issue edit 2 --remove-label status:ready,status:in-progress,status:in-review,status:needs-decision,status:blocked && gh issue edit 2 --add-label status:ready']));
@@ -184,7 +190,7 @@ test('scenario assertion schemas fail during preflight with precise locations', 
         { type: 'commands_succeeded_in_order', value: ['gh issue view', 'npm test'] },
         { type: 'fixture_gate' },
     ];
-    const scenario = { id: 'schema-test', prompt: '$implement #1', issue: {}, assertions: validAssertions };
+    const scenario = { id: 'schema-test', prompt: '$cycle #1', issue: {}, assertions: validAssertions };
     assert.equal(validateScenario(scenario), scenario);
 
     const invalidAssertions = [
@@ -225,7 +231,7 @@ test('snapshot executables stay inert while snapshot template data still changes
             "await fetch('http://127.0.0.1:9/evaluator-probe');",
             '',
         ].join('\n'));
-        const candidateTemplate = join(candidate, 'templates', 'skills', 'implement.md.tmpl');
+        const candidateTemplate = join(candidate, 'templates', 'skills', 'cycle.md.tmpl');
         writeFileSync(candidateTemplate, `${readFileSync(candidateTemplate, 'utf8').trimEnd()}\n\nCandidate data marker.\n`);
 
         const rendererEnv = rendererEnvironment(join(scratch, 'renderer-control'), {
@@ -295,7 +301,7 @@ test('snapshot harness data cannot route executable content onto the fixture con
         chmodSync(fakeCodex, 0o755);
         writeFileSync(join(candidate, 'profiles', 'lean.jsonc'), `${JSON.stringify({
             name: 'lean',
-            skills: ['implement'],
+            skills: ['cycle'],
         }, null, 2)}\n`);
         writeFileSync(join(candidate, 'harnesses', 'codex.jsonc'), `${JSON.stringify({
             name: 'codex',
@@ -305,7 +311,7 @@ test('snapshot harness data cannot route executable content onto the fixture con
             capabilities: { has_menus: false, has_subagents: true },
             notes: { attribution: 'hostile snapshot', ask: 'plain chat' },
         }, null, 2)}\n`);
-        writeFileSync(join(candidate, 'templates', 'skills', 'implement.md.tmpl'), [
+        writeFileSync(join(candidate, 'templates', 'skills', 'cycle.md.tmpl'), [
             "import { test } from 'node:test';",
             "import assert from 'node:assert/strict';",
             "import { writeFileSync } from 'node:fs';",
@@ -491,6 +497,30 @@ test('behavioral runner compares isolated snapshots without making a model call'
         assert.ok(orderFailures.every((result) => result.assertions.some((assertion) =>
             assertion.type === 'commands_succeeded_in_order' && !assertion.pass)));
 
+        // Committing straight onto main must fail the scenario even when every other step
+        // looks right: the tracker double refuses a PR whose head is main.
+        const onMainOutput = join(scratch, 'on-main-failure');
+        execFileSync(process.execPath, [
+            RUNNER,
+            '--baseline', ROOT,
+            '--candidate', ROOT,
+            '--model', 'fake-model',
+            '--output', onMainOutput,
+            '--codex-bin', fakeCodex,
+            '--scenario', 'safe-bounded',
+            '--timeout-ms', '30000',
+        ], {
+            cwd: ROOT,
+            encoding: 'utf8',
+            stdio: 'pipe',
+            env: { ...process.env, FAKE_CODEX_ON_MAIN: '1' },
+        });
+        const onMainResults = readFileSync(join(onMainOutput, 'results.jsonl'), 'utf8')
+            .trim()
+            .split('\n')
+            .map((line) => JSON.parse(line));
+        assert.ok(onMainResults.length > 0 && onMainResults.every((result) => result.passed === false));
+
         const missing = spawnSync(process.execPath, [
             RUNNER,
             '--baseline', ROOT,
@@ -502,6 +532,37 @@ test('behavioral runner compares isolated snapshots without making a model call'
         assert.equal(missing.status, 2);
         assert.match(missing.stderr, /cannot run .*does-not-exist --version/);
         assert.doesNotMatch(missing.stderr, /\n\s+at /);
+    } finally {
+        rmSync(scratch, { recursive: true, force: true });
+    }
+});
+
+test('snapshot conditional profile entries get the same safety validation as plain ones', { timeout: 120_000 }, () => {
+    const scratch = mkdtempSync(join(tmpdir(), 'cycle-eval-profile-entries-'));
+    try {
+        const fakeCodex = join(scratch, 'codex');
+        writeFileSync(fakeCodex, fakeCodexSource());
+        chmodSync(fakeCodex, 0o755);
+        const cases = [
+            [{ skill: '../escape', when: 'deploy.test' }, /unsafe skill name in snapshot profile lean/],
+            [{ skill: 'cycle', when: 'deploy.test; rm' }, /when/],
+            [{ skill: 'cycle', when: 'deploy.test', extra: 1 }, /unknown key/],
+            [{ skill: 'cycle' }, /when/],
+            [7, /skill name or/],
+        ];
+        for (const [entry, pattern] of cases) {
+            const candidate = join(scratch, 'candidate');
+            rmSync(candidate, { recursive: true, force: true });
+            copySnapshot(candidate);
+            writeFileSync(join(candidate, 'profiles', 'lean.jsonc'), JSON.stringify({ name: 'lean', skills: ['cycle', entry] }));
+            const result = spawnSync(process.execPath, [
+                RUNNER, '--baseline', ROOT, '--candidate', candidate, '--model', 'fake-model',
+                '--output', join(scratch, `out-${cases.findIndex((c) => c[0] === entry)}`),
+                '--codex-bin', fakeCodex, '--scenario', 'safe-bounded',
+            ], { cwd: ROOT, encoding: 'utf8' });
+            assert.equal(result.status, 2, JSON.stringify(entry));
+            assert.match(result.stderr, pattern);
+        }
     } finally {
         rmSync(scratch, { recursive: true, force: true });
     }
