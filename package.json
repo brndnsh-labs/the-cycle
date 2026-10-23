@@ -2,7 +2,7 @@
   "name": "@brndnsh/the-cycle",
   "version": "0.2.0",
   "type": "module",
-  "description": "An installable, self-updating work pipeline for AI coding harnesses",
+  "description": "One work pipeline for AI coding agents, kept in sync across repos",
   "license": "MIT",
   "repository": {
     "type": "git",

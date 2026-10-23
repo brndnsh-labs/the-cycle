@@ -1,7 +1,7 @@
 # the-cycle
 
-An installable, self-updating work pipeline for AI coding harnesses — Claude Code, Codex CLI,
-Copilot CLI, OpenCode, and Pi.
+One work pipeline for your AI coding agents — Claude Code, Codex CLI, Copilot CLI, OpenCode, and
+Pi — kept in sync across every repo that uses it.
 
 `the-cycle` renders a small set of skills — `/intake` to shape work, `/cycle` to build and ship it,
 `/review` for an independent check, and a thin maintenance layer — into any repository, adapted to
