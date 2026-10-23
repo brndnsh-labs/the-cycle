@@ -1,6 +1,6 @@
 ---
 name: deploy-test
-description: Deploy {{repo.name}} to the test environment — low ceremony, for previewing a branch or an uncommitted tree before it merges. Runs the deploy, verifies the right build landed, and lists what to check from what actually shipped. Usage `/deploy-test`.
+description: Deploy {{repo.name}} to the test environment — low ceremony, for previewing a branch before it merges. Runs the deploy, verifies the right build landed, and lists what to check from what actually shipped. Usage `/deploy-test`.
 ---
 
 # /deploy-test — put it on the test box
@@ -10,8 +10,9 @@ no gate, no explicit go — a test box is cheap to get wrong. Never point this a
 
 {{> overlay?:deploy}}
 
-1. **Sanity:** `git status -sb` — say whether you're shipping a clean branch or a dirty tree (both
-   are fine here).
+1. **Sanity:** `git status -sb` — say whether you're shipping a clean branch or a dirty tree. Some
+   deploys ship only a pushed commit (the deploy notes above say so); then commit and push the
+   branch first.
 2. **Deploy:** `{{deploy.test}}`, streaming the output.
 3. **Verify the right build landed** — read back the served revision if the build stamps one;
    otherwise check what the deploy script reports. A "successful" deploy still serving the old
