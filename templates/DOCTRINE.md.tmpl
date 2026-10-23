@@ -157,7 +157,7 @@ approval of the deploy.
 ## §6 Delivery
 
 **Branches.** Issue work happens on a feature branch with a PR, never on `main`.
-{{#if branch.minor_edits_direct}}Minor tooling, skills, or docs edits may go straight to `main`.{{/if}}{{#unless branch.minor_edits_direct}}No minor-edit carve-out: `main` is protected against all direct pushes.{{/unless}}
+{{#if branch.minor_edits_direct}}Minor tooling, skills, or docs edits may go straight to `main`.{{/if}}{{#unless branch.minor_edits_direct}}No minor-edit carve-out: every change, however small, goes through a branch and PR — never push directly to `main`.{{/unless}}
 Branch from freshly fetched `origin/main` (`git fetch origin && git checkout -b <slug> origin/main`),
 not local `main` — unpushed local commits otherwise fold silently into your squash. Prune merged local branches now and then
 (`git fetch --prune origin`, then `git branch -D`, since squash-merged branches never look merged).
