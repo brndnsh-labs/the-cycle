@@ -904,11 +904,24 @@ const upstreamSha = () => {
     return 'unknown';
 };
 
+// Write state.json in the indentation it already has, so a repo whose formatter wants tabs
+// doesn't fail its own lint on every `cycle update`.
+function saveState(root, state) {
+    const p = repositoryPath(root, statePath(root));
+    let indent = 2;
+    try {
+        const ws = readFileSync(p, 'utf8').match(/\n([ \t]+)\S/)?.[1];
+        if (ws) indent = ws.startsWith('\t') ? '\t' : ws.length;
+    } catch {
+        /* no state yet: default */
+    }
+    writeFileSync(p, `${JSON.stringify(state, null, indent)}\n`);
+}
+
 function writeState(root, plan, retained = {}) {
     const files = { ...retained };
     for (const f of plan) files[f.rel] = readProvenance(f.content)?.hash ?? '';
-    const state = { upstream: upstreamSha(), files };
-    writeFileSync(repositoryPath(root, statePath(root)), `${JSON.stringify(state, null, 2)}\n`);
+    saveState(root, { upstream: upstreamSha(), files });
 }
 
 /**
@@ -1845,7 +1858,7 @@ function cmdEject(args) {
         console.log(`${green('✓')} ejected ${dim(relative(root, path))}`);
     }
     if (!ejected) fail(`${name} is already unmanaged in every configured harness`);
-    writeFileSync(repositoryPath(root, statePath(root)), `${JSON.stringify(state, null, 2)}\n`);
+    saveState(root, state);
 
     console.log(`${bold(name)} is now yours to maintain in this repo`);
     console.log(dim(`  remove it from the "${cfg.profile}" profile, or it will be re-rendered by \`cycle update\``));

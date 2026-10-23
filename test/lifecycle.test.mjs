@@ -313,3 +313,27 @@ describe('orphan overlay files', () => {
         assert.equal(run(home(), repo, ['update']).code, 0);
     });
 });
+
+describe('state.json formatting', () => {
+    const statePath = (repo) => join(repo, '.cycle', 'state.json');
+
+    test('a fresh state.json uses two-space indentation', () => {
+        const home = makeHome(['alpha']);
+        const repo = makeRepo();
+        assert.equal(run(home, repo, ['update']).code, 0);
+        assert.match(readFileSync(statePath(repo), 'utf8'), /^\{\n  "upstream"/);
+    });
+
+    test('update keeps the indentation an existing state.json already has', () => {
+        const home = makeHome(['alpha']);
+        for (const [indent, firstKey] of [['\t', /^\{\n\t"upstream"/], [4, /^\{\n {4}"upstream"/]]) {
+            const repo = makeRepo();
+            run(home, repo, ['update']);
+            writeFileSync(statePath(repo), `${JSON.stringify(state(repo), null, indent)}\n`);
+            rmSync(skillPath(repo, 'alpha')); // forces a real re-render, so state is rewritten
+            assert.equal(run(home, repo, ['update']).code, 0);
+            assert.ok(existsSync(skillPath(repo, 'alpha')));
+            assert.match(readFileSync(statePath(repo), 'utf8'), firstKey);
+        }
+    });
+});
