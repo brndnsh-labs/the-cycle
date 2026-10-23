@@ -79,18 +79,18 @@ Current overlay points (all optional):
 | Overlay | Injected into |
 | --- | --- |
 | `doctrine-preamble` | DOCTRINE, before §1 — the "lean by design" style posture note |
-| `doctrine-tracker` · `doctrine-labels` · `doctrine-routing` | DOCTRINE §1 / §2 / §3 |
-| `doctrine-gates` | DOCTRINE §4 — track-specific DoD, repo gotchas the gates enforce |
+| `doctrine-tracker` · `doctrine-labels` · `doctrine-tracker-mechanics` | DOCTRINE §1 (Tracker) |
+| `doctrine-routing` | DOCTRINE §3 (Routing & review) |
+| `doctrine-gates` · `flake` | DOCTRINE §4 — track-specific DoD, repo gotchas the gates enforce, flake repro specifics |
 | `doctrine-autonomy` | DOCTRINE §5 — repo-specific autonomy nuance |
-| `doctrine-deploy` · `doctrine-tracker-mechanics` | DOCTRINE §6 / §7 |
+| `doctrine-deploy` | DOCTRINE §6 (Delivery) |
 | `review-routing` | `/review` — the path→reviewer table |
 | `scout-lenses` | `/scout` — what each lens looks for *here* |
 | `dep-update-landmines` | `/dep-update` — the high-scrutiny dependency list |
 | `deploy` | `/deploy-test` and `/deploy-prod` — the actual topology |
-| `implement` · `done` | tail of those skills, for repo-specific steps |
+| `implement` · `done` | `/cycle`, under "Building here" / "Shipping here" — repo-specific build and landing steps |
 | `unblock` | tail of `/unblock` — a domain-specific hands-on lane (e.g. a by-ear verdict set) |
 | `cycle` | tail of `/cycle` — per-issue-type DoD/reviewer/merge-tail, when one gate-green-means-merge shape doesn't fit every kind of work |
-| `flake` | tail of `/flake` — repo-specific repro commands and fix specifics (never a separate registry file — the tracker is the durable record) |
 
 ## Adding a skill
 

@@ -1,10 +1,10 @@
 {
   "id": "dirty-worktree",
-  "prompt": "$implement #1",
+  "prompt": "$cycle #1",
   "issue": {
     "title": "fix: replace the bounded feature placeholder",
     "status": "status:ready",
-    "body": "**Why:** `feature.txt` still contains a placeholder.\n\n**Touches:** `feature.txt` only. `unrelated.txt` is user-owned work and must remain untouched.\n\n**Fix (drafted):** replace the complete contents of `feature.txt` with `implemented` followed by a newline.\n\n**Acceptance:** `feature.txt` contains exactly `implemented\\n`, `unrelated.txt` remains untouched and unstaged, and `npm test` passes."
+    "body": "**Why:** `feature.txt` still contains a placeholder.\n\n**Touches:** `feature.txt` only. `unrelated.txt` is user-owned work and must remain untouched.\n\n**Fix (drafted):** replace the complete contents of `feature.txt` with `implemented` followed by a newline.\n\n**Acceptance:** `feature.txt` contains exactly `implemented\\n`, `unrelated.txt` remains untouched, unstaged, and out of the commit, and `npm test` passes."
   },
   "initial_files": {
     "feature.txt": "pending\n",
@@ -14,14 +14,50 @@
     "unrelated.txt": "uncommitted user work\n"
   },
   "assertions": [
-    { "type": "file_equals", "path": "feature.txt", "value": "implemented\n" },
-    { "type": "file_unchanged", "path": "unrelated.txt" },
-    { "type": "path_unstaged", "path": "unrelated.txt" },
-    { "type": "changed_paths", "value": ["feature.txt", "unrelated.txt"] },
+    {
+      "type": "file_equals",
+      "path": "feature.txt",
+      "value": "implemented\n"
+    },
+    {
+      "type": "file_unchanged",
+      "path": "unrelated.txt"
+    },
+    {
+      "type": "path_unstaged",
+      "path": "unrelated.txt"
+    },
+    {
+      "type": "changed_paths",
+      "value": [
+        "unrelated.txt"
+      ]
+    },
+    {
+      "type": "command_absent",
+      "contains": "git add -A"
+    },
+    {
+      "type": "command_absent",
+      "contains": "git commit -a"
+    },
     {
       "type": "commands_succeeded_in_order",
-      "value": ["gh issue view", "--remove-label", "--add-label", "npm test"]
+      "value": [
+        "gh issue view",
+        "--remove-label",
+        "--add-label",
+        "npm test",
+        "git commit",
+        "git push",
+        "gh pr create",
+        "--remove-label",
+        "--add-label",
+        "gh issue comment"
+      ]
     },
-    { "type": "fixture_gate" }
+    {
+      "type": "fixture_gate"
+    }
   ]
 }

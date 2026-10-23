@@ -3,9 +3,9 @@
 An installable, self-updating work pipeline for AI coding harnesses — Claude Code, Codex CLI,
 Copilot CLI, OpenCode, and Pi.
 
-`the-cycle` renders a set of skills — `/cycle`, `/implement`, `/review`, `/patch`, `/done`, and a
-maintenance layer around them — into any repository, adapted to that repository's gates, tracker,
-and risk surfaces. Improvements made here propagate outward with `cycle update`, and `cycle check`
+`the-cycle` renders a small set of skills — `/intake` to shape work, `/cycle` to build and ship it,
+`/review` for an independent check, and a thin maintenance layer — into any repository, adapted to
+that repository's gates, tracker, and risk surfaces. Improvements made here propagate outward with `cycle update`, and `cycle check`
 reports when an installed copy has drifted.
 
 ## Why this exists
@@ -19,6 +19,14 @@ The two features that matter most are therefore:
 - `cycle update` propagates reviewed pipeline improvements.
 - `cycle check` makes local and upstream drift visible.
 
+## Design stance
+
+Modern models already know how to engineer. The pipeline supplies only what they can't infer —
+this repo's gates, tracker bindings, brake surfaces, delivery policy, and a few hard-won lessons —
+and otherwise gets out of the way. Ceremony scales with risk: a trivial change gets the gates and a
+quick read; a real change gets a fresh-context review; a brake surface gets a security review and a
+human. The evidence behind that stance is in [docs/evaluations](docs/evaluations).
+
 ## How it works
 
 Every repository-specific value lives in a generated binding file, leaving the shared skill
@@ -30,8 +38,8 @@ templates portable:
   [Harnesses](docs/HARNESSES.md).
 - **Overlays** hold the irreducibly repository-specific guidance a template cannot generalize,
   such as reviewer routing and scout lenses. See [Authoring](docs/AUTHORING.md).
-- **DOCTRINE and references** keep one compact authoritative invariant spine in every session,
-  while delivery and filing mechanics load only for skills that use them.
+- **DOCTRINE** is one compact rule spine every skill cites: tracker, filing, review, gates,
+  brakes, and delivery.
 - **Drift detection** records provenance in every rendered file. `cycle check` distinguishes a
   locally edited render from a render whose source template has moved upstream.
 
@@ -53,13 +61,14 @@ See [Installing the-cycle](docs/INSTALLING.md) for the agent handoff, manual alt
 
 ## Profiles
 
-Machinery is opt-in: a repository takes on a lane when it earns it.
-
 | Profile | Skills |
 | --- | --- |
-| `lean` | cycle · implement · review · patch · done · next · intake · scout · burndown · dep-update · deploy-test · deploy-prod |
-| `standard` | + unblock · wrap-up · pre-compact |
-| `full` | + nightly · fan-out · cover · flake |
+| `lean` | cycle · intake · review · next · scout · wrap-up · dep-update¹ · deploy-test¹ · deploy-prod¹ |
+| `standard` | + unblock |
+| `full` | same as `standard` (kept so existing configs resolve) |
+
+¹ Rendered only when the repo configures it: a dependency manager, a test target, a prod target.
+`cycle update` removes a skill that a profile or condition no longer includes.
 
 ## Backends
 

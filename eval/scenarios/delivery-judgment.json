@@ -1,6 +1,6 @@
 {
   "id": "delivery-judgment",
-  "prompt": "$done #1",
+  "prompt": "$cycle #1",
   "issue": {
     "title": "feat: record the selected feature policy",
     "status": "status:in-progress",
@@ -14,16 +14,24 @@
     "feature.txt": "implemented\n"
   },
   "assertions": [
-    { "type": "file_equals", "path": "feature.txt", "value": "implemented\n" },
-    { "type": "file_unchanged", "path": "unrelated.txt" },
-    { "type": "changed_paths", "value": [] },
+    {
+      "type": "file_equals",
+      "path": "feature.txt",
+      "value": "implemented\n"
+    },
+    {
+      "type": "file_unchanged",
+      "path": "unrelated.txt"
+    },
+    {
+      "type": "changed_paths",
+      "value": []
+    },
     {
       "type": "commands_succeeded_in_order",
       "value": [
         "gh issue view",
         "npm test",
-        "git checkout -b",
-        "git add",
         "git commit",
         "git push",
         "gh pr create",
@@ -32,7 +40,12 @@
         "gh issue comment"
       ]
     },
-    { "type": "command_absent", "contains": "gh pr merge" },
-    { "type": "fixture_gate" }
+    {
+      "type": "command_absent",
+      "contains": "gh pr merge"
+    },
+    {
+      "type": "fixture_gate"
+    }
   ]
 }

@@ -18,7 +18,7 @@ import { homedir, tmpdir } from 'node:os';
 import { dirname, join, relative, resolve, sep } from 'node:path';
 import { parseArgs } from 'node:util';
 import { fileURLToPath } from 'node:url';
-import { readJsonc } from '../bin/cycle.mjs';
+import { profileEntries, readJsonc } from '../bin/cycle.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, '..');
@@ -191,9 +191,19 @@ function validateSnapshotData(rendererRoot) {
     if (!Array.isArray(profile.skills) || !profile.skills.length) {
         fail('snapshot profile lean must contain a non-empty skills array');
     }
-    for (const skill of profile.skills) {
+    // Why: profile entries are snapshot data. Shape comes from the trusted engine's own parser
+    // (so a conditional { skill, when } entry means exactly what the renderer will take it to
+    // mean); this runner then applies its stricter safety rules to each skill name.
+    let entries;
+    try { entries = profileEntries(profile, 'snapshot profile lean'); }
+    catch (error) { fail(error.message); }
+    for (const entry of entries) {
+        const { skill, when } = entry;
         if (typeof skill !== 'string' || !/^[a-z0-9](?:[a-z0-9-]*[a-z0-9])?$/.test(skill)) {
             fail(`unsafe skill name in snapshot profile lean: ${JSON.stringify(skill)}`);
+        }
+        if (when !== null && (typeof when !== 'string' || !/^!?[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*$/.test(when))) {
+            fail(`unsafe condition in snapshot profile lean: ${JSON.stringify(when)}`);
         }
         const template = join(rendererRoot, 'templates', 'skills', `${skill}.md.tmpl`);
         if (!existsSync(template) || !lstatSync(template).isFile()) {
@@ -628,6 +638,9 @@ function codexEnvironment(fixture, scenario) {
     }
     if (process.env.FAKE_CODEX_REVERSE_STATUS !== undefined) {
         env.FAKE_CODEX_REVERSE_STATUS = process.env.FAKE_CODEX_REVERSE_STATUS;
+    }
+    if (process.env.FAKE_CODEX_ON_MAIN !== undefined) {
+        env.FAKE_CODEX_ON_MAIN = process.env.FAKE_CODEX_ON_MAIN;
     }
     // Why: authentication stays in CODEX_HOME; ambient credentials do not enter the agent process.
     return env;

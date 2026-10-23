@@ -89,10 +89,8 @@ and surfaces the full failure on stderr where the model will read it.
 ```
 
 ⚠️ **This hook is suspected of silently dropping some writes from backgrounded subagents.** It also
-reflows lines, which can stale an `old_string` between two edits to the same region — `/patch`
-carries a "re-Read before a second Edit" instruction specifically to compensate. Worth having, but
-enable it deliberately, and set `hooks.format_on_edit: true` in config so the skills know to
-compensate.
+reflows lines, which can stale an `old_string` between two edits to the same region, so re-read a
+region before a second edit to it. Worth having, but enable it deliberately.
 
 ## Permissions
 

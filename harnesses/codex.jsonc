@@ -7,8 +7,8 @@
 //   - discovery path: developers.openai.com/codex/skills — .agents/skills/<name>/SKILL.md
 //     at the repo root (also .agents/skills at a parent, ~/.agents/skills, but the
 //     repo-root path is what a rendered install writes to).
-//   - subagents: GA 2026-03-14 — parallel spawn from a single task, so /fan-out and
-//     /cover's per-unit spawn apply here too.
+//   - subagents: GA 2026-03-14 — parallel spawn from a single task, so /review's
+//     fresh-context reviewer and /scout's parallel sweep apply here too.
 //   - structured questions: `request_user_input` exists in Plan mode, but repository
 //     skills normally run in Default mode. Advertise the capability as unavailable so
 //     rendered workflows use their direct-chat fallback instead of naming a tool they

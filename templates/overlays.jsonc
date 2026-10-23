@@ -20,19 +20,19 @@
     "value": "always"
   },
   "doctrine-tracker": {
-    "into": "DOCTRINE §1 (Tracker & readiness)",
+    "into": "DOCTRINE §1 (Tracker)",
     "purpose": "Anything about this repo's tracker that the status table doesn't capture — what 'ready' actually requires here, or a convention about how issues get scoped.",
     "shape": "A few bullets.",
     "value": "when the repo has readiness rules beyond the status vocabulary"
   },
   "doctrine-labels": {
-    "into": "DOCTRINE §2 (Labels)",
+    "into": "DOCTRINE §1 (Tracker), after the label notes",
     "purpose": "The repo's label vocabulary beyond the routing namespaces — workflow labels like `bug`, `area:*`, `finding`, and what each one means.",
     "shape": "A table or bullet list of label → meaning.",
     "value": "when the repo uses labels the pipeline doesn't define"
   },
   "doctrine-routing": {
-    "into": "DOCTRINE §3 (Routing)",
+    "into": "DOCTRINE §3 (Routing & review)",
     "purpose": "How work is routed here: which agent or model handles which kind of issue, and the rule for deciding.",
     "shape": "A table: signal → agent/model, plus the default.",
     "value": "when the repo has more than one implementer"
@@ -44,19 +44,19 @@
     "value": "when a gate's purpose isn't obvious from its name"
   },
   "doctrine-autonomy": {
-    "into": "DOCTRINE §5 (Judgment calls & autonomy)",
+    "into": "DOCTRINE §5 (Autonomy & brakes)",
     "purpose": "Repo-specific nuance about when to decide alone and when to stop and ask. The always-brake list is config; this is the reasoning around it.",
     "shape": "A few bullets, each naming a situation and the expected response.",
     "value": "when the repo has a non-obvious risk surface"
   },
   "doctrine-deploy": {
-    "into": "DOCTRINE §6 (Merge guard)",
+    "into": "DOCTRINE §6 (Delivery)",
     "purpose": "What happens between a green PR and running software here — environments, promotion order, who pushes the button.",
     "shape": "A short ordered list.",
     "value": "when the repo deploys anywhere"
   },
   "doctrine-tracker-mechanics": {
-    "into": "DOCTRINE §7 (Tracker mechanics)",
+    "into": "DOCTRINE §1 (Tracker), after the commands",
     "purpose": "Mechanical tracker conventions particular to this repo — milestone naming, how epics decompose, anything a skill would otherwise guess.",
     "shape": "Bullets.",
     "value": "when tracker conventions aren't self-evident"
@@ -86,13 +86,13 @@
     "value": "when the repo deploys anywhere"
   },
   "implement": {
-    "into": "tail of /implement",
+    "into": "/cycle, under \"Building here\"",
     "purpose": "Steps that must happen on every implementation here and aren't captured by the gates — a codegen step, a fixture to regenerate, a file to keep in sync.",
     "shape": "A short checklist.",
     "value": "when the repo has a build step with a manual counterpart"
   },
   "done": {
-    "into": "tail of /done",
+    "into": "/cycle, under \"Shipping here\"",
     "purpose": "Steps that must happen when work lands — a changelog, a doc to update, a notification.",
     "shape": "A short checklist.",
     "value": "when landing work has obligations beyond the merge"
@@ -110,8 +110,8 @@
     "value": "when different kinds of issues need a genuinely different loop tail, not just a different reviewer table"
   },
   "flake": {
-    "into": "tail of /flake",
-    "purpose": "How to actually reproduce and fix a flake *here* — exact repro commands per test runner, import paths for seeded-random helpers, framework-specific fixes (e.g. an e2e hydration/setup gotcha). Never a separate registry file: the tracker is the durable record (§7's rule against a frozen markdown tracker applies here too).",
+    "into": "DOCTRINE §4 (Gates)",
+    "purpose": "How to actually reproduce and fix a flake *here* — exact repro commands per test runner, import paths for seeded-random helpers, framework-specific fixes (e.g. an e2e hydration/setup gotcha). Never a separate registry file: the tracker is the durable record.",
     "shape": "A short list of runner → repro command, plus any repo-specific fix pattern per flake class.",
     "value": "when the repro commands or fixes aren't obvious from the test framework alone"
   }

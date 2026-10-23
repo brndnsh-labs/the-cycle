@@ -22,7 +22,7 @@ idea, different axis: this file is about the tracker, that one is about the harn
 | `issue_list_closed` | — | recently closed, for the `--board` view |
 | `issue_list_label` | `$1` label | filtered open issues |
 | `issue_list_milestone` | `$1` milestone | filtered open issues |
-| `issue_view` | `$1` number | one issue incl. body |
+| `issue_view` | `$1` number | one issue incl. body and comments |
 | `issue_create` | `$1` title `$2` body `$3` label | file an issue |
 | `issue_edit_label` / `issue_unlabel` | `$1` number `$2` label | add / remove a label |
 | `issue_comment` | `$1` number `$2` text | comment |
@@ -145,7 +145,7 @@ is a deliberate change to those two checks first — not something that can happ
 3. Set every semantic flag honestly. Getting `auto_merge` wrong is the one that can actually
    lose work.
 4. **Check whether the new backend's tracker mechanics actually match GitHub's.** DOCTRINE's §1
-   ("closed issue is done") and §7 (tracker-mechanics opening, "unreachable → stop") currently read
+   ("closed issue is done") and its tracker commands and "unreachable → stop" rule currently read
    as GitHub-specific prose, hardcoded directly into the template rather than spliced from a
    per-backend note — that's correct only because GitHub is the sole backend today. If the new
    backend's routing model, close-on-merge behavior, or unreachable condition genuinely differ,

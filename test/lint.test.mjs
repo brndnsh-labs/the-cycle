@@ -56,15 +56,8 @@ describe('lint', () => {
 
     test('catches a citation with no matching DOCTRINE section', () => {
         const dir = sandbox();
-        edit(dir, 'templates/skills/patch.md.tmpl', (t) => `${t}\n\nSee DOCTRINE §42.\n`);
+        edit(dir, 'templates/skills/review.md.tmpl', (t) => `${t}\n\nSee DOCTRINE §42.\n`);
         assert.ok(checksHit(dir).has('citations'));
-    });
-
-    test('lints shared references alongside skills', () => {
-        const dir = sandbox();
-        edit(dir, 'templates/references/DELIVERY.md.tmpl', (t) => `${t}\n\nSee DOCTRINE §42.\n`);
-        const hit = errors(dir).find((finding) => finding.where?.startsWith('references/DELIVERY.md.tmpl:'));
-        assert.equal(hit?.check, 'citations');
     });
 
     test('catches a renumbered DOCTRINE section that skills still cite', () => {
@@ -75,7 +68,7 @@ describe('lint', () => {
 
     test('catches a verb no backend binds', () => {
         const dir = sandbox();
-        edit(dir, 'templates/skills/done.md.tmpl', (t) => `${t}\n{{@issue_teleport "1"}}\n`);
+        edit(dir, 'templates/skills/cycle.md.tmpl', (t) => `${t}\n{{@issue_teleport "1"}}\n`);
         assert.ok(checksHit(dir).has('verbs'));
     });
 
@@ -93,6 +86,12 @@ describe('lint', () => {
         assert.match(hits[0].message, /issue_teleport/);
     });
 
+    test('catches a template pointing at a retired skill', () => {
+        const dir = sandbox();
+        edit(dir, 'templates/skills/next.md.tmpl', (t) => `${t}\n\nThen run /burndown.\n`);
+        assert.ok(errors(dir).some((f) => f.check === 'cross-refs' && /retired/.test(f.message)));
+    });
+
     test('catches a profile listing a skill with no template', () => {
         const dir = sandbox();
         edit(dir, 'profiles/lean.jsonc', (t) => t.replace('"cycle",', '"cycle",\n    "imaginary",'));
@@ -103,7 +102,7 @@ describe('lint', () => {
     // restated `npm run typecheck`, so changing it meant editing every skill.
     test('catches a gate command inlined into portable prose', () => {
         const dir = sandbox();
-        edit(dir, 'templates/skills/implement.md.tmpl', (t) => `${t}\n\nRun \`npm run typecheck\` before you stop.\n`);
+        edit(dir, 'templates/skills/cycle.md.tmpl', (t) => `${t}\n\nRun \`npm run typecheck\` before you stop.\n`);
         assert.ok(checksHit(dir).has('inlining'));
     });
 
@@ -173,7 +172,7 @@ describe('lint', () => {
     // fires and the skill silently loses a section.
     test('catches a template branching on a flag no backend declares', () => {
         const dir = sandbox();
-        edit(dir, 'templates/skills/done.md.tmpl', (t) => `${t}\n{{#if backend.never_declared}}x{{/if}}\n`);
+        edit(dir, 'templates/skills/cycle.md.tmpl', (t) => `${t}\n{{#if backend.never_declared}}x{{/if}}\n`);
         assert.ok(errors(dir).some((f) => f.check === 'semantics' && /never_declared/.test(f.message)));
     });
 
@@ -182,8 +181,16 @@ describe('lint', () => {
     // actually populates.
     test('catches a template branching on a harness field the engine never populates', () => {
         const dir = sandbox();
-        edit(dir, 'templates/skills/done.md.tmpl', (t) => `${t}\n{{#if harness.has_wings}}x{{/if}}\n`);
+        edit(dir, 'templates/skills/cycle.md.tmpl', (t) => `${t}\n{{#if harness.has_wings}}x{{/if}}\n`);
         assert.ok(errors(dir).some((f) => f.check === 'harnesses' && /has_wings/.test(f.message)));
+    });
+
+    // `{{#if overlay.<name>}}` reads as false for any name that isn't a real overlay
+    // file, so a typo'd point would silently drop its heading and content everywhere.
+    test('catches a template branching on an overlay point the registry does not define', () => {
+        const dir = sandbox();
+        edit(dir, 'templates/skills/cycle.md.tmpl', (t) => `${t}\n{{#if overlay.implment}}x{{/if}}\n`);
+        assert.ok(errors(dir).some((f) => f.check === 'overlays' && /implment/.test(f.message)));
     });
 
     test('catches a harness file whose declared name does not match its filename', () => {
